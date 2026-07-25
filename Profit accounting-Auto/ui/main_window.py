@@ -16,56 +16,41 @@ from .history_page import HistoryPage
 
 
 class SettingsDialog(tk.Toplevel):
-    """设置对话框"""
+    """设置对话框 — v2：仅汇率和默认尾程"""
 
     def __init__(self, parent, config_manager, on_save=None):
         super().__init__(parent)
         self._cfg = config_manager
         self._on_save = on_save
-
         self.title("设置")
-        self.geometry("350x250")
+        self.geometry("300x160")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
-
         self._build_ui()
         self._load_values()
 
     def _build_ui(self):
         frame = ttk.Frame(self, padding=15)
         frame.pack(fill=tk.BOTH, expand=True)
-
         r = 0
         ttk.Label(frame, text="汇率 (1 USD = ? RMB)：").grid(row=r, column=0, sticky=tk.W, pady=5)
         self._var_rate = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._var_rate, width=15).grid(row=r, column=1, pady=5)
-        r += 1
-
-        ttk.Label(frame, text="头程单价 (元/kg)：").grid(row=r, column=0, sticky=tk.W, pady=5)
-        self._var_head = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._var_head, width=15).grid(row=r, column=1, pady=5)
-        r += 1
-
-        ttk.Label(frame, text="固定服务费 (元)：").grid(row=r, column=0, sticky=tk.W, pady=5)
-        self._var_fixed = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._var_fixed, width=15).grid(row=r, column=1, pady=5)
-        r += 1
+        ttk.Entry(frame, textvariable=self._var_rate, width=12).grid(row=r, column=1, pady=5); r += 1
 
         ttk.Label(frame, text="默认尾程费用 (元)：").grid(row=r, column=0, sticky=tk.W, pady=5)
         self._var_tail = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._var_tail, width=15).grid(row=r, column=1, pady=5)
-        r += 1
+        ttk.Entry(frame, textvariable=self._var_tail, width=12).grid(row=r, column=1, pady=5); r += 1
+
+        ttk.Label(frame, text="头程/固定费由货代选择决定", foreground="gray", font=("", 8)).grid(row=r, column=0, columnspan=2, pady=5); r += 1
 
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=r, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=r, column=0, columnspan=2, pady=5)
         ttk.Button(btn_frame, text="保存", command=self._save).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=5)
 
     def _load_values(self):
         self._var_rate.set(str(self._cfg.exchange_rate))
-        self._var_head.set(str(self._cfg.head_haul_rate))
-        self._var_fixed.set(str(self._cfg.fixed_service_fee))
         self._var_tail.set(str(self._cfg.default_tail_haul))
 
     def _save(self):
@@ -73,27 +58,16 @@ class SettingsDialog(tk.Toplevel):
             rate = float(self._var_rate.get())
             if rate <= 0:
                 raise ValueError("汇率必须大于 0")
-            head = float(self._var_head.get())
-            if head < 0:
-                raise ValueError("头程单价不能为负数")
-            fixed = float(self._var_fixed.get())
-            if fixed < 0:
-                raise ValueError("固定服务费不能为负数")
             tail = float(self._var_tail.get())
             if tail < 0:
                 raise ValueError("尾程费用不能为负数")
         except ValueError as e:
             messagebox.showerror("输入错误", f"请输入有效数字：{e}")
             return
-
         self._cfg.exchange_rate = rate
-        self._cfg.head_haul_rate = head
-        self._cfg.fixed_service_fee = fixed
         self._cfg.default_tail_haul = tail
-
         if self._on_save:
             self._on_save()
-
         messagebox.showinfo("提示", "设置已保存。")
         self.destroy()
 
