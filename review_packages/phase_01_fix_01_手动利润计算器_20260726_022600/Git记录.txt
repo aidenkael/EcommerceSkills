@@ -1,0 +1,44 @@
+# Git 记录 — phase_01_fix_01
+
+## 提交历史
+```
+9fc254f fix: P0 fixes for phase_01 review findings  (HEAD -> master)
+072318b feat: complete phase 01 manual profit calculator
+```
+
+## 本次修复提交
+```
+commit 9fc254f
+Author: WorkBuddy <workbuddy@local.dev>
+Date:   Sun Jul 26 02:22:00 2026 +0800
+
+    fix: P0 fixes for phase_01 review findings
+
+    P0-1: 默认物流规则改为 6元固定费+40元尾程
+    P0-2: 缺失费用时标记"估算"
+    P0-3: 修复推广预留比例联动
+    P0-4: 目标利润率不覆盖当前售价
+    P0-5: 历史商品加载时使用保存时的数据+费率快照
+    P0-6: 清空按钮同步清除 product_id
+    P0-7: 增加 schema_version 表+列迁移+配置迁移
+```
+
+## 代码变更统计（仅 Profit accounting-Auto/）
+
+| 文件 | 变更 |
+|------|------|
+| `config/config_manager.py` | +2/-2 (默认值) |
+| `database/db_manager.py` | +125/-? (schema/migration/snapshot规则) |
+| `tests/test_database.py` | +70 (新增2项测试，更新期望值) |
+| `ui/history_page.py` | 重写 (列名/实际利润率) |
+| `ui/main_window.py` | +15 (校验/自动刷新) |
+| `ui/product_page.py` | 重写 (P0-2~P0-6) |
+
+总计: 7 files changed, 435 insertions(+), 226 deletions(-)
+
+## 当前分支状态
+
+```
+On branch master
+nothing to commit, working tree clean
+```

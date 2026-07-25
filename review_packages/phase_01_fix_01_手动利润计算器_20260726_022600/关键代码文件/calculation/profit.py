@@ -3,11 +3,9 @@
 
 公式：
   总成本 = 商品成本 + 发往义乌运费 + 总物流成本
-  毛利润 = 售价人民币 - 总成本
-  毛利率(%) = 毛利润 ÷ 售价人民币 × 100
-  净利润 = 毛利润 - 售价 × 推广预留比例
-  净利率(%) = 净利润 ÷ 售价 × 100  =  毛利率 - 推广预留比例
-  建议售价 = 总成本 ÷ (1 - 目标净利率/100 - 推广预留比例/100)
+  利润金额 = 售价人民币 - 总成本
+  利润率(%) = 利润金额 ÷ 售价人民币 × 100
+  建议售价 = 总成本 ÷ (1 - 目标利润率/100 - 推广预留比例/100)
 
 所有输入必须是非负数值，缺失或非法返回 None。
 """
@@ -103,50 +101,3 @@ def suggested_price_from_rate(total_cost_val, target_rate, promotion_rate):
         return None  # 无法覆盖成本
 
     return total_cost_val / (1.0 - total_rate)
-
-
-def net_profit_amount(selling_price_rmb, total_cost_val, promotion_rate):
-    """
-    计算净利润（扣除推广预留后）
-
-    Args:
-        selling_price_rmb: 售价人民币 (元)
-        total_cost_val:    总成本 (元)
-        promotion_rate:    推广预留比例 (%)
-
-    Returns:
-        float: 净利润 (元)
-        None:  任一参数缺失/非法
-    """
-    gp = profit_amount(selling_price_rmb, total_cost_val)
-    if gp is None:
-        return None
-    if promotion_rate is None:
-        return gp
-    if promotion_rate < 0:
-        return None
-    promo_cost = selling_price_rmb * (promotion_rate / 100.0)
-    return gp - promo_cost
-
-
-def net_profit_rate(selling_price_rmb, total_cost_val, promotion_rate):
-    """
-    计算净利率（扣除推广预留后）
-
-    Args:
-        selling_price_rmb: 售价人民币 (元)，必须 > 0
-        total_cost_val:    总成本 (元)
-        promotion_rate:    推广预留比例 (%)
-
-    Returns:
-        float: 净利率 (%)
-        None:  售价缺失/为零/负数 或 总成本缺失
-    """
-    if selling_price_rmb is None or total_cost_val is None:
-        return None
-    if selling_price_rmb <= 0:
-        return None
-    np = net_profit_amount(selling_price_rmb, total_cost_val, promotion_rate)
-    if np is None:
-        return None
-    return (np / selling_price_rmb) * 100

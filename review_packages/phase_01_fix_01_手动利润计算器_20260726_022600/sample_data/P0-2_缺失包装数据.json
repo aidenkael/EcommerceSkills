@@ -1,0 +1,20 @@
+{
+  "测试场景": "P0-2验证 — 不填包装尺寸，利润应显示数据不足",
+  "name": "测试商品-缺失包装数据",
+  "cost": 10.00,
+  "domestic_shipping": 5.00,
+  "packaged_weight": null,
+  "packaged_length": null,
+  "packaged_width": null,
+  "packaged_height": null,
+  "fixed_service_fee": 6.00,
+  "tail_haul_cost": 40.00,
+  "selling_price_rmb": 100.00,
+  "_预期显示": {
+    "头程费用": "数据不足",
+    "总物流成本": "≥46.00 元(估算)",
+    "总成本": "≥51.00 元(估算)",
+    "利润金额": "数据不足(物流费用不完整)",
+    "利润率": "数据不足(物流费用不完整)"
+  }
+}

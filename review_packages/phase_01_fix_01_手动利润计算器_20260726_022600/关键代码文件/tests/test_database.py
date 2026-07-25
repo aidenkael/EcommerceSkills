@@ -109,14 +109,12 @@ class TestDatabase:
         assert self.db.get_snapshot("nonexistent") is None
 
     def test_config_migration(self):
-        """配置迁移：旧值 36/0 应被更新（仅首次初始化时触发）"""
-        # 模拟旧值 + 清除迁移标记
+        """配置迁移：旧值 36/0 应被更新"""
+        # 模拟旧值
         self.db.set_config("fixed_service_fee", "36.0")
         self.db.set_config("default_tail_haul", "0.0")
-        self.db.set_config("_config_migrated_v1", "0")  # 重置迁移标记
 
         # 重新初始化（触发迁移）
         db2 = DatabaseManager(self.db_path)
         assert float(db2.get_config("fixed_service_fee", "0")) == 6.0
         assert float(db2.get_config("default_tail_haul", "0")) == 40.0
-        assert db2.get_config("_config_migrated_v1") == "1"  # 标记已设置

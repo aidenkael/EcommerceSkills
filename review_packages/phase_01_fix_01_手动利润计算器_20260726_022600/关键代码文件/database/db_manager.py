@@ -149,33 +149,21 @@ class DatabaseManager:
             conn.close()
 
     def _migrate_config(self):
-        """安全迁移：仅在新数据库首次初始化时生效。不会覆盖用户已有设置。"""
+        """迁移已有数据库中的旧配置值到新基线"""
         conn = self._get_conn()
         try:
-            # 检查是否已执行过迁移
-            migrated = conn.execute(
-                "SELECT value FROM config WHERE key = '_config_migrated_v1'"
-            ).fetchone()
-            if migrated and migrated["value"] == "1":
-                return
-
-            # 首次运行：如果旧版数据库中有出厂默认值(36/0)且用户尚未修改，则更新
-            old_factory = {"fixed_service_fee": "36.0", "default_tail_haul": "0.0"}
-            for key, old_val in old_factory.items():
+            # 如果已存在旧值且与默认值不同，不覆盖（用户可能自己改过）
+            # 但如果旧值是旧版的出厂默认值（36/0），则更新到新默认值
+            old_defaults = {"fixed_service_fee": "36.0", "default_tail_haul": "0.0"}
+            for key, old_val in old_defaults.items():
                 current = conn.execute(
                     "SELECT value FROM config WHERE key = ?", (key,)
                 ).fetchone()
                 if current and current["value"] == old_val:
-                    # 仍是旧出厂默认值 → 升级到新默认值
+                    new_val = DEFAULT_CONFIG[key]
                     conn.execute(
-                        "UPDATE config SET value = ? WHERE key = ?",
-                        (DEFAULT_CONFIG[key], key),
+                        "UPDATE config SET value = ? WHERE key = ?", (new_val, key)
                     )
-
-            # 标记已迁移（防止重复执行）
-            conn.execute(
-                "INSERT OR REPLACE INTO config (key, value) VALUES ('_config_migrated_v1', '1')"
-            )
             conn.commit()
         finally:
             conn.close()
@@ -287,24 +275,27 @@ class DatabaseManager:
             conn.close()
 
     def search_products(self, keyword="", limit=100, offset=0) -> list[dict]:
-        """搜索商品（按名称或ID），返回含物流成本的完整数据供历史列表使用"""
+        """搜索商品（按名称或ID）"""
         conn = self._get_conn()
         try:
-            base_sql = """SELECT id, name, cost, domestic_shipping,
-                                 head_haul_cost, fixed_service_fee, tail_haul_cost,
-                                 selling_price_rmb, selling_price_usd,
-                                 target_profit_rate, promotion_reserve_rate,
-                                 status, created_at, updated_at
-                          FROM products"""
             if keyword:
                 pattern = f"%{keyword}%"
                 rows = conn.execute(
-                    base_sql + " WHERE name LIKE ? OR id LIKE ? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                    """SELECT id, name, cost, selling_price_rmb, selling_price_usd,
+                              target_profit_rate, status, created_at, updated_at
+                       FROM products
+                       WHERE name LIKE ? OR id LIKE ?
+                       ORDER BY updated_at DESC
+                       LIMIT ? OFFSET ?""",
                     (pattern, pattern, limit, offset),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    base_sql + " ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                    """SELECT id, name, cost, selling_price_rmb, selling_price_usd,
+                              target_profit_rate, status, created_at, updated_at
+                       FROM products
+                       ORDER BY updated_at DESC
+                       LIMIT ? OFFSET ?""",
                     (limit, offset),
                 ).fetchall()
             return [dict(r) for r in rows]

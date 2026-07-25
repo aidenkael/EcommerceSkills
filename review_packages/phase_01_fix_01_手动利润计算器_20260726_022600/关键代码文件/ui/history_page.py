@@ -85,18 +85,13 @@ class HistoryPage(ttk.Frame):
             price_val = p.get("selling_price_rmb")
             price_str = f"{price_val:.2f}" if price_val is not None else ""
 
-            # fix_02-7: 实际净利润率 = (售价 - 完整总成本 - 推广预留) / 售价
-            if price_val is not None and price_val > 0:
-                domestic = p.get("domestic_shipping") or 0
-                head = p.get("head_haul_cost") or 0
-                fixed = p.get("fixed_service_fee") or 0
-                tail = p.get("tail_haul_cost") or 0
-                total_c = (cost_val or 0) + domestic + head + fixed + tail
-                promo = p.get("promotion_reserve_rate") or 0
-                # 净利润 = 售价 - 总成本 - 推广费用
-                net_p = price_val - total_c - price_val * (promo / 100)
-                rate = (net_p / price_val) * 100
-                rate_str = f"{rate:.1f}%"
+            # 实际利润率 = (售价 - 采购成本) / 售价（按可获取的字段估算）
+            if price_val is not None and cost_val is not None and price_val > 0:
+                actual = (price_val - cost_val) / price_val * 100
+                rate_str = f"{actual:.1f}%"
+            elif price_val is not None and price_val > 0:
+                # 有售价无成本
+                rate_str = "?"
             else:
                 rate_str = ""
 

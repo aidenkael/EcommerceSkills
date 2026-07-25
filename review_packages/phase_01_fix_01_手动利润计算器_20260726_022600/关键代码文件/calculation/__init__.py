@@ -10,7 +10,5 @@ from .profit import (
     profit_amount,
     profit_rate,
     suggested_price_from_rate,
-    net_profit_amount,
-    net_profit_rate,
 )
 from .currency import rmb_to_usd, usd_to_rmb
