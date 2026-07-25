@@ -24,7 +24,7 @@ from math import prod
 from pathlib import Path
 from typing import Any
 
-from .calculator import calc_head_cost, calc_volume_weight
+from .calculator import calc_head_cost, calc_volume_weight, calc_freight_costs
 from .config import BASE_DIR, load_config, normalize_category
 from .evidence_resolver import resolve_evidence, _is_soft
 from .packaging_decision_ai import validate_packaging_scenarios
@@ -89,10 +89,7 @@ def estimate(
 
     # ---- 3. 计费场景 ----
     category_type = normalize_category(summary.get("category_type"), config)
-    # 2026-07-26: 费率改为按货代区分, category_type 不再影响单价
-    from .calculator import get_freight_rate
-    rate_info = get_freight_rate(config)
-    rate = float(rate_info["head_price_per_kg"])
+    # 2026-07-26: 费率按货代区分, 两家同时计算
     accepted_weight = resolution.get("accepted_weight") or {}
     accepted_dimensions = resolution.get("accepted_dimensions") or {}
     ai_net_weight = _safe_float(accepted_weight.get("value_kg"))
@@ -110,6 +107,9 @@ def estimate(
                 "head_cost_cny": 0.0,
                 "chargeable_weight_kg": 0.0,
                 "volume_weight_kg": 0.0,
+                "provider_costs": {},
+                "recommended_provider": "",
+                "recommended_cost_rmb": 0.0,
             }
             continue
 
@@ -142,7 +142,8 @@ def estimate(
         )
 
         chargeable = weight_result["chargeable_kg"]
-        head = calc_head_cost(chargeable, category_type, config)
+        freight = calc_freight_costs(chargeable)
+        head = freight["recommended_cost_rmb"]
 
         scenarios_result[mode] = {
             "packaged_size_cm": dims,
@@ -150,6 +151,9 @@ def estimate(
             "volume_weight_kg": vol_weight,
             "chargeable_weight_kg": round(chargeable, 4),
             "head_cost_cny": head,
+            "provider_costs": freight["provider_costs"],
+            "recommended_provider": freight["recommended_provider"],
+            "recommended_cost_rmb": freight["recommended_cost_rmb"],
             "method": scenario.get("method", ""),
             "folding_action": scenario.get("folding_action", ""),
             "soft_volume_ignored": soft_result["volume_ignored"],
@@ -198,7 +202,6 @@ def estimate(
         "folding_action": scenarios_result["normal"].get("folding_action", ""),
         "normal": scenarios_result["normal"],
         "conservative": scenarios_result["conservative"],
-        "head_rate_cny_per_kg": rate,
         "needs_review": bool(review_reasons),
         "review_reasons": review_reasons,
         "confidence": str(summary.get("confidence") or "low"),

@@ -245,3 +245,47 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
     }
 
     return product_summary, raw_evidence, packaging_scenarios, ai_meta
+
+
+def estimate_from_ai_json(
+    ai_data: dict,
+    user_weight: float | None = None,
+    user_weight_unit: str = "g",
+    user_weight_trust: str = "可信",
+    product_link: str = "",
+) -> dict:
+    """可供未来利润软件直接导入的薄入口。
+
+    Args:
+        ai_data: AI JSON dict (按 AiProductJson 格式)
+        user_weight: 用户商品净重 (数值)
+        user_weight_unit: "g" 或 "kg"
+        user_weight_trust: 可信/约值/未核实/参考/低置信/多规格未知/未提供
+        product_link: 1688 链接 (仅保存)
+
+    Returns:
+        统一估算结果 (同 estimator.estimate())
+    """
+    from .estimator import estimate
+    from .weight_rules import UserWeight
+
+    ai = validate(ai_data)
+    if product_link:
+        ai.product_link = product_link
+
+    summary, evidence, scenarios, ai_meta = to_estimate_inputs(ai)
+
+    uw = None
+    if user_weight is not None:
+        uw = UserWeight(user_weight, user_weight_unit, user_weight_trust)
+
+    result = estimate(
+        product_summary=summary,
+        raw_evidence=evidence,
+        packaging_scenarios=scenarios,
+        product_link=ai.product_link,
+        user_weight=uw,
+    )
+
+    result["ai_meta"] = ai_meta
+    return result

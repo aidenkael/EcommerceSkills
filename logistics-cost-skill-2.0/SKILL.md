@@ -7,17 +7,17 @@ description: 单件跨境物流头程成本核算。Codex 读取商品图片输�
 
 ## 入口
 
-`python run.py --ai-json <Codex AI JSON> [--weight-value N] [--link URL]`
+CLI: `python run.py --ai-json <Codex AI JSON> [--weight-value N] [--link URL]`
+
+Python: `from logistics_cost.ai_schema import estimate_from_ai_json`
 
 ## 流程
 
 ```
-Codex multimodal Read (读取商品图片像素)
-  → AI JSON (product_type, ai_net_weight_kg, ai_package_size_cm, confidence...)
-  → run.py 加载 + 校验
-  → estimator.estimate()
-    → 证据仲裁 → 软品检查 → 重量修正 → 确定性头程
-  → 输出正常档/保守档/复核标记
+AI JSON → validate → to_estimate_inputs → estimator.estimate()
+  → 证据仲裁 → 包装校验 → 软品检查 → 重量修正
+  → 每家货代分别计算: 深圳 = 计费重 × 80 + 10, 义乌 = 计费重 × 100 + 6
+  → 返回: provider_costs + recommended_provider + recommended_cost_rmb
 ```
 
 ## AI JSON 格式
@@ -41,32 +41,41 @@ Codex multimodal Read (读取商品图片像素)
 }
 ```
 
-必填: product_type, ai_net_weight_kg, ai_package_size_cm, ai_package_weight_kg, conservative_package_size_cm, conservative_package_weight_kg, confidence
-
-`quantity_source` 三选一: user_confirmed / ai_inferred / assumed; 默认 assumed (暂按 1 件试算)。
-
 ## 规则
 
-### 货代费率 (2026-07-26 生效)
+### 货代费率
 
 | 货代 | 单价 | 固定服务费 |
 |---|---|---|
-| 深圳 (sz) | 80 元/kg | 10 元/单 |
-| 义乌 (yw) | 100 元/kg | 6 元/单 |
+| 深圳 | 80 元/kg | 10 元/单 |
+| 义乌 | 100 元/kg | 6 元/单 |
 
 - 体积重 = 长×宽×高 / 8000
 - 计费重 = max(实重, 体积重)
+- 每个包装档同时计算两家，推荐费用较低的货代
 - 包类/非包类只作为商品属性，不影响费率
-- 默认货代: 当前未设定，需用户选择 (`config/default_freight_forwarder`, 设为 null)
-- **旧规则 "包类80元/kg、非包类100元/kg" 已作废 (2026-07-26)**，仍在 config 中保留为 `categories._deprecated`
+- **旧规则 "包类80/非包类100" 已作废 (2026-07-26)**，运行时不再读取
 
 - 用户可信净重 → 净重 + 0.05kg
 - 低可信/约值/未核实 → 回退 AI 估重
 - 软品展开尺寸不得作为包装尺寸 (体积重>AI净重×3 自动忽略)
 - 1688 链接只保存, 不访问网页
 
-## 输出
+## 输出结构
 
-成功: `{"status":"calculated","normal":{...},"conservative":{...},"ai_meta":{...}}`
-
-受阻: `{"status":"blocked","review_reasons":[...]}`
+```json
+{
+  "status": "calculated",
+  "normal": {
+    "chargeable_weight_kg": 0.12,
+    "provider_costs": {
+      "深圳货代": {"rate_per_kg_rmb": 80, "fixed_service_fee_rmb": 10, "total_cost_rmb": 19.6},
+      "义乌货代": {"rate_per_kg_rmb": 100, "fixed_service_fee_rmb": 6, "total_cost_rmb": 18.0}
+    },
+    "recommended_provider": "义乌货代",
+    "recommended_cost_rmb": 18.0
+  },
+  "conservative": { ... },
+  "ai_meta": {...}
+}
+```

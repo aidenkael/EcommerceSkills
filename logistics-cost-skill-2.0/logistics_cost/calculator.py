@@ -1,14 +1,14 @@
 """不包含视觉推理的确定性物流公式。
 
-头程费率:
-  旧规则(已作废): 包类 80元/kg / 非包类 100元/kg, 根据 category 选择
-  新规则(当前): 按货代区分
-    深圳(sz):  80元/kg + 固定服务费 10元/单
-    义乌(yw): 100元/kg + 固定服务费  6元/单
-  兼容: default_freight_forwarder 为 null 时, 旧 categories 费率仍然可用
+货代费率 (2026-07-26):
+  深圳: 80元/kg + 10元/单固定服务费
+  义乌: 100元/kg +  6元/单固定服务费
 
 体积重: 长×宽×高(cm) ÷ 8000
 计费重: max(实重, 体积重)
+包类/非包类只作为商品属性, 不影响费率。
+
+旧规则 "包类80/非包类100" 已于 2026-07-26 作废。
 """
 
 from __future__ import annotations
@@ -18,10 +18,17 @@ from typing import Any
 from .config import (
     get_exchange_rate_status,
     load_config,
-    normalize_category,
     positive_number,
 )
 
+# ---- 货代定义 ----
+
+FREIGHT_FORWARDERS = {
+    "sz": {"label": "深圳货代", "rate_per_kg_rmb": 80, "fixed_service_fee_rmb": 10},
+    "yw": {"label": "义乌货代", "rate_per_kg_rmb": 100, "fixed_service_fee_rmb": 6},
+}
+
+# ---- 核心计算 ----
 
 def calc_volume_weight(
     length_cm: float,
@@ -45,35 +52,35 @@ def calc_chargeable_weight(actual_weight_kg: float, volume_weight_kg: float) -> 
     )
 
 
-# ---- 货代费率 (2026-07-26 替换旧 categories) ----
+def calc_freight_costs(chargeable_weight_kg: float) -> dict[str, Any]:
+    """同时计算两家货代费用，返回 provider_costs + recommended_provider。
 
-def get_freight_rate(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    """返回当前使用的货代费率(含单价和固定服务费)。
-
-    优先: freight_forwarders[default_freight_forwarder]
-    回退: categories[general] (兼容旧配置)
+    返回:
+      {
+        "provider_costs": { "深圳货代": {...}, "义乌货代": {...} },
+        "recommended_provider": "义乌货代",
+        "recommended_cost_rmb": 16.0,
+      }
     """
-    config = config or load_config()
-    fw = config.get("default_freight_forwarder")
-    ff = config.get("freight_forwarders", {})
-    if fw and fw in ff:
-        return dict(ff[fw])
-    # 回退: 旧 categories 费率 (标记为 deprecated)
-    cats = config.get("categories", {})
-    gen = cats.get("general", cats.get("bag", {}))
-    if gen:
-        return {"head_price_per_kg": gen.get("head_price_per_kg", 100),
-                "fixed_service_fee": gen.get("fixed_service_fee", 6),
-                "_deprecated_fallback": True}
-    return {"head_price_per_kg": 100, "fixed_service_fee": 6}
-
-
-# ---- deprecated helper, 保留兼容 ----
-
-def _category(category_type: str, config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """[已作废] 旧的按包类/非包类选择费率。保留用于 calc_logistics 等旧入口兼容。"""
-    key = normalize_category(category_type, config)
-    return key, config["categories"][key]
+    w = positive_number(chargeable_weight_kg, "chargeable_weight_kg", allow_zero=True)
+    costs = {}
+    lowest = None
+    lowest_key = ""
+    for key, fw in FREIGHT_FORWARDERS.items():
+        total = round(w * fw["rate_per_kg_rmb"] + fw["fixed_service_fee_rmb"], 2)
+        costs[fw["label"]] = {
+            "rate_per_kg_rmb": fw["rate_per_kg_rmb"],
+            "fixed_service_fee_rmb": fw["fixed_service_fee_rmb"],
+            "total_cost_rmb": total,
+        }
+        if lowest is None or total < lowest:
+            lowest = total
+            lowest_key = fw["label"]
+    return {
+        "provider_costs": costs,
+        "recommended_provider": lowest_key,
+        "recommended_cost_rmb": lowest,
+    }
 
 
 def calc_head_cost(
@@ -81,10 +88,31 @@ def calc_head_cost(
     category_type: str,
     config: dict[str, Any] | None = None,
 ) -> float:
-    config = config or load_config()
-    rate_info = get_freight_rate(config)
-    weight = positive_number(chargeable_weight_kg, "chargeable_weight_kg", allow_zero=True)
-    return round(weight * float(rate_info["head_price_per_kg"]), 2)
+    """[兼容保留] 使用推荐货代计算头程。新调用应用 calc_freight_costs。"""
+    freight = calc_freight_costs(chargeable_weight_kg)
+    return freight["recommended_cost_rmb"]
+
+
+# ---- deprecated: retained for signature compatibility only ----
+
+def get_freight_rate(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """[已作废] 请改用 calc_freight_costs() 同时计算两家。
+    
+    保留此函数仅用于向后兼容旧调用者(如 calc_logistics),
+    返回推荐货运的费用信息。
+    """
+    freight = calc_freight_costs(0.0)
+    rec = freight["recommended_provider"]
+    cost = freight["provider_costs"][rec]
+    return {"head_price_per_kg": cost["rate_per_kg_rmb"], "fixed_service_fee": cost["fixed_service_fee_rmb"]}
+
+
+def _category(category_type: str, config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """[已作废] 旧的按包类/非包类选择费率。仅用于 calc_logistics 签名兼容。"""
+    from .config import normalize_category
+    key = normalize_category(category_type, config)
+    # no longer reads config["categories"] — returns dummy
+    return key, {"category_cn": "已作废", "head_price_per_kg": 0, "fixed_service_fee": 0}
 
 
 def calc_tail_cost(
@@ -103,11 +131,9 @@ def calc_total_cost(
     config: dict[str, Any] | None = None,
 ) -> float:
     config = config or load_config()
-    rate_info = get_freight_rate(config)
     return round(
         positive_number(head_cost, "head_cost", allow_zero=True)
-        + positive_number(tail_cost_cny, "tail_cost_cny", allow_zero=True)
-        + float(rate_info["fixed_service_fee"]),
+        + positive_number(tail_cost_cny, "tail_cost_cny", allow_zero=True),
         2,
     )
 
@@ -118,9 +144,10 @@ def infer_chargeable_weight_from_head_cost(
     config: dict[str, Any] | None = None,
 ) -> float:
     config = config or load_config()
-    _, category = _category(category_type, config)
+    freight = calc_freight_costs(0.0)
+    rate = freight["provider_costs"][freight["recommended_provider"]]["rate_per_kg_rmb"]
     cost = positive_number(actual_head_cost, "actual_head_cost", allow_zero=True)
-    return cost / float(category["head_price_per_kg"])
+    return cost / rate
 
 
 def compare_head_cost_feedback(
@@ -133,11 +160,11 @@ def compare_head_cost_feedback(
     estimated = positive_number(estimated_head_cost, "estimated_head_cost")
     actual = positive_number(actual_head_cost, "actual_head_cost", allow_zero=True)
     error_amount = actual - estimated
-    error_percent = error_amount / estimated
-    threshold = config["correction_threshold"]
+    error_percent = error_amount / estimated if estimated else 0
+    threshold = config.get("correction_threshold", {})
     attention = (
-        abs(error_amount) > float(threshold["amount_cny"])
-        or abs(error_percent) > float(threshold["percent"])
+        abs(error_amount) > float(threshold.get("amount_cny", 5))
+        or abs(error_percent) > float(threshold.get("percent", 0.1))
     )
     direction = "underestimate" if error_amount > 0 else "overestimate" if error_amount < 0 else "match"
     return {
@@ -153,6 +180,7 @@ def compare_head_cost_feedback(
         "need_attention": attention,
     }
 
+
 def calc_logistics(
     length_cm: float,
     width_cm: float,
@@ -164,12 +192,10 @@ def calc_logistics(
     packaging_profile_key: str | None = None,
 ) -> dict[str, Any]:
     config = load_config()
-    rate_info = get_freight_rate(config)
-    category_type, category = _category(product_category, config)  # 旧兼容
     volume_weight = calc_volume_weight(length_cm, width_cm, height_cm, config)
     chargeable_weight = calc_chargeable_weight(actual_weight_kg, volume_weight)
+    freight = calc_freight_costs(chargeable_weight)
     rate = config["usd_cny_rate"] if usd_to_cny is None else usd_to_cny
-    head_cost = calc_head_cost(chargeable_weight, category_type, config)
     tail_cost = calc_tail_cost(rate, config)
     rate_status = get_exchange_rate_status(config)
     return {
@@ -180,17 +206,17 @@ def calc_logistics(
         "volume_weight_kg": round(volume_weight, 4),
         "chargeable_weight_kg": round(chargeable_weight, 4),
         "packaging_profile_key": packaging_profile_key or "",
-        "category_type": category_type,
-        "product_category": category["category_cn"],
-        "first_leg_rate": rate_info["head_price_per_kg"],
-        "first_leg_cost": head_cost,
+        "first_leg_rate": freight["provider_costs"][freight["recommended_provider"]]["rate_per_kg_rmb"],
+        "first_leg_cost": freight["recommended_cost_rmb"],
         "last_leg_cost_usd": config["tail_fee_usd"],
         "usd_to_cny": float(rate),
         "usd_cny_rate_updated_at": rate_status["updated_at"],
         "usd_cny_rate_source": rate_status["source"],
         "usd_cny_rate_is_stale": rate_status["is_stale"],
         "last_leg_cost_cny": tail_cost,
-        "service_fee": rate_info["fixed_service_fee"],
-        "total_cost": calc_total_cost(head_cost, tail_cost, category_type, config),
+        "provider_costs": freight["provider_costs"],
+        "recommended_provider": freight["recommended_provider"],
+        "recommended_cost_rmb": freight["recommended_cost_rmb"],
+        "total_cost": calc_total_cost(freight["recommended_cost_rmb"], tail_cost, product_category, config),
         "formula_version": config["formula_version"],
     }
