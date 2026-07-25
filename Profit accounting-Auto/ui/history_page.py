@@ -82,14 +82,14 @@ class HistoryPage(ttk.Frame):
             price_val = p.get("selling_price_rmb")
             price_str = f"{price_val:.2f}" if price_val is not None else ""
 
-            # 净利率 = 只有物流完整时才计算
+            # 净利率：只有头程/固定费/尾程全部完整时才计算
             head = p.get("head_haul_cost")
-            if head is not None and price_val is not None and price_val > 0:
-                domestic = p.get("domestic_shipping") or 0
-                fixed = p.get("fixed_service_fee") or 0
-                tail = p.get("tail_haul_cost") or 0
-                total_c = (cost_val or 0) + domestic + head + fixed + tail
-                promo = p.get("promotion_reserve_rate") or 0
+            fixed = p.get("fixed_service_fee")
+            tail = p.get("tail_haul_cost")
+            if head is not None and fixed is not None and tail is not None and price_val is not None and price_val > 0:
+                domestic = p.get("domestic_shipping") if p.get("domestic_shipping") is not None else 0
+                total_c = (cost_val if cost_val is not None else 0) + domestic + head + fixed + tail
+                promo = p.get("promotion_reserve_rate") if p.get("promotion_reserve_rate") is not None else 0
                 net_p = price_val - total_c - price_val * (promo / 100)
                 rate = (net_p / price_val) * 100
                 rate_str = f"{rate:.1f}%"
