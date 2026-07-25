@@ -13,7 +13,7 @@
 VOLUME_DIVISOR = 8000  # 体积重除数 (cm³ → kg)
 
 
-def volumetric_weight(length_cm, width_cm, height_cm):
+def volumetric_weight(length_cm, width_cm, height_cm, volume_divisor=VOLUME_DIVISOR):
     """
     计算体积重 (kg)
 
@@ -21,16 +21,19 @@ def volumetric_weight(length_cm, width_cm, height_cm):
         length_cm: 长 (cm)，必须 >= 0
         width_cm:  宽 (cm)，必须 >= 0
         height_cm: 高 (cm)，必须 >= 0
+        volume_divisor: 体积重除数，必须 > 0
 
     Returns:
         float: 体积重 (kg)
         None:  任一参数为 None 或负数
     """
-    if any(v is None for v in (length_cm, width_cm, height_cm)):
+    if any(v is None for v in (length_cm, width_cm, height_cm, volume_divisor)):
         return None
     if any(v < 0 for v in (length_cm, width_cm, height_cm)):
         return None
-    return (length_cm * width_cm * height_cm) / VOLUME_DIVISOR
+    if volume_divisor <= 0:
+        return None
+    return (length_cm * width_cm * height_cm) / volume_divisor
 
 
 def chargeable_weight(actual_weight_kg, vol_weight_kg):

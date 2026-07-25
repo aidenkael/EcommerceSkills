@@ -1,11 +1,11 @@
 """
-新商品测算页面 — fix_05
+新商品测算页面 — fix_06
 
 核心修复：
-- _build_saved_rule_context() vs _build_current_rule_context() 分离
-- head_haul_rate 写入 _computed（规则快照完整）
-- _calculation_results 嵌入 snapshot_data
-- 历史规则永不被编辑/保存/还原清除
+- 当前保存规则与首次还原规则分离
+- 当前规则和当前计算结果每次保存均原子持久化
+- 历史加载优先使用冻结的计算结果
+- 体积重除数参与实际公式
 - 严格 None 传播（用 known_* 函数显示下限）
 """
 
@@ -19,8 +19,10 @@ from calculation import (
     total_cost, known_total_cost_subtotal,
     profit_amount, profit_rate, suggested_price_from_rate,
     net_profit_amount, net_profit_rate, rmb_to_usd, usd_to_rmb,
+    compare_rule_contexts,
 )
 from config.config_manager import VOLUME_DIVISOR, FORWARDER_LABELS
+from database.db_manager import CALCULATION_SCHEMA_VERSION
 
 
 def _safe_float(val):
@@ -166,29 +168,29 @@ class ProductPage(ttk.Frame):
 
     # ─── 规则上下文 ────────────────────────────────────────
 
-    def _build_saved_rule_context(self, product, snap):
-        """从快照构建保存时的规则（只读取快照，不读取当前配置）"""
-        ctx = {"forwarder": product.get("freight_forwarder")}
-        if snap and isinstance(snap.get("_snapshot_rule_full"), dict):
-            full = snap["_snapshot_rule_full"]
-            ctx.update({
-                "head_haul_rate": full.get("head_haul_rate"),
-                "fixed_service_fee": full.get("fixed_service_fee"),
-                "tail_haul_cost": full.get("tail_haul_cost"),
-                "exchange_rate": snap.get("_snapshot_exchange_rate"),
-                "volume_divisor": snap.get("_snapshot_volume_divisor", VOLUME_DIVISOR),
-                "rule_version": snap.get("_snapshot_rule_version"),
-            })
-        elif snap:
-            ctx.update({
-                "head_haul_rate": snap.get("_snapshot_head_haul_rate"),
-                "fixed_service_fee": snap.get("_snapshot_fixed_service_fee"),
-                "tail_haul_cost": snap.get("_snapshot_tail_haul_cost"),
-                "exchange_rate": snap.get("_snapshot_exchange_rate"),
-                "volume_divisor": snap.get("_snapshot_volume_divisor", VOLUME_DIVISOR),
-                "rule_version": snap.get("_snapshot_rule_version"),
-            })
-        return ctx
+    @staticmethod
+    def _build_product_rule_context(product):
+        """读取商品最近一次保存的规则，不回退到首次快照。"""
+        rules = product.get("_current_rule_snapshot") if product else None
+        return dict(rules) if isinstance(rules, dict) else None
+
+    @staticmethod
+    def _build_snapshot_rule_context(snapshot):
+        """只从首次快照构建还原规则，禁止混入当前商品字段。"""
+        if not snapshot:
+            return None
+        full = snapshot.get("_snapshot_rule_full")
+        if isinstance(full, dict):
+            return dict(full)
+        return {
+            "forwarder": snapshot.get("freight_forwarder"),
+            "head_haul_rate": snapshot.get("_snapshot_head_haul_rate"),
+            "fixed_service_fee": snapshot.get("_snapshot_fixed_service_fee"),
+            "tail_haul_cost": snapshot.get("_snapshot_tail_haul_cost"),
+            "exchange_rate": snapshot.get("_snapshot_exchange_rate"),
+            "volume_divisor": snapshot.get("_snapshot_volume_divisor", VOLUME_DIVISOR),
+            "rule_version": snapshot.get("_snapshot_rule_version"),
+        }
 
     def _build_current_rule_context(self):
         """从当前UI和配置构建当前规则"""
@@ -200,7 +202,7 @@ class ProductPage(ttk.Frame):
             "fixed_service_fee": route.get("fixed_service_fee") if route else None,
             "tail_haul_cost": _safe_float(self._entry_vars.get("tail", tk.StringVar()).get()) if "tail" in self._entry_vars else self._cfg.default_tail_haul,
             "exchange_rate": self._cfg.exchange_rate,
-            "volume_divisor": VOLUME_DIVISOR,
+            "volume_divisor": self._cfg.volume_divisor,
             "rule_version": self._cfg.rule_version,
         }
 
@@ -297,34 +299,40 @@ class ProductPage(ttk.Frame):
 
         head_rate = ctx.get("head_haul_rate")
         fixed_fee = ctx.get("fixed_service_fee")
-        exchange_rate = ctx.get("exchange_rate", 7.20)
+        exchange_rate = ctx.get("exchange_rate")
         forwarder = ctx.get("forwarder")
+        volume_divisor = ctx.get("volume_divisor")
 
         # === 写入 _computed（完整规则快照） ===
-        self._computed["forwarder"] = forwarder
-        self._computed["head_haul_rate"] = head_rate
-        self._computed["fixed_service_fee"] = fixed_fee
-        self._computed["tail_haul_cost"] = tail_haul
-        self._computed["exchange_rate"] = exchange_rate
-        self._computed["volume_divisor"] = VOLUME_DIVISOR
-        self._computed["rule_version"] = self._cfg.rule_version
+        self._computed = {
+            "forwarder": forwarder,
+            "head_haul_rate": head_rate,
+            "fixed_service_fee": fixed_fee,
+            "tail_haul_cost": tail_haul,
+            "exchange_rate": exchange_rate,
+            "volume_divisor": volume_divisor,
+            "rule_version": ctx.get("rule_version"),
+            "calculation_schema_version": CALCULATION_SCHEMA_VERSION,
+        }
 
         # 未选货代 → 不计算
         if forwarder is None or head_rate is None or fixed_fee is None:
             for k in self._result_labels: self._result_labels[k].set("请选择货代" if k == "head_haul" else "—")
             self._computed.update({"head_haul": None, "total_logistics": None, "total_cost": None,
-                                    "profit": None, "profit_rate": None, "suggested_price": None})
+                                    "profit": None, "profit_rate": None, "suggested_price": None,
+                                    "volumetric_weight": None, "chargeable_weight": None,
+                                    "converted_usd": None})
             return
 
         # USD→RMB
         if self._last_modified == "price_usd":
             pu = _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get())
-            if pu is not None and exchange_rate > 0:
+            if pu is not None and exchange_rate is not None and exchange_rate > 0:
                 price_rmb = pu * exchange_rate
                 self._entry_vars.get("price_rmb", tk.StringVar()).set(f"{price_rmb:.2f}")
                 self._last_modified = "price_rmb"
 
-        vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h)
+        vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h, volume_divisor)
         chg_w = chargeable_weight(pkg_w, vol_w)
         head_cost = head_haul_cost(chg_w, head_rate)
         head_partial = (head_cost is None)
@@ -353,13 +361,16 @@ class ProductPage(ttk.Frame):
         self._computed["head_haul"] = head_cost
         self._computed["total_logistics"] = logistics
         self._computed["total_cost"] = tc
+        self._computed["volumetric_weight"] = vol_w
+        self._computed["chargeable_weight"] = chg_w
 
         if head_partial or logistics is None or tc is None:
             self._set_result("profit", None, partial=True)
             self._set_result("profit_rate", None, partial=True)
             self._set_result("suggested_price", None)
             self._set_result("converted_usd", None)
-            self._computed.update({"profit": None, "profit_rate": None, "suggested_price": None})
+            self._computed.update({"profit": None, "profit_rate": None, "suggested_price": None,
+                                   "converted_usd": None})
             return
 
         p_rate = promo_rate if promo_rate is not None else 0
@@ -373,7 +384,9 @@ class ProductPage(ttk.Frame):
                 sp = suggested_price_from_rate(tc, target_rate, promo_rate or 0)
                 self._set_result("suggested_price", sp, " 元")
                 self._computed["suggested_price"] = sp
-                if sp is not None: self._set_result("converted_usd", rmb_to_usd(sp, exchange_rate), " $")
+                converted = rmb_to_usd(sp, exchange_rate) if sp is not None else None
+                self._set_result("converted_usd", converted, " $")
+                self._computed["converted_usd"] = converted
                 if price_rmb is not None and price_rmb > 0:
                     np = net_profit_amount(price_rmb, tc, p_rate); npr = net_profit_rate(price_rmb, tc, p_rate)
                     self._set_result("profit", np, " 元"); self._set_result("profit_rate", npr, " %")
@@ -390,11 +403,13 @@ class ProductPage(ttk.Frame):
                 self._computed["profit"] = np; self._computed["profit_rate"] = npr
                 u = rmb_to_usd(price_rmb, exchange_rate)
                 self._set_result("converted_usd", u, " $")
+                self._computed["converted_usd"] = u
                 if u is not None: self._entry_vars["price_usd"].set(f"{u:.2f}")
             else:
                 self._set_result("profit", None); self._set_result("profit_rate", None)
                 self._set_result("converted_usd", None, " $")
                 self._computed["profit"] = None; self._computed["profit_rate"] = None
+                self._computed["converted_usd"] = None
             self._set_result("suggested_price", None)
             self._computed["suggested_price"] = None
 
@@ -449,33 +464,53 @@ class ProductPage(ttk.Frame):
             self._computed = {}
         finally: self._programmatic = False
 
+    def _build_rule_snapshot(self):
+        return {
+            "exchange_rate": self._computed.get("exchange_rate"),
+            "head_haul_rate": self._computed.get("head_haul_rate"),
+            "fixed_service_fee": self._computed.get("fixed_service_fee"),
+            "tail_haul_cost": self._computed.get("tail_haul_cost"),
+            "volume_divisor": self._computed.get("volume_divisor"),
+            "forwarder": self._computed.get("forwarder"),
+            "rule_version": self._computed.get("rule_version"),
+        }
+
+    def _build_calculation_snapshot(self):
+        return {
+            "calculation_schema_version": CALCULATION_SCHEMA_VERSION,
+            "volumetric_weight": self._computed.get("volumetric_weight"),
+            "chargeable_weight": self._computed.get("chargeable_weight"),
+            "head_haul_cost": self._computed.get("head_haul"),
+            "total_logistics_cost": self._computed.get("total_logistics"),
+            "total_cost": self._computed.get("total_cost"),
+            "net_profit_amount": self._computed.get("profit"),
+            "net_profit_rate": self._computed.get("profit_rate"),
+            "suggested_price_rmb": self._computed.get("suggested_price"),
+            "converted_usd": self._computed.get("converted_usd"),
+        }
+
     def save_product(self):
         inv = self._get_invalid_list()
         if inv:
             messagebox.showwarning("输入错误", "以下字段存在错误：\n\n" + "\n".join(f"  - {f}" for f in inv))
             return
         data = self._gather_data()
-        if self._product_id:
-            self._db.update_product(self._product_id, data)
-            messagebox.showinfo("提示", f"商品 {self._product_id} 已更新。")
-        else:
-            self._product_id = self._db.create_product(data)
-            rules = {
-                "exchange_rate": self._computed.get("exchange_rate"),
-                "head_haul_rate": self._computed.get("head_haul_rate"),
-                "fixed_service_fee": self._computed.get("fixed_service_fee"),
-                "tail_haul_cost": self._computed.get("tail_haul_cost"),
-                "volume_divisor": VOLUME_DIVISOR,
-                "forwarder": self._computed.get("forwarder"),
-                "rule_version": self._cfg.rule_version,
-            }
-            calc_results = {k: self._computed.get(k) for k in [
-                "volumetric_weight", "chargeable_weight", "head_haul", "total_logistics",
-                "total_cost", "profit", "profit_rate", "suggested_price"
-            ]}
-            self._db.save_snapshot(self._product_id, data, rules, calc_results)
-            self._has_snapshot = True
+        rules = self._build_rule_snapshot()
+        calc_results = self._build_calculation_snapshot()
+        was_new = self._product_id is None
+        try:
+            self._product_id = self._db.save_product_state(
+                data, rules, calc_results, pid=self._product_id
+            )
+        except Exception as exc:
+            messagebox.showerror("保存失败", f"商品未保存，数据库已回滚：{exc}")
+            return
+        self._saved_rule_context = dict(rules)
+        self._has_snapshot = True
+        if was_new:
             messagebox.showinfo("提示", f"商品已保存，ID: {self._product_id}")
+        else:
+            messagebox.showinfo("提示", f"商品 {self._product_id} 已更新。")
 
     def restore_product(self):
         if not self._product_id:
@@ -483,13 +518,16 @@ class ProductPage(ttk.Frame):
         snap = self._db.get_snapshot(self._product_id)
         if not snap:
             messagebox.showinfo("提示", "没有可还原的快照。"); return
-        if snap.get("_snapshot_rule_full") and isinstance(snap["_snapshot_rule_full"], dict):
-            self._set_forwarder_key(snap["_snapshot_rule_full"].get("forwarder", ""))
+        snapshot_rules = self._build_snapshot_rule_context(snap)
+        if snapshot_rules:
+            self._set_forwarder_key(snapshot_rules.get("forwarder", ""))
         self._load_data(snap)
-        # 从快照重建保存规则（不设为 None）
-        product = self._db.get_product(self._product_id)
-        self._saved_rule_context = self._build_saved_rule_context(product or snap, snap)
-        self._populate_results_from_saved(snap)
+        self._saved_rule_context = snapshot_rules
+        self._populate_results_from_saved(
+            snap,
+            snap.get("_calculation_results"),
+            snapshot_rules,
+        )
         messagebox.showinfo("提示", "已还原到首次保存的状态。")
 
     def load_product(self, product_id: str):
@@ -499,70 +537,110 @@ class ProductPage(ttk.Frame):
         self._has_snapshot = self._db.get_snapshot(product_id) is not None
         self._calc_direction = None; self._last_modified = None
         self._load_data(product)
-        fwd = product.get("freight_forwarder"); self._set_forwarder_key(fwd if fwd else "")
         snap = self._db.get_snapshot(product_id)
-        self._saved_rule_context = self._build_saved_rule_context(product, snap) if snap else None
+        self._saved_rule_context = self._build_product_rule_context(product)
+        if self._saved_rule_context is None and snap:
+            self._saved_rule_context = self._build_snapshot_rule_context(snap)
+        fwd = (
+            self._saved_rule_context.get("forwarder")
+            if self._saved_rule_context else product.get("freight_forwarder")
+        )
+        self._set_forwarder_key(fwd if fwd else "")
         self._show_rate_banner = True
-        self._populate_results_from_saved(product)
+        self._populate_results_from_saved(
+            product,
+            product.get("_current_calculation_results"),
+            self._saved_rule_context,
+        )
         if self._saved_rule_context: self._check_rate_changes()
 
-    def _populate_results_from_saved(self, data):
+    @staticmethod
+    def _saved_result(calc, canonical_key, legacy_key=None):
+        if not isinstance(calc, dict):
+            return False, None
+        if canonical_key in calc:
+            return True, calc.get(canonical_key)
+        if legacy_key and legacy_key in calc:
+            return True, calc.get(legacy_key)
+        return False, None
+
+    def _populate_results_from_saved(self, data, calc=None, rule_context=None):
+        rule_context = rule_context or {}
         pkg_l = data.get("packaged_length"); pkg_wi = data.get("packaged_width")
         pkg_h = data.get("packaged_height"); pkg_w = data.get("packaged_weight")
-        vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h); chg_w = chargeable_weight(pkg_w, vol_w)
+        found, vol_w = self._saved_result(calc, "volumetric_weight")
+        if not found or vol_w is None:
+            vol_w = volumetric_weight(
+                pkg_l, pkg_wi, pkg_h, rule_context.get("volume_divisor", VOLUME_DIVISOR)
+            )
+        found, chg_w = self._saved_result(calc, "chargeable_weight")
+        if not found or chg_w is None:
+            chg_w = chargeable_weight(pkg_w, vol_w)
         self._set_result("vol_weight", vol_w, " kg"); self._set_result("charge_weight", chg_w, " kg")
 
-        head = data.get("head_haul_cost"); fwd = data.get("freight_forwarder") or ""
+        found, head = self._saved_result(calc, "head_haul_cost", "head_haul")
+        if not found:
+            head = data.get("head_haul_cost")
+        fwd = rule_context.get("forwarder") or data.get("freight_forwarder") or ""
         fwd_l = FORWARDER_LABELS.get(fwd, fwd) if fwd else ""
         if head is not None: self._set_result("head_haul", head, f" 元({fwd_l})" if fwd_l else " 元")
         else: self._set_result("head_haul", None, partial=True)
 
         fixed = data.get("fixed_service_fee"); tail = data.get("tail_haul_cost")
         missing = (head is None or fixed is None or tail is None)
-        logistics = total_logistics_cost(head, fixed, tail) if not missing else None
+        found, logistics = self._saved_result(calc, "total_logistics_cost", "total_logistics")
+        if not found:
+            logistics = total_logistics_cost(head, fixed, tail) if not missing else None
         cost = data.get("cost"); domestic = data.get("domestic_shipping")
-        tc = total_cost(cost, domestic, logistics) if logistics is not None else None
+        found, tc = self._saved_result(calc, "total_cost")
+        if not found:
+            tc = total_cost(cost, domestic, logistics) if logistics is not None else None
 
         self._set_result("total_logistics", logistics, " 元", partial=missing)
         self._set_result("total_cost", tc, " 元", partial=(missing or tc is None))
-        if missing or tc is None:
+        found_profit, net_profit = self._saved_result(calc, "net_profit_amount", "profit")
+        found_rate, net_rate = self._saved_result(calc, "net_profit_rate", "profit_rate")
+        if not found_profit or not found_rate:
+            price_rmb = data.get("selling_price_rmb"); promo = data.get("promotion_reserve_rate") or 0
+            if not missing and tc is not None and price_rmb is not None and price_rmb > 0:
+                net_profit = net_profit_amount(price_rmb, tc, promo)
+                net_rate = net_profit_rate(price_rmb, tc, promo)
+            else:
+                net_profit = None
+                net_rate = None
+        if net_profit is None or net_rate is None:
             self._set_result("profit", None, partial=True); self._set_result("profit_rate", None, partial=True)
         else:
-            price_rmb = data.get("selling_price_rmb"); promo = data.get("promotion_reserve_rate") or 0
-            if price_rmb is not None and price_rmb > 0:
-                np = net_profit_amount(price_rmb, tc, promo); npr = net_profit_rate(price_rmb, tc, promo)
-                self._set_result("profit", np, " 元"); self._set_result("profit_rate", npr, " %")
-                self._computed["profit"] = np; self._computed["profit_rate"] = npr
-            else:
-                self._set_result("profit", None, " 元"); self._set_result("profit_rate", None, " %")
-        self._set_result("converted_usd", data.get("selling_price_usd"), " $")
-        self._set_result("suggested_price", None)
+            self._set_result("profit", net_profit, " 元"); self._set_result("profit_rate", net_rate, " %")
+        _, suggested = self._saved_result(calc, "suggested_price_rmb", "suggested_price")
+        found_usd, converted_usd = self._saved_result(calc, "converted_usd")
+        if not found_usd:
+            converted_usd = data.get("selling_price_usd")
+        self._set_result("converted_usd", converted_usd, " $")
+        self._set_result("suggested_price", suggested, " 元")
 
-        calc = data.get("_calculation_results", {})
         self._computed = {
-            "head_haul": head, "head_haul_rate": self._saved_rule_context["head_haul_rate"] if self._saved_rule_context else None,
+            "head_haul": head, "head_haul_rate": rule_context.get("head_haul_rate"),
             "fixed_service_fee": fixed, "tail_haul_cost": tail,
             "total_logistics": logistics, "total_cost": tc,
-            "exchange_rate": self._saved_rule_context["exchange_rate"] if self._saved_rule_context else self._cfg.exchange_rate,
+            "exchange_rate": rule_context.get("exchange_rate"),
             "forwarder": fwd or None,
-            "volume_divisor": self._saved_rule_context["volume_divisor"] if self._saved_rule_context else VOLUME_DIVISOR,
-            "rule_version": self._saved_rule_context["rule_version"] if self._saved_rule_context else self._cfg.rule_version,
-            "profit": self._computed.get("profit"), "profit_rate": self._computed.get("profit_rate"),
-            "suggested_price": None,
+            "volume_divisor": rule_context.get("volume_divisor"),
+            "rule_version": rule_context.get("rule_version"),
+            "calculation_schema_version": (
+                calc.get("calculation_schema_version", CALCULATION_SCHEMA_VERSION)
+                if isinstance(calc, dict) else CALCULATION_SCHEMA_VERSION
+            ),
+            "volumetric_weight": vol_w, "chargeable_weight": chg_w,
+            "profit": net_profit, "profit_rate": net_rate,
+            "suggested_price": suggested, "converted_usd": converted_usd,
         }
 
     def _check_rate_changes(self):
         saved = self._saved_rule_context
         if not saved: return
         current = self._build_current_rule_context()
-        diffs = {}
-        keys = ["forwarder", "head_haul_rate", "fixed_service_fee", "tail_haul_cost", "volume_divisor", "exchange_rate", "rule_version"]
-        for k in keys:
-            sv = saved.get(k); cv = current.get(k)
-            if sv is not None and cv is not None:
-                if isinstance(sv, float) and isinstance(cv, float):
-                    if abs(sv - cv) > 0.001: diffs[k] = (sv, cv)
-                elif sv != cv: diffs[k] = (sv, cv)
+        diffs = compare_rule_contexts(saved, current)
         self._show_rate_notice(diffs if diffs else None)
 
     def _gather_data(self):

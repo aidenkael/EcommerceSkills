@@ -9,6 +9,37 @@ from tkinter import ttk, messagebox
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from calculation import total_logistics_cost, total_cost, net_profit_rate
+
+
+def saved_or_legacy_net_rate(product):
+    """优先返回保存结果；仅在全部成本完整时兼容计算旧记录。"""
+    calculated = product.get("_current_calculation_results")
+    if isinstance(calculated, dict) and "net_profit_rate" in calculated:
+        return calculated.get("net_profit_rate")
+
+    required = [
+        product.get("cost"),
+        product.get("domestic_shipping"),
+        product.get("head_haul_cost"),
+        product.get("fixed_service_fee"),
+        product.get("tail_haul_cost"),
+        product.get("selling_price_rmb"),
+    ]
+    if any(value is None for value in required):
+        return None
+    logistics = total_logistics_cost(
+        product["head_haul_cost"],
+        product["fixed_service_fee"],
+        product["tail_haul_cost"],
+    )
+    total = total_cost(product["cost"], product["domestic_shipping"], logistics)
+    return net_profit_rate(
+        product["selling_price_rmb"],
+        total,
+        product.get("promotion_reserve_rate"),
+    )
+
 
 class HistoryPage(ttk.Frame):
 
@@ -82,18 +113,10 @@ class HistoryPage(ttk.Frame):
             price_val = p.get("selling_price_rmb")
             price_str = f"{price_val:.2f}" if price_val is not None else ""
 
-            # 净利率：只有头程/固定费/尾程全部完整时才计算
-            head = p.get("head_haul_cost")
-            fixed = p.get("fixed_service_fee")
-            tail = p.get("tail_haul_cost")
-            if head is not None and fixed is not None and tail is not None and price_val is not None and price_val > 0:
-                domestic = p.get("domestic_shipping") if p.get("domestic_shipping") is not None else 0
-                total_c = (cost_val if cost_val is not None else 0) + domestic + head + fixed + tail
-                promo = p.get("promotion_reserve_rate") if p.get("promotion_reserve_rate") is not None else 0
-                net_p = price_val - total_c - price_val * (promo / 100)
-                rate = (net_p / price_val) * 100
+            rate = saved_or_legacy_net_rate(p)
+            if rate is not None:
                 rate_str = f"{rate:.1f}%"
-            elif head is None and price_val is not None and price_val > 0:
+            elif price_val is not None and price_val > 0:
                 rate_str = "数据不足"
             else:
                 rate_str = ""
