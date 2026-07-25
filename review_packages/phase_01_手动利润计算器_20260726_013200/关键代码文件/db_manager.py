@@ -2,12 +2,9 @@
 SQLite 数据库管理模块
 
 表结构:
-  schema_version    — 数据库版本（迁移用）
   products         — 商品主表（当前有效数据）
-  product_snapshots — 第一次保存时的快照（含当时费率）
+  product_snapshots — 第一次保存时的快照（用于还原）
   config           — 配置键值对
-
-规则版本: 1 (初始版)
 """
 
 import sqlite3
@@ -17,14 +14,7 @@ import os
 from datetime import datetime
 
 
-CURRENT_SCHEMA_VERSION = 1
-
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS schema_version (
-    version   INTEGER PRIMARY KEY,
-    applied_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS products (
     id                  TEXT PRIMARY KEY,
     name                TEXT DEFAULT '',
@@ -54,14 +44,10 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 CREATE TABLE IF NOT EXISTS product_snapshots (
-    id                  TEXT PRIMARY KEY,
-    product_id          TEXT NOT NULL UNIQUE,
-    snapshot_data       TEXT NOT NULL,
-    exchange_rate       REAL,
-    head_haul_rate      REAL,
-    fixed_service_fee   REAL,
-    rule_version        INTEGER DEFAULT 1,
-    created_at          TEXT NOT NULL,
+    id            TEXT PRIMARY KEY,
+    product_id    TEXT NOT NULL UNIQUE,
+    snapshot_data TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 
@@ -81,12 +67,12 @@ NUMERIC_FIELDS = [
     "target_profit_rate", "promotion_reserve_rate",
 ]
 
-# 配置默认值（v1 基线：6元固定费 + 40元尾程）
+# 配置默认值
 DEFAULT_CONFIG = {
     "exchange_rate": "7.20",
     "head_haul_rate": "100.0",
-    "fixed_service_fee": "6.0",
-    "default_tail_haul": "40.0",
+    "fixed_service_fee": "36.0",
+    "default_tail_haul": "0.0",
 }
 
 
@@ -100,7 +86,6 @@ class DatabaseManager:
             db_path = os.path.join(db_dir, "profit_accounting.db")
         self.db_path = db_path
         self._init_db()
-        self._migrate_config()
 
     def _get_conn(self):
         conn = sqlite3.connect(self.db_path)
@@ -108,73 +93,17 @@ class DatabaseManager:
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
-    def _add_column_if_missing(self, conn, table, column, col_type):
-        """安全添加列（如果不存在）"""
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-        except sqlite3.OperationalError:
-            pass  # 列已存在
-
     def _init_db(self):
-        """建表 + 版本初始化 + 列迁移"""
         conn = self._get_conn()
         try:
             conn.executescript(SCHEMA_SQL)
-
-            # 为旧版快照表补充新列（如果不存在）
-            self._add_column_if_missing(conn, "product_snapshots", "exchange_rate", "REAL")
-            self._add_column_if_missing(conn, "product_snapshots", "head_haul_rate", "REAL")
-            self._add_column_if_missing(conn, "product_snapshots", "fixed_service_fee", "REAL")
-            self._add_column_if_missing(conn, "product_snapshots", "rule_version", "INTEGER DEFAULT 1")
-
-            # 检查 schema_version 是否已有记录
-            existing = conn.execute(
-                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-            ).fetchone()
-
-            if existing is None:
-                conn.execute(
-                    "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-                    (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()),
-                )
-
-            # 填入默认配置（仅当 key 不存在时）
+            # 填入默认配置
             for key, val in DEFAULT_CONFIG.items():
                 conn.execute(
                     "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
                     (key, val),
                 )
             conn.commit()
-        finally:
-            conn.close()
-
-    def _migrate_config(self):
-        """迁移已有数据库中的旧配置值到新基线"""
-        conn = self._get_conn()
-        try:
-            # 如果已存在旧值且与默认值不同，不覆盖（用户可能自己改过）
-            # 但如果旧值是旧版的出厂默认值（36/0），则更新到新默认值
-            old_defaults = {"fixed_service_fee": "36.0", "default_tail_haul": "0.0"}
-            for key, old_val in old_defaults.items():
-                current = conn.execute(
-                    "SELECT value FROM config WHERE key = ?", (key,)
-                ).fetchone()
-                if current and current["value"] == old_val:
-                    new_val = DEFAULT_CONFIG[key]
-                    conn.execute(
-                        "UPDATE config SET value = ? WHERE key = ?", (new_val, key)
-                    )
-            conn.commit()
-        finally:
-            conn.close()
-
-    def get_schema_version(self) -> int:
-        conn = self._get_conn()
-        try:
-            row = conn.execute(
-                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-            ).fetchone()
-            return row["version"] if row else 0
         finally:
             conn.close()
 
@@ -307,57 +236,37 @@ class DatabaseManager:
 
     # ─── 快照管理 ──────────────────────────────────────────
 
-    def save_snapshot(self, product_id: str, data: dict, rules: dict = None):
-        """
-        保存第一次推算快照（如果已存在则跳过）
-
-        Args:
-            product_id: 商品ID
-            data: 商品数据dict
-            rules: 当时的费率规则 dict，如 {'exchange_rate': 7.2, 'head_haul_rate': 100.0, ...}
-        """
+    def save_snapshot(self, product_id: str, data: dict):
+        """保存第一次推算快照（如果已存在则跳过）"""
         now = datetime.now().isoformat()
         snapshot_json = json.dumps(data, ensure_ascii=False)
 
         conn = self._get_conn()
         try:
+            # 检查是否已有快照 — 只保留第一份
             existing = conn.execute(
                 "SELECT id FROM product_snapshots WHERE product_id = ?", (product_id,)
             ).fetchone()
             if existing is None:
                 snap_id = str(uuid.uuid4())[:8]
-                ex_rate = rules.get("exchange_rate") if rules else None
-                hd_rate = rules.get("head_haul_rate") if rules else None
-                fx_fee = rules.get("fixed_service_fee") if rules else None
                 conn.execute(
-                    """INSERT INTO product_snapshots
-                       (id, product_id, snapshot_data, exchange_rate, head_haul_rate,
-                        fixed_service_fee, rule_version, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (snap_id, product_id, snapshot_json, ex_rate, hd_rate, fx_fee,
-                     CURRENT_SCHEMA_VERSION, now),
+                    "INSERT INTO product_snapshots (id, product_id, snapshot_data, created_at) VALUES (?, ?, ?, ?)",
+                    (snap_id, product_id, snapshot_json, now),
                 )
                 conn.commit()
         finally:
             conn.close()
 
     def get_snapshot(self, product_id: str) -> dict | None:
-        """获取快照数据（包含费率信息）"""
+        """获取快照数据"""
         conn = self._get_conn()
         try:
             row = conn.execute(
-                """SELECT snapshot_data, exchange_rate, head_haul_rate,
-                          fixed_service_fee, rule_version
-                   FROM product_snapshots WHERE product_id = ?""",
+                "SELECT snapshot_data FROM product_snapshots WHERE product_id = ?",
                 (product_id,),
             ).fetchone()
             if row:
-                result = json.loads(row["snapshot_data"])
-                result["_snapshot_exchange_rate"] = row["exchange_rate"]
-                result["_snapshot_head_haul_rate"] = row["head_haul_rate"]
-                result["_snapshot_fixed_service_fee"] = row["fixed_service_fee"]
-                result["_snapshot_rule_version"] = row["rule_version"]
-                return result
+                return json.loads(row["snapshot_data"])
             return None
         finally:
             conn.close()

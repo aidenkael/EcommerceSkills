@@ -1,0 +1,32 @@
+{
+  "name": "示例商品-女士夏季连衣裙",
+  "cost": 45.00,
+  "domestic_shipping": 8.00,
+  "net_weight": 0.25,
+  "net_length": 30.0,
+  "net_width": 20.0,
+  "net_height": 5.0,
+  "packaged_weight": 0.35,
+  "packaged_length": 35.0,
+  "packaged_width": 25.0,
+  "packaged_height": 8.0,
+  "head_haul_cost": null,
+  "fixed_service_fee": 36.00,
+  "tail_haul_cost": 45.00,
+  "shein_price": 120.00,
+  "selling_price_rmb": 168.00,
+  "selling_price_usd": 23.33,
+  "target_profit_rate": 35.0,
+  "promotion_reserve_rate": 15.0,
+  "notes": "SHEIN美国站夏季热销款，重量轻，利润空间好",
+  "_计算结果": {
+    "体积重": "35×25×8÷8000 = 0.875 kg",
+    "计费重量": "max(0.35, 0.875) = 0.875 kg",
+    "头程费用": "0.875 × 100 = 87.50 元",
+    "总物流成本": "87.50 + 36 + 45 = 168.50 元",
+    "总成本": "45 + 8 + 168.50 = 221.50 元",
+    "利润": "168 - 221.50 = -53.50 元",
+    "利润率": "-53.50 ÷ 168 × 100% = -31.85%",
+    "建议售价_按35%利润率": "221.50 ÷ (1-0.35-0.15) = 221.50 ÷ 0.50 = 443.00 元"
+  }
+}

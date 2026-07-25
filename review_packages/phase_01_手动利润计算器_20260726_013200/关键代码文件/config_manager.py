@@ -58,7 +58,7 @@ class ConfigManager:
     @property
     def fixed_service_fee(self) -> float:
         """固定服务费 (元)"""
-        return self.get_float("fixed_service_fee", 6.0)
+        return self.get_float("fixed_service_fee", 36.0)
 
     @fixed_service_fee.setter
     def fixed_service_fee(self, val: float):
@@ -67,7 +67,7 @@ class ConfigManager:
     @property
     def default_tail_haul(self) -> float:
         """默认尾程费用 (元)"""
-        return self.get_float("default_tail_haul", 40.0)
+        return self.get_float("default_tail_haul", 0.0)
 
     @default_tail_haul.setter
     def default_tail_haul(self, val: float):

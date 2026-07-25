@@ -1,0 +1,32 @@
+{
+  "name": "示例商品-蓝牙耳机",
+  "cost": 28.00,
+  "domestic_shipping": 5.00,
+  "net_weight": null,
+  "net_length": null,
+  "net_width": null,
+  "net_height": null,
+  "packaged_weight": 0.12,
+  "packaged_length": 12.0,
+  "packaged_width": 8.0,
+  "packaged_height": null,
+  "head_haul_cost": null,
+  "fixed_service_fee": 36.00,
+  "tail_haul_cost": null,
+  "shein_price": null,
+  "selling_price_rmb": 65.00,
+  "selling_price_usd": null,
+  "target_profit_rate": null,
+  "promotion_reserve_rate": null,
+  "notes": "测试数据：部分字段为空",
+  "_预期表现": {
+    "体积重": "12×8×? = 数据不足（缺高）",
+    "计费重量": "数据不足（体积重缺失）",
+    "头程费用": "数据不足（计费重量缺失）",
+    "总物流成本": "0+36+0 = 36.00（缺失项按0计）",
+    "总成本": "28+5+36 = 69.00",
+    "利润": "65-69 = -4.00 元",
+    "利润率": "-4÷65×100% = -6.15%",
+    "建议售价": "数据不足（目标利润率缺失）"
+  }
+}

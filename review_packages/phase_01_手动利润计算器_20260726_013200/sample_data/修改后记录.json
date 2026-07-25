@@ -1,0 +1,37 @@
+{
+  "name": "示例商品-女士夏季连衣裙（已修改）",
+  "cost": 52.00,
+  "domestic_shipping": 8.00,
+  "net_weight": 0.25,
+  "net_length": 30.0,
+  "net_width": 20.0,
+  "net_height": 5.0,
+  "packaged_weight": 0.38,
+  "packaged_length": 35.0,
+  "packaged_width": 25.0,
+  "packaged_height": 8.0,
+  "head_haul_cost": null,
+  "fixed_service_fee": 36.00,
+  "tail_haul_cost": 50.00,
+  "shein_price": 135.00,
+  "selling_price_rmb": 188.00,
+  "selling_price_usd": 26.11,
+  "target_profit_rate": 38.0,
+  "promotion_reserve_rate": 12.0,
+  "notes": "供应商涨价，成本从45涨到52；尾程费用从45涨到50。SHEIN二次核价更新为135。",
+  "_修改内容": {
+    "商品成本": "45.00 → 52.00",
+    "包装后重量": "0.35 → 0.38",
+    "尾程费用": "45.00 → 50.00",
+    "售价人民币": "168.00 → 188.00",
+    "目标利润率": "35% → 38%",
+    "推广预留比例": "15% → 12%",
+    "SHEIN二次核价": "120.00 → 135.00"
+  },
+  "_首次保存快照": {
+    "name": "示例商品-女士夏季连衣裙",
+    "cost": 45.00,
+    "selling_price_rmb": 168.00,
+    "_说明": "点击「还原」按钮将恢复到此状态"
+  }
+}

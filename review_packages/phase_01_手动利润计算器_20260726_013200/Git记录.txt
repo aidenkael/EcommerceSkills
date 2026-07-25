@@ -1,0 +1,56 @@
+# Git 记录 — phase_01
+
+## 当前分支
+```
+master
+```
+
+## 最新提交
+```
+commit 072318b356f72f72659d80e708cecf6dd3482fd8
+Author: WorkBuddy <workbuddy@local.dev>
+Date:   Sun Jul 26 01:32:57 2026 +0800
+
+    feat: complete phase 01 manual profit calculator
+    
+    - v0.1 单SKC手动利润计算器
+    - calculation/: 物流/利润/货币纯函数模块
+    - database/: SQLite CRUD + 快照 + 配置
+    - config/: 配置读写封装
+    - ui/: tkinter 双标签页界面
+    - tests/: 59项 pytest 测试全部通过
+    - 无外部依赖，仅需 Python 标准库
+```
+
+## 本阶段开始前的提交编号
+```
+无（初始提交）
+```
+
+## 本阶段结束后的提交编号
+```
+072318b356f72f72659d80e708cecf6dd3482fd8
+```
+
+## 完整提交历史
+```
+072318b feat: complete phase 01 manual profit calculator (HEAD -> master)
+```
+
+## Git Status
+```
+On branch master
+Untracked files:
+  .workbuddy/
+  review_packages/
+
+nothing added to commit but untracked files present
+```
+
+## 是否存在未提交文件
+
+**是**。以下文件尚未提交到 Git，属于项目辅助文件：
+- `.workbuddy/` — WorkBuddy 项目数据目录
+- `review_packages/` — 本验收包目录
+
+这些文件不影响源代码功能，可以后续决定是否纳入版本管理。

@@ -74,14 +74,8 @@ class SettingsDialog(tk.Toplevel):
             if rate <= 0:
                 raise ValueError("汇率必须大于 0")
             head = float(self._var_head.get())
-            if head < 0:
-                raise ValueError("头程单价不能为负数")
             fixed = float(self._var_fixed.get())
-            if fixed < 0:
-                raise ValueError("固定服务费不能为负数")
             tail = float(self._var_tail.get())
-            if tail < 0:
-                raise ValueError("尾程费用不能为负数")
         except ValueError as e:
             messagebox.showerror("输入错误", f"请输入有效数字：{e}")
             return
@@ -127,9 +121,6 @@ class MainWindow:
         )
         self._notebook.add(self._history_page, text="历史记录")
 
-        # 切换到历史记录标签时自动刷新
-        self._notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
-
     def _build_menu(self):
         menubar = tk.Menu(self._root)
         self._root.config(menu=menubar)
@@ -149,12 +140,6 @@ class MainWindow:
         """从历史记录打开商品"""
         self._product_page.load_product(product_id)
         self._notebook.select(0)  # 切换到新商品测算页面
-
-    def _on_tab_changed(self, event):
-        """标签页切换时刷新历史列表"""
-        current_tab = self._notebook.index(self._notebook.select())
-        if current_tab == 1:  # 历史记录标签
-            self._history_page.refresh_list()
 
     def run(self):
         """启动主循环"""
