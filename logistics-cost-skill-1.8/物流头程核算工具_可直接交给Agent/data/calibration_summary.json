@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "record_count": 79,
+  "source_workbook": "data/source/calibration_source.xlsx",
+  "actual_cost_count": 79,
+  "actual_cost_rmb": {
+    "min": 3.0,
+    "median": 10.0,
+    "mean": 13.124050632911391,
+    "max": 80.0
+  },
+  "actual_to_legacy_ratio": {
+    "min": 0.075,
+    "q1": 0.49309664694280075,
+    "median": 0.8333333333333334,
+    "q3": 1.2285714285714286,
+    "max": 4.4
+  },
+  "exact_duplicate_sha256_groups": [],
+  "same_dhash_groups": [],
+  "important_interpretation": [
+    "历史数据中同款商品可能出现不同实际运费，因此输出必须包含区间和复核标记。",
+    "历史 AI 估算曾按旧的包类/非包类规则计算；当前计算不得沿用该旧规则。",
+    "历史实际费用主要用于修正视觉估重偏差和形成参考区间，当前费用仍按 config/freight_rules.json 计算。"
+  ]
+}

@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+output/*
+!output/accuracy_report.csv

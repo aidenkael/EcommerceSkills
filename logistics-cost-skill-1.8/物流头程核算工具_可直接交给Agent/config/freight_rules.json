@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "currency": "CNY",
+  "scope": "头程费用",
+  "volume_weight_divisor_cm3_per_kg": 8000,
+  "providers": {
+    "深圳货代": {
+      "rate_per_kg_rmb": 80.0,
+      "fixed_service_fee_rmb": 10.0,
+      "enabled": true
+    },
+    "义乌货代": {
+      "rate_per_kg_rmb": 100.0,
+      "fixed_service_fee_rmb": 6.0,
+      "enabled": true
+    }
+  },
+  "selection": {
+    "mode": "lowest_estimated_cost",
+    "show_all_providers": true,
+    "provider_crossover_weight_kg": 0.2
+  },
+  "package_adjustments": {
+    "OPP袋": {
+      "extra_weight_kg": 0.008,
+      "padding_cm": [
+        1.0,
+        1.0,
+        0.3
+      ]
+    },
+    "PE袋": {
+      "extra_weight_kg": 0.015,
+      "padding_cm": [
+        1.5,
+        1.5,
+        0.5
+      ]
+    },
+    "气泡膜+小纸盒": {
+      "extra_weight_kg": 0.045,
+      "padding_cm": [
+        2.0,
+        2.0,
+        2.0
+      ]
+    },
+    "气泡膜+纸盒": {
+      "extra_weight_kg": 0.08,
+      "padding_cm": [
+        3.0,
+        3.0,
+        3.0
+      ]
+    },
+    "PE袋+薄纸盒": {
+      "extra_weight_kg": 0.04,
+      "padding_cm": [
+        2.0,
+        2.0,
+        1.5
+      ]
+    },
+    "PE袋+纸盒": {
+      "extra_weight_kg": 0.07,
+      "padding_cm": [
+        2.5,
+        2.5,
+        2.5
+      ]
+    },
+    "未知": {
+      "extra_weight_kg": 0.02,
+      "padding_cm": [
+        1.5,
+        1.5,
+        1.0
+      ]
+    }
+  },
+  "calibration": {
+    "enabled": true,
+    "max_neighbors": 5,
+    "min_similarity": 0.12,
+    "ratio_clip": [
+      0.35,
+      2.5
+    ],
+    "default_correction_strength": 0.2,
+    "strong_match_correction_strength": 0.45,
+    "near_duplicate_correction_strength": 0.65,
+    "exact_duplicate_correction_strength": 0.75
+  },
+  "uncertainty": {
+    "measured_weight_and_dimensions": 0.12,
+    "one_measurement_available": 0.22,
+    "calibration_inferred": 0.35,
+    "image_only_low_confidence": 0.5,
+    "max": 0.65
+  },
+  "rounding": {
+    "weight_decimals": 4,
+    "cost_decimals": 2
+  },
+  "optional_total_logistics": {
+    "enabled_by_default": false,
+    "tail_cost_rmb_default": null,
+    "other_fixed_cost_rmb_default": 0.0,
+    "note": "默认仅计算头程。尾程费用必须由调用方显式传入，避免把旧规则写死。"
+  },
+  "deprecated_rules": [
+    "禁止继续使用“包类80元/kg、非包类100元/kg”的旧分档。",
+    "历史表的 legacy_classification 仅用于找相似商品，不参与当前货代计价。"
+  ]
+}

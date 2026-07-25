@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProductAnalysis",
+  "type": "object",
+  "required": [
+    "image_path",
+    "product_name",
+    "rigidity",
+    "package_type",
+    "confidence"
+  ],
+  "properties": {
+    "image_path": {
+      "type": "string"
+    },
+    "product_name": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rigidity": {
+      "enum": [
+        "soft",
+        "hard",
+        "mixed",
+        "unknown"
+      ]
+    },
+    "package_type": {
+      "enum": [
+        "OPP袋",
+        "PE袋",
+        "气泡膜+小纸盒",
+        "气泡膜+纸盒",
+        "PE袋+薄纸盒",
+        "PE袋+纸盒",
+        "未知"
+      ]
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "actual_weight_kg": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "dimensions_cm": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "packed_weight_kg": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "packed_dimensions_cm": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "compressible": {
+      "type": "boolean"
+    },
+    "fragile": {
+      "type": "boolean"
+    },
+    "confidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "evidence": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

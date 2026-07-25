@@ -22,19 +22,44 @@ env/
 .DS_Store
 Thumbs.db
 
-# Project specific - 暂不跟踪原有脚本目录
-Image Search/
-Information extraction/
-logistics-cost-skill-1.0/
-logistics-cost-skill-2.0/
-logistics-cost-skill-1.0.zip
-logistics-cost-skill-2.0.zip
-
 # 测试缓存
 .pytest_cache/
 
 # 日志
 *.log
 
-# 数据库正式数据（只保留结构）
-# Profit accounting-Auto/data/*.db
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 压缩包
+*.zip
+*.7z
+*.rar
+*.tar.gz
+*.tar
+
+# 大二进制文件
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 敏感配置
+.env
+.env.*
+
+# Node 依赖（预留）
+node_modules/
+
+# Agent 工作目录
+.workbuddy/
+
+# 临时文件
+*.tmp
+*.temp
+
+# 系统文件
+Thumbs.db
+.DS_Store

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LogisticsEstimateResult",
+  "type": "object",
+  "required": [
+    "image_path",
+    "chargeable_weight_kg",
+    "provider_costs",
+    "recommended_provider",
+    "recommended_cost_rmb"
+  ]
+}

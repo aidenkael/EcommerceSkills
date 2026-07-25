@@ -1,0 +1,27 @@
+{
+  "verified_date": "2026-07-24",
+  "total_items": 79,
+  "soft_goods_corrected": 20,
+  "total_head_cost_reduction_cny": 939.79,
+  "key_findings": [
+    "#15 cosplay_wig: 341.25 → 28.00 (降313.25)",
+    "#27 batman_latex_mask: 140.40 → 14.00 (降126.40)",
+    "#43 uv_arm_sleeves: 132.30 → 7.00 (降125.30)",
+    "#40 hair_extensions_3bundles: 76.80 → 20.00 (降56.80)",
+    "#19 shower_cap: 58.80 → 3.00 (降55.80)",
+    "#41 hair_weft_piece: 29.40 → 7.00 (降22.40)",
+    "#31 thin_beanie: 18.00 → 4.00 (降14.00)"
+  ],
+  "rules_applied": [
+    "SOFT_VOLUME_INFLATION_RATIO = 3.0 (体积重>AI净重×3即忽略)",
+    "SOFT_PRODUCT_TYPES 含 40+ 软品类型",
+    "软品 + product_body_size 尺寸 → 自动检查体积重过冲",
+    "有 packaged_size 标注时豁免软品检查"
+  ],
+  "method": "79条原始数据中的 product_body_size 维度输入 estimate_head_scenarios，在新软品规则下逐条重算，与旧 results.json 对比差异",
+  "limitations": [
+    "仅图片视觉估算，无页面爬取",
+    "无历史价格库",
+    "仅头程，不含尾程/汇率/利润"
+  ]
+}

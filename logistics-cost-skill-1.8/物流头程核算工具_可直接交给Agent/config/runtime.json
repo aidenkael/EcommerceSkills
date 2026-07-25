@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "default_vision_provider": "agent",
+  "supported_vision_providers": [
+    "agent",
+    "openai_compatible",
+    "ollama"
+  ],
+  "input_extensions": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".bmp"
+  ],
+  "output_jsonl": "output/estimates.jsonl",
+  "output_csv": "output/estimates.csv",
+  "agent_analysis_file": "work/agent_analysis.jsonl",
+  "vision_prompt_file": "config/vision_prompt.txt"
+}

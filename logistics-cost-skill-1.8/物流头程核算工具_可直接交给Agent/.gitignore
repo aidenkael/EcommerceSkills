@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+output/*.csv
+output/*.jsonl
+work/agent_analysis.jsonl

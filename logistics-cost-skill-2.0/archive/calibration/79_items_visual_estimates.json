@@ -1,0 +1,2373 @@
+[
+  {
+    "task_id": 1,
+    "excel_row": 2,
+    "image": "商品图片/IMG_001.png",
+    "product_type": "toe_socks",
+    "category_type": "general",
+    "material": "nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      1
+    ],
+    "bare_weight_kg": 0.02,
+    "normal_size_cm": [
+      14,
+      10,
+      2
+    ],
+    "normal_weight_kg": 0.03,
+    "conservative_size_cm": [
+      16,
+      12,
+      3
+    ],
+    "conservative_weight_kg": 0.05,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "肤色分趾隐形袜，超薄尼龙软质可折叠"
+  },
+  {
+    "task_id": 2,
+    "excel_row": 3,
+    "image": "商品图片/IMG_002.png",
+    "product_type": "socks_5pack",
+    "category_type": "general",
+    "material": "nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      16,
+      12,
+      2
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      18,
+      14,
+      4
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      22,
+      16,
+      6
+    ],
+    "conservative_weight_kg": 0.12,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "5双装白色隐形袜，软质可压缩"
+  },
+  {
+    "task_id": 3,
+    "excel_row": 4,
+    "image": "商品图片/IMG_003.png",
+    "product_type": "measuring_spoon_set",
+    "category_type": "general",
+    "material": "plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      14,
+      5,
+      2.5
+    ],
+    "bare_weight_kg": 0.02,
+    "normal_size_cm": [
+      17,
+      7,
+      3
+    ],
+    "normal_weight_kg": 0.025,
+    "conservative_size_cm": [
+      20,
+      9,
+      4
+    ],
+    "conservative_weight_kg": 0.04,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "绿色塑料量勺套装(1PC)，硬质不可折"
+  },
+  {
+    "task_id": 4,
+    "excel_row": 5,
+    "image": "商品图片/IMG_004.png",
+    "product_type": "mini_wallet",
+    "category_type": "bag",
+    "material": "pu_leather",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      18,
+      10,
+      4
+    ],
+    "normal_weight_kg": 0.1,
+    "conservative_size_cm": [
+      20,
+      12,
+      5
+    ],
+    "conservative_weight_kg": 0.13,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "黑粉拼色迷你钱包带链条环，PU半硬质"
+  },
+  {
+    "task_id": 5,
+    "excel_row": 6,
+    "image": "商品图片/IMG_005.png",
+    "product_type": "brooch_set",
+    "category_type": "general",
+    "material": "metal_enamel",
+    "rigidity": "hard",
+    "fragility": "medium",
+    "bare_size_cm": [
+      7,
+      6,
+      1.5
+    ],
+    "bare_weight_kg": 0.045,
+    "normal_size_cm": [
+      10,
+      8,
+      2
+    ],
+    "normal_weight_kg": 0.06,
+    "conservative_size_cm": [
+      14,
+      10,
+      3
+    ],
+    "conservative_weight_kg": 0.09,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "金属珐琅胸针3枚装，硬质易损需气泡保护"
+  },
+  {
+    "task_id": 6,
+    "excel_row": 7,
+    "image": "商品图片/IMG_006.png",
+    "product_type": "yoga_toe_socks",
+    "category_type": "general",
+    "material": "cotton_nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      14,
+      10,
+      2
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      16,
+      12,
+      3
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      18,
+      14,
+      4
+    ],
+    "conservative_weight_kg": 0.08,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "粉色绑带瑜伽五指袜，棉尼混纺软质可折"
+  },
+  {
+    "task_id": 7,
+    "excel_row": 8,
+    "image": "商品图片/IMG_007.png",
+    "product_type": "quilted_shoulder_bag",
+    "category_type": "bag",
+    "material": "pu_leather",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      24,
+      12,
+      18
+    ],
+    "normal_weight_kg": 0.35,
+    "conservative_size_cm": [
+      28,
+      15,
+      21
+    ],
+    "conservative_weight_kg": 0.45,
+    "packaging_method": "气泡袋+外箱",
+    "confidence": "medium",
+    "reasoning": "棕色绗缝链条单肩包，PU中硬有型"
+  },
+  {
+    "task_id": 8,
+    "excel_row": 9,
+    "image": "商品图片/IMG_008.png",
+    "product_type": "shell_brooch",
+    "category_type": "general",
+    "material": "alloy_resin",
+    "rigidity": "hard",
+    "fragility": "medium",
+    "bare_size_cm": [
+      6,
+      5,
+      2
+    ],
+    "bare_weight_kg": 0.03,
+    "normal_size_cm": [
+      9,
+      7,
+      3
+    ],
+    "normal_weight_kg": 0.04,
+    "conservative_size_cm": [
+      12,
+      9,
+      4
+    ],
+    "conservative_weight_kg": 0.07,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "金色贝壳胸针，合金树脂硬质易损"
+  },
+  {
+    "task_id": 9,
+    "excel_row": 10,
+    "image": "商品图片/IMG_009.png",
+    "product_type": "waterproof_phone_pouch",
+    "category_type": "general",
+    "material": "pvc_tpu",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      18,
+      11,
+      1.5
+    ],
+    "bare_weight_kg": 0.03,
+    "normal_size_cm": [
+      20,
+      13,
+      2
+    ],
+    "normal_weight_kg": 0.04,
+    "conservative_size_cm": [
+      23,
+      15,
+      3
+    ],
+    "conservative_weight_kg": 0.06,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "透明防水手机袋，PVC软质可折"
+  },
+  {
+    "task_id": 10,
+    "excel_row": 11,
+    "image": "商品图片/IMG_010.png",
+    "product_type": "fingerless_gym_gloves",
+    "category_type": "general",
+    "material": "polyester_silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      16,
+      10,
+      2
+    ],
+    "bare_weight_kg": 0.05,
+    "normal_size_cm": [
+      18,
+      12,
+      3
+    ],
+    "normal_weight_kg": 0.06,
+    "conservative_size_cm": [
+      20,
+      14,
+      4
+    ],
+    "conservative_weight_kg": 0.09,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色露指健身手套，涤纶+硅胶软质"
+  },
+  {
+    "task_id": 11,
+    "excel_row": 12,
+    "image": "商品图片/IMG_011.png",
+    "product_type": "lace_arm_warmers",
+    "category_type": "general",
+    "material": "lace_polyester",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      35,
+      10,
+      2
+    ],
+    "bare_weight_kg": 0.05,
+    "normal_size_cm": [
+      35,
+      14,
+      4
+    ],
+    "normal_weight_kg": 0.07,
+    "conservative_size_cm": [
+      35,
+      18,
+      6
+    ],
+    "conservative_weight_kg": 0.1,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色绑带蕾丝长袖套，蕾丝软质可卷折"
+  },
+  {
+    "task_id": 12,
+    "excel_row": 13,
+    "image": "商品图片/IMG_012.png",
+    "product_type": "cat_figurine",
+    "category_type": "general",
+    "material": "metal_alloy",
+    "rigidity": "hard",
+    "fragility": "medium",
+    "bare_size_cm": [
+      8,
+      6,
+      9
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      12,
+      10,
+      12
+    ],
+    "normal_weight_kg": 0.15,
+    "conservative_size_cm": [
+      15,
+      13,
+      15
+    ],
+    "conservative_weight_kg": 0.22,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "银色猫咪金属摆件，合金硬质易损需保护"
+  },
+  {
+    "task_id": 13,
+    "excel_row": 14,
+    "image": "商品图片/IMG_013.png",
+    "product_type": "baby_teether",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      8,
+      6,
+      2
+    ],
+    "bare_weight_kg": 0.025,
+    "normal_size_cm": [
+      10,
+      8,
+      3
+    ],
+    "normal_weight_kg": 0.035,
+    "conservative_size_cm": [
+      13,
+      10,
+      4
+    ],
+    "conservative_weight_kg": 0.055,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "蓝色硅胶婴儿牙胶，食品级硅胶软质"
+  },
+  {
+    "task_id": 14,
+    "excel_row": 15,
+    "image": "商品图片/IMG_014.png",
+    "product_type": "insulated_tumbler",
+    "category_type": "general",
+    "material": "stainless_steel",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      8,
+      8,
+      26
+    ],
+    "bare_weight_kg": 0.38,
+    "normal_size_cm": [
+      11,
+      11,
+      29
+    ],
+    "normal_weight_kg": 0.42,
+    "conservative_size_cm": [
+      13,
+      13,
+      32
+    ],
+    "conservative_weight_kg": 0.5,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "绿色不锈钢保温杯，硬质不变形"
+  },
+  {
+    "task_id": 15,
+    "excel_row": 16,
+    "image": "商品图片/IMG_015.png",
+    "product_type": "cosplay_wig",
+    "category_type": "general",
+    "material": "synthetic_fiber",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      30,
+      10,
+      65
+    ],
+    "bare_weight_kg": 0.25,
+    "normal_size_cm": [
+      30,
+      14,
+      65
+    ],
+    "normal_weight_kg": 0.28,
+    "conservative_size_cm": [
+      30,
+      18,
+      65
+    ],
+    "conservative_weight_kg": 0.35,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "紫色长卷发假发，化纤软质可大幅压缩"
+  },
+  {
+    "task_id": 16,
+    "excel_row": 17,
+    "image": "商品图片/IMG_016.png",
+    "product_type": "strawberry_bikini",
+    "category_type": "general",
+    "material": "polyester",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      20,
+      18,
+      3
+    ],
+    "bare_weight_kg": 0.08,
+    "normal_size_cm": [
+      24,
+      22,
+      4
+    ],
+    "normal_weight_kg": 0.1,
+    "conservative_size_cm": [
+      28,
+      26,
+      6
+    ],
+    "conservative_weight_kg": 0.15,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "粉色草莓印花比基尼，涤纶软质可折"
+  },
+  {
+    "task_id": 17,
+    "excel_row": 18,
+    "image": "商品图片/IMG_017.png",
+    "product_type": "mini_strawberry_backpack",
+    "category_type": "bag",
+    "material": "fabric",
+    "rigidity": "soft",
+    "fragility": "low",
+    "normal_size_cm": [
+      14,
+      8,
+      20
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      17,
+      11,
+      24
+    ],
+    "conservative_weight_kg": 0.12,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "草莓迷你双肩包，布艺软质小包"
+  },
+  {
+    "task_id": 18,
+    "excel_row": 19,
+    "image": "商品图片/IMG_018.png",
+    "product_type": "pet_car_seatbelt",
+    "category_type": "general",
+    "material": "nylon_plastic",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "bare_size_cm": [
+      30,
+      6,
+      3
+    ],
+    "bare_weight_kg": 0.1,
+    "normal_size_cm": [
+      32,
+      10,
+      5
+    ],
+    "normal_weight_kg": 0.12,
+    "conservative_size_cm": [
+      36,
+      14,
+      7
+    ],
+    "conservative_weight_kg": 0.17,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "宠物车载安全带套装，尼龙+塑料扣件"
+  },
+  {
+    "task_id": 19,
+    "excel_row": 20,
+    "image": "商品图片/IMG_019.png",
+    "product_type": "shower_cap",
+    "category_type": "general",
+    "material": "peva",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      28,
+      2,
+      14
+    ],
+    "bare_weight_kg": 0.025,
+    "normal_size_cm": [
+      28,
+      12,
+      14
+    ],
+    "normal_weight_kg": 0.03,
+    "conservative_size_cm": [
+      28,
+      16,
+      14
+    ],
+    "conservative_weight_kg": 0.05,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色防水浴帽，PEVA软质可扁平包装"
+  },
+  {
+    "task_id": 20,
+    "excel_row": 21,
+    "image": "商品图片/IMG_020.png",
+    "product_type": "mistletoe_ornament",
+    "category_type": "general",
+    "material": "fabric_wire",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "bare_size_cm": [
+      18,
+      5,
+      25
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      22,
+      8,
+      25
+    ],
+    "normal_weight_kg": 0.055,
+    "conservative_size_cm": [
+      26,
+      12,
+      25
+    ],
+    "conservative_weight_kg": 0.08,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "槲寄生装饰挂件，布艺+铁丝骨架"
+  },
+  {
+    "task_id": 21,
+    "excel_row": 22,
+    "image": "商品图片/IMG_021.png",
+    "product_type": "kazoo_instrument",
+    "category_type": "general",
+    "material": "plastic_metal",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      3,
+      3,
+      12
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      8,
+      6,
+      22
+    ],
+    "normal_weight_kg": 0.09,
+    "conservative_size_cm": [
+      12,
+      10,
+      27
+    ],
+    "conservative_weight_kg": 0.14,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "卡祖笛含盒+5膜，塑料+金属硬质"
+  },
+  {
+    "task_id": 22,
+    "excel_row": 23,
+    "image": "商品图片/IMG_022.png",
+    "product_type": "silicone_ice_tray",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      10,
+      2.5
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      14,
+      12,
+      4
+    ],
+    "normal_weight_kg": 0.07,
+    "conservative_size_cm": [
+      17,
+      15,
+      6
+    ],
+    "conservative_weight_kg": 0.11,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "绿色硅胶冰格模具，软质可折"
+  },
+  {
+    "task_id": 23,
+    "excel_row": 24,
+    "image": "商品图片/IMG_023.png",
+    "product_type": "monogram_long_wallet",
+    "category_type": "bag",
+    "material": "pu_leather",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      26,
+      13,
+      3
+    ],
+    "normal_weight_kg": 0.18,
+    "conservative_size_cm": [
+      30,
+      16,
+      5
+    ],
+    "conservative_weight_kg": 0.24,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "老花长款钱包手拿包，PU中硬有型"
+  },
+  {
+    "task_id": 24,
+    "excel_row": 25,
+    "image": "商品图片/IMG_024.png",
+    "product_type": "embossed_chain_bag",
+    "category_type": "bag",
+    "material": "pu_leather",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      24,
+      10,
+      20
+    ],
+    "normal_weight_kg": 0.32,
+    "conservative_size_cm": [
+      28,
+      14,
+      24
+    ],
+    "conservative_weight_kg": 0.42,
+    "packaging_method": "气泡袋+外箱",
+    "confidence": "medium",
+    "reasoning": "黑色浮雕链条单肩包，PU中硬"
+  },
+  {
+    "task_id": 25,
+    "excel_row": 26,
+    "image": "商品图片/IMG_025.png",
+    "product_type": "seatbelt_buckle_2pcs",
+    "category_type": "general",
+    "material": "plastic_metal",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      6,
+      4,
+      3
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      10,
+      8,
+      5
+    ],
+    "normal_weight_kg": 0.06,
+    "conservative_size_cm": [
+      14,
+      11,
+      7
+    ],
+    "conservative_weight_kg": 0.1,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "安全带插扣2个，硬塑+金属件"
+  },
+  {
+    "task_id": 26,
+    "excel_row": 27,
+    "image": "商品图片/IMG_026.png",
+    "product_type": "quick_connect_fitting",
+    "category_type": "general",
+    "material": "stainless_steel",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      6,
+      6,
+      10
+    ],
+    "bare_weight_kg": 0.15,
+    "normal_size_cm": [
+      10,
+      10,
+      14
+    ],
+    "normal_weight_kg": 0.18,
+    "conservative_size_cm": [
+      13,
+      13,
+      18
+    ],
+    "conservative_weight_kg": 0.25,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "不锈钢快速气动接头，金属硬质"
+  },
+  {
+    "task_id": 27,
+    "excel_row": 28,
+    "image": "商品图片/IMG_027.png",
+    "product_type": "batman_latex_mask",
+    "category_type": "general",
+    "material": "latex",
+    "rigidity": "soft",
+    "fragility": "medium",
+    "bare_size_cm": [
+      24,
+      18,
+      26
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      24,
+      18,
+      26
+    ],
+    "normal_weight_kg": 0.14,
+    "conservative_size_cm": [
+      26,
+      22,
+      26
+    ],
+    "conservative_weight_kg": 0.2,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "蝙蝠侠乳胶面具，乳胶软质但易撕裂"
+  },
+  {
+    "task_id": 28,
+    "excel_row": 29,
+    "image": "商品图片/IMG_028.png",
+    "product_type": "chain_sweater_brooch",
+    "category_type": "general",
+    "material": "alloy",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      10,
+      2,
+      8
+    ],
+    "bare_weight_kg": 0.035,
+    "normal_size_cm": [
+      14,
+      5,
+      11
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      18,
+      8,
+      14
+    ],
+    "conservative_weight_kg": 0.08,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "银色链条装饰胸针，合金硬质"
+  },
+  {
+    "task_id": 29,
+    "excel_row": 30,
+    "image": "商品图片/IMG_029.png",
+    "product_type": "miffy_fabric_patches_2pcs",
+    "category_type": "general",
+    "material": "fabric_embroidery",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      8,
+      3,
+      10
+    ],
+    "bare_weight_kg": 0.01,
+    "normal_size_cm": [
+      12,
+      6,
+      14
+    ],
+    "normal_weight_kg": 0.02,
+    "conservative_size_cm": [
+      16,
+      9,
+      18
+    ],
+    "conservative_weight_kg": 0.035,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "米菲兔刺绣布贴2枚，布艺软质"
+  },
+  {
+    "task_id": 30,
+    "excel_row": 31,
+    "image": "商品图片/IMG_030.png",
+    "product_type": "silicone_earplugs_set",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      6,
+      4,
+      3
+    ],
+    "bare_weight_kg": 0.015,
+    "normal_size_cm": [
+      10,
+      8,
+      5
+    ],
+    "normal_weight_kg": 0.03,
+    "conservative_size_cm": [
+      13,
+      11,
+      7
+    ],
+    "conservative_weight_kg": 0.055,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "粉色硅胶降噪耳塞套装含收纳盒"
+  },
+  {
+    "task_id": 31,
+    "excel_row": 32,
+    "image": "商品图片/IMG_031.png",
+    "product_type": "thin_beanie",
+    "category_type": "general",
+    "material": "cotton",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      20,
+      18,
+      2
+    ],
+    "bare_weight_kg": 0.03,
+    "normal_size_cm": [
+      20,
+      18,
+      4
+    ],
+    "normal_weight_kg": 0.04,
+    "conservative_size_cm": [
+      22,
+      20,
+      6
+    ],
+    "conservative_weight_kg": 0.07,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "白色薄款瓜皮帽冷帽，棉质超薄可折"
+  },
+  {
+    "task_id": 32,
+    "excel_row": 33,
+    "image": "商品图片/IMG_032.png",
+    "product_type": "makeup_brushes_2pcs",
+    "category_type": "general",
+    "material": "synthetic_hair_plastic",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "bare_size_cm": [
+      4,
+      3,
+      16
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      8,
+      6,
+      20
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      12,
+      9,
+      25
+    ],
+    "conservative_weight_kg": 0.08,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "化妆刷2支装，刷柄硬质刷毛软"
+  },
+  {
+    "task_id": 33,
+    "excel_row": 34,
+    "image": "商品图片/IMG_033.png",
+    "product_type": "gold_geometric_choker",
+    "category_type": "general",
+    "material": "metal_alloy",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      14,
+      1,
+      6
+    ],
+    "bare_weight_kg": 0.025,
+    "normal_size_cm": [
+      18,
+      3,
+      10
+    ],
+    "normal_weight_kg": 0.035,
+    "conservative_size_cm": [
+      22,
+      5,
+      14
+    ],
+    "conservative_weight_kg": 0.06,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "金色几何回纹颈链，合金硬质细链"
+  },
+  {
+    "task_id": 34,
+    "excel_row": 35,
+    "image": "商品图片/IMG_034.png",
+    "product_type": "car_vent_freshener_8pcs",
+    "category_type": "general",
+    "material": "plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      18,
+      3,
+      3
+    ],
+    "bare_weight_kg": 0.08,
+    "normal_size_cm": [
+      22,
+      8,
+      6
+    ],
+    "normal_weight_kg": 0.12,
+    "conservative_size_cm": [
+      26,
+      12,
+      9
+    ],
+    "conservative_weight_kg": 0.18,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "汽车出风口香薰夹8件套，硬塑"
+  },
+  {
+    "task_id": 35,
+    "excel_row": 36,
+    "image": "商品图片/IMG_035.png",
+    "product_type": "car_key_case_2pcs",
+    "category_type": "general",
+    "material": "tpu_plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      6,
+      4,
+      2
+    ],
+    "bare_weight_kg": 0.03,
+    "normal_size_cm": [
+      12,
+      10,
+      5
+    ],
+    "normal_weight_kg": 0.06,
+    "conservative_size_cm": [
+      16,
+      14,
+      7
+    ],
+    "conservative_weight_kg": 0.1,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "车钥匙保护壳2个，TPU硬壳"
+  },
+  {
+    "task_id": 36,
+    "excel_row": 37,
+    "image": "商品图片/IMG_036.png",
+    "product_type": "white_toe_liner_socks",
+    "category_type": "general",
+    "material": "cotton_nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      1.5
+    ],
+    "bare_weight_kg": 0.02,
+    "normal_size_cm": [
+      14,
+      10,
+      2
+    ],
+    "normal_weight_kg": 0.03,
+    "conservative_size_cm": [
+      16,
+      12,
+      3
+    ],
+    "conservative_weight_kg": 0.05,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "白色分趾船袜，薄棉尼混纺软质"
+  },
+  {
+    "task_id": 37,
+    "excel_row": 38,
+    "image": "商品图片/IMG_037.png",
+    "product_type": "yoga_goddess_statue",
+    "category_type": "general",
+    "material": "resin_bronze",
+    "rigidity": "hard",
+    "fragility": "high",
+    "bare_size_cm": [
+      10,
+      8,
+      16
+    ],
+    "bare_weight_kg": 0.2,
+    "normal_size_cm": [
+      15,
+      13,
+      21
+    ],
+    "normal_weight_kg": 0.26,
+    "conservative_size_cm": [
+      19,
+      17,
+      26
+    ],
+    "conservative_weight_kg": 0.35,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "青铜瑜伽女神摆件，树脂硬质极易损"
+  },
+  {
+    "task_id": 38,
+    "excel_row": 39,
+    "image": "商品图片/IMG_038.png",
+    "product_type": "spray_gun",
+    "category_type": "general",
+    "material": "plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      14,
+      12,
+      22
+    ],
+    "bare_weight_kg": 0.15,
+    "normal_size_cm": [
+      18,
+      16,
+      26
+    ],
+    "normal_weight_kg": 0.18,
+    "conservative_size_cm": [
+      22,
+      20,
+      31
+    ],
+    "conservative_weight_kg": 0.25,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "黑红喷壶喷雾枪，硬塑大体积"
+  },
+  {
+    "task_id": 39,
+    "excel_row": 40,
+    "image": "商品图片/IMG_039.png",
+    "product_type": "camera_wrist_strap",
+    "category_type": "general",
+    "material": "nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      24,
+      3,
+      3
+    ],
+    "bare_weight_kg": 0.03,
+    "normal_size_cm": [
+      24,
+      12,
+      4
+    ],
+    "normal_weight_kg": 0.04,
+    "conservative_size_cm": [
+      24,
+      16,
+      6
+    ],
+    "conservative_weight_kg": 0.07,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "军绿色相机腕带，尼龙织带软质可卷"
+  },
+  {
+    "task_id": 40,
+    "excel_row": 41,
+    "image": "商品图片/IMG_040.png",
+    "product_type": "hair_extensions_3bundles",
+    "category_type": "general",
+    "material": "human_hair_synthetic",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      32
+    ],
+    "bare_weight_kg": 0.18,
+    "normal_size_cm": [
+      16,
+      12,
+      32
+    ],
+    "normal_weight_kg": 0.2,
+    "conservative_size_cm": [
+      20,
+      16,
+      32
+    ],
+    "conservative_weight_kg": 0.28,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色直发假发发束3束，软质可压"
+  },
+  {
+    "task_id": 41,
+    "excel_row": 42,
+    "image": "商品图片/IMG_041.png",
+    "product_type": "hair_weft_piece",
+    "category_type": "general",
+    "material": "synthetic_fiber",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      10,
+      2,
+      28
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      14,
+      6,
+      28
+    ],
+    "normal_weight_kg": 0.07,
+    "conservative_size_cm": [
+      18,
+      10,
+      28
+    ],
+    "conservative_weight_kg": 0.12,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色接发片1B#，化纤软质可折"
+  },
+  {
+    "task_id": 42,
+    "excel_row": 43,
+    "image": "商品图片/IMG_042.png",
+    "product_type": "ganesh_statue_white",
+    "category_type": "general",
+    "material": "resin_ceramic",
+    "rigidity": "hard",
+    "fragility": "high",
+    "bare_size_cm": [
+      14,
+      10,
+      18
+    ],
+    "bare_weight_kg": 0.25,
+    "normal_size_cm": [
+      19,
+      15,
+      23
+    ],
+    "normal_weight_kg": 0.31,
+    "conservative_size_cm": [
+      24,
+      20,
+      29
+    ],
+    "conservative_weight_kg": 0.42,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "白色象头神迦内什摆件，树脂陶瓷易碎"
+  },
+  {
+    "task_id": 43,
+    "excel_row": 44,
+    "image": "商品图片/IMG_043.png",
+    "product_type": "uv_arm_sleeves",
+    "category_type": "general",
+    "material": "nylon_spandex",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      18,
+      10,
+      42
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      18,
+      14,
+      42
+    ],
+    "normal_weight_kg": 0.07,
+    "conservative_size_cm": [
+      24,
+      19,
+      42
+    ],
+    "conservative_weight_kg": 0.12,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "粉紫色防晒冰袖，弹力面料软质可卷"
+  },
+  {
+    "task_id": 44,
+    "excel_row": 45,
+    "image": "商品图片/IMG_044.png",
+    "product_type": "round_tin_wallet",
+    "category_type": "bag",
+    "material": "metal_tin",
+    "rigidity": "hard",
+    "fragility": "low",
+    "normal_size_cm": [
+      10,
+      10,
+      4
+    ],
+    "normal_weight_kg": 0.12,
+    "conservative_size_cm": [
+      13,
+      13,
+      6
+    ],
+    "conservative_weight_kg": 0.17,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "银色迷你圆盒零钱包，马口铁硬质"
+  },
+  {
+    "task_id": 45,
+    "excel_row": 46,
+    "image": "商品图片/IMG_045.png",
+    "product_type": "seatbelt_extender",
+    "category_type": "general",
+    "material": "plastic_metal",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      6,
+      5,
+      12
+    ],
+    "bare_weight_kg": 0.07,
+    "normal_size_cm": [
+      10,
+      8,
+      16
+    ],
+    "normal_weight_kg": 0.09,
+    "conservative_size_cm": [
+      14,
+      11,
+      21
+    ],
+    "conservative_weight_kg": 0.14,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "汽车安全带延长卡扣，硬塑+金属"
+  },
+  {
+    "task_id": 46,
+    "excel_row": 47,
+    "image": "商品图片/IMG_046.png",
+    "product_type": "airpods_cartoon_case",
+    "category_type": "general",
+    "material": "silicone_tpu",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      5,
+      5,
+      3
+    ],
+    "bare_weight_kg": 0.025,
+    "normal_size_cm": [
+      8,
+      7,
+      5
+    ],
+    "normal_weight_kg": 0.035,
+    "conservative_size_cm": [
+      11,
+      10,
+      7
+    ],
+    "conservative_weight_kg": 0.06,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "白色AirPods卡通保护壳，TPU硬壳"
+  },
+  {
+    "task_id": 47,
+    "excel_row": 48,
+    "image": "商品图片/IMG_047.png",
+    "product_type": "pet_deshedding_brush_L",
+    "category_type": "general",
+    "material": "plastic_metal",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      17,
+      9,
+      4
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      21,
+      12,
+      6
+    ],
+    "normal_weight_kg": 0.14,
+    "conservative_size_cm": [
+      26,
+      16,
+      9
+    ],
+    "conservative_weight_kg": 0.22,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "宠物去毛梳L号(17*9cm)，硬塑+钢齿"
+  },
+  {
+    "task_id": 48,
+    "excel_row": 49,
+    "image": "商品图片/IMG_048.png",
+    "product_type": "black_envelope_clutch",
+    "category_type": "bag",
+    "material": "pu_leather",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      28,
+      14,
+      4
+    ],
+    "normal_weight_kg": 0.25,
+    "conservative_size_cm": [
+      32,
+      18,
+      6
+    ],
+    "conservative_weight_kg": 0.34,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "黑色长款信封手拿包，PU中硬"
+  },
+  {
+    "task_id": 49,
+    "excel_row": 50,
+    "image": "商品图片/IMG_049.png",
+    "product_type": "beige_structured_handbag",
+    "category_type": "bag",
+    "material": "pu_leather",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      26,
+      14,
+      24
+    ],
+    "normal_weight_kg": 0.4,
+    "conservative_size_cm": [
+      30,
+      18,
+      29
+    ],
+    "conservative_weight_kg": 0.52,
+    "packaging_method": "气泡袋+外箱",
+    "confidence": "medium",
+    "reasoning": "米白色结构手提单肩包，PU中硬有型"
+  },
+  {
+    "task_id": 50,
+    "excel_row": 51,
+    "image": "商品图片/IMG_050.png",
+    "product_type": "cotton_swabs_500pcs",
+    "category_type": "general",
+    "material": "cotton_paper",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      10,
+      10,
+      9
+    ],
+    "bare_weight_kg": 0.15,
+    "normal_size_cm": [
+      12,
+      12,
+      11
+    ],
+    "normal_weight_kg": 0.18,
+    "conservative_size_cm": [
+      15,
+      15,
+      14
+    ],
+    "conservative_weight_kg": 0.25,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "棉签桶装500支，圆筒纸盒装"
+  },
+  {
+    "task_id": 51,
+    "excel_row": 52,
+    "image": "商品图片/IMG_051.png",
+    "product_type": "pet_leash_collars_red",
+    "category_type": "general",
+    "material": "nylon_plastic",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "bare_size_cm": [
+      35,
+      3,
+      3
+    ],
+    "bare_weight_kg": 0.08,
+    "normal_size_cm": [
+      35,
+      16,
+      5
+    ],
+    "normal_weight_kg": 0.1,
+    "conservative_size_cm": [
+      35,
+      21,
+      8
+    ],
+    "conservative_weight_kg": 0.15,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "红色宠物牵引绳+项圈，尼龙织带"
+  },
+  {
+    "task_id": 52,
+    "excel_row": 53,
+    "image": "商品图片/IMG_052.png",
+    "product_type": "pvc_floral_cosmetic_bag",
+    "category_type": "bag",
+    "material": "pvc",
+    "rigidity": "soft",
+    "fragility": "low",
+    "normal_size_cm": [
+      22,
+      14,
+      7
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      26,
+      18,
+      10
+    ],
+    "conservative_weight_kg": 0.12,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "透明PVC印花化妆包，软质可折"
+  },
+  {
+    "task_id": 53,
+    "excel_row": 54,
+    "image": "商品图片/IMG_053.png",
+    "product_type": "cherry_hair_claw",
+    "category_type": "general",
+    "material": "plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      10,
+      4,
+      4
+    ],
+    "bare_weight_kg": 0.035,
+    "normal_size_cm": [
+      13,
+      7,
+      7
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      17,
+      10,
+      10
+    ],
+    "conservative_weight_kg": 0.08,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "粉色樱桃图案发夹，硬塑材质"
+  },
+  {
+    "task_id": 54,
+    "excel_row": 55,
+    "image": "商品图片/IMG_054.png",
+    "product_type": "large_heart_hair_claw",
+    "category_type": "general",
+    "material": "plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      5,
+      8
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      16,
+      8,
+      11
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      20,
+      11,
+      15
+    ],
+    "conservative_weight_kg": 0.13,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "白底蓝心大号发夹，硬塑大尺寸"
+  },
+  {
+    "task_id": 55,
+    "excel_row": 56,
+    "image": "商品图片/IMG_055.png",
+    "product_type": "collapsible_travel_cup",
+    "category_type": "general",
+    "material": "silicone_plastic",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      8,
+      8,
+      20
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      10,
+      10,
+      20
+    ],
+    "normal_weight_kg": 0.13,
+    "conservative_size_cm": [
+      13,
+      13,
+      20
+    ],
+    "conservative_weight_kg": 0.18,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "绿白折叠便携水杯，硅胶可折叠"
+  },
+  {
+    "task_id": 56,
+    "excel_row": 57,
+    "image": "商品图片/IMG_056.png",
+    "product_type": "transparent_cosmetic_bag_21x11",
+    "category_type": "bag",
+    "material": "pvc_mesh",
+    "rigidity": "soft",
+    "fragility": "low",
+    "normal_size_cm": [
+      21,
+      11,
+      7
+    ],
+    "normal_weight_kg": 0.1,
+    "conservative_size_cm": [
+      25,
+      15,
+      10
+    ],
+    "conservative_weight_kg": 0.14,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "棕色透明化妆收纳包(21x11cm)"
+  },
+  {
+    "task_id": 57,
+    "excel_row": 58,
+    "image": "商品图片/IMG_057.png",
+    "product_type": "pet_carrier_backpack_blue",
+    "category_type": "bag",
+    "material": "oxford_mesh",
+    "rigidity": "semi_rigid",
+    "fragility": "low",
+    "normal_size_cm": [
+      32,
+      28,
+      42
+    ],
+    "normal_weight_kg": 0.85,
+    "conservative_size_cm": [
+      38,
+      34,
+      49
+    ],
+    "conservative_weight_kg": 1.05,
+    "packaging_method": "外箱",
+    "confidence": "medium",
+    "reasoning": "蓝色宠物背包猫包，牛津布+网眼中硬"
+  },
+  {
+    "task_id": 58,
+    "excel_row": 59,
+    "image": "商品图片/IMG_058.png",
+    "product_type": "apple_squishy_green",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      9,
+      9,
+      9
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      12,
+      12,
+      12
+    ],
+    "normal_weight_kg": 0.14,
+    "conservative_size_cm": [
+      15,
+      15,
+      15
+    ],
+    "conservative_weight_kg": 0.2,
+    "packaging_method": "OPP袋+气泡",
+    "confidence": "medium",
+    "reasoning": "绿色苹果硅胶捏捏乐，软质回弹"
+  },
+  {
+    "task_id": 59,
+    "excel_row": 60,
+    "image": "商品图片/IMG_059.png",
+    "product_type": "silicone_no_show_socks",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      22,
+      8,
+      2
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      24,
+      10,
+      3
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      28,
+      13,
+      5
+    ],
+    "conservative_weight_kg": 0.08,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "浅绿硅胶隐形船袜(22×8cm标注)"
+  },
+  {
+    "task_id": 60,
+    "excel_row": 61,
+    "image": "商品图片/IMG_060.png",
+    "product_type": "black_ankle_socks",
+    "category_type": "general",
+    "material": "cotton",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      4
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      14,
+      10,
+      5
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      17,
+      13,
+      7
+    ],
+    "conservative_weight_kg": 0.09,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色短袜船袜，棉质软质"
+  },
+  {
+    "task_id": 61,
+    "excel_row": 62,
+    "image": "商品图片/IMG_061.png",
+    "product_type": "cleaning_sponge_block",
+    "category_type": "general",
+    "material": "sponge",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      10,
+      10,
+      6
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      12,
+      12,
+      8
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      15,
+      15,
+      11
+    ],
+    "conservative_weight_kg": 0.09,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "白色清洁海绵块，多孔海绵软质"
+  },
+  {
+    "task_id": 62,
+    "excel_row": 63,
+    "image": "商品图片/IMG_062.png",
+    "product_type": "black_drawstring_pouch",
+    "category_type": "bag",
+    "material": "nonwoven",
+    "rigidity": "soft",
+    "fragility": "low",
+    "normal_size_cm": [
+      28,
+      18,
+      6
+    ],
+    "normal_weight_kg": 0.06,
+    "conservative_size_cm": [
+      33,
+      23,
+      9
+    ],
+    "conservative_weight_kg": 0.1,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色抽绳收纳束口袋，无纺布软质"
+  },
+  {
+    "task_id": 63,
+    "excel_row": 64,
+    "image": "商品图片/IMG_063.png",
+    "product_type": "lint_roller_set",
+    "category_type": "general",
+    "material": "plastic_adhesive",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      6,
+      6
+    ],
+    "bare_weight_kg": 0.1,
+    "normal_size_cm": [
+      18,
+      12,
+      8
+    ],
+    "normal_weight_kg": 0.13,
+    "conservative_size_cm": [
+      23,
+      16,
+      11
+    ],
+    "conservative_weight_kg": 0.2,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "粘毛滚筒套装含替换芯，硬塑筒身"
+  },
+  {
+    "task_id": 64,
+    "excel_row": 65,
+    "image": "商品图片/IMG_064.png",
+    "product_type": "golden_incense_holder",
+    "category_type": "general",
+    "material": "metal",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      16,
+      8,
+      22
+    ],
+    "bare_weight_kg": 0.18,
+    "normal_size_cm": [
+      20,
+      12,
+      27
+    ],
+    "normal_weight_kg": 0.22,
+    "conservative_size_cm": [
+      25,
+      16,
+      33
+    ],
+    "conservative_weight_kg": 0.3,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "金色蚊香盘架香薰托，金属硬质"
+  },
+  {
+    "task_id": 65,
+    "excel_row": 66,
+    "image": "商品图片/IMG_065.png",
+    "product_type": "ice_pack_sleep_mask",
+    "category_type": "general",
+    "material": "fabric_gel",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      22,
+      20,
+      2
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      22,
+      20,
+      4
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      25,
+      23,
+      7
+    ],
+    "conservative_weight_kg": 0.13,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色冰敷睡眠眼罩，布料+凝胶软质"
+  },
+  {
+    "task_id": 66,
+    "excel_row": 67,
+    "image": "商品图片/IMG_066.png",
+    "product_type": "metal_yoyo",
+    "category_type": "general",
+    "material": "metal_alloy",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      6,
+      6,
+      6
+    ],
+    "bare_weight_kg": 0.08,
+    "normal_size_cm": [
+      11,
+      9,
+      8
+    ],
+    "normal_weight_kg": 0.11,
+    "conservative_size_cm": [
+      15,
+      13,
+      12
+    ],
+    "conservative_weight_kg": 0.17,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "红色金属悠悠球，合金硬质精密"
+  },
+  {
+    "task_id": 67,
+    "excel_row": 68,
+    "image": "商品图片/IMG_067.png",
+    "product_type": "airplane_luggage_tag",
+    "category_type": "general",
+    "material": "silicone_rubber",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      11,
+      7,
+      0.5
+    ],
+    "bare_weight_kg": 0.025,
+    "normal_size_cm": [
+      14,
+      10,
+      2
+    ],
+    "normal_weight_kg": 0.035,
+    "conservative_size_cm": [
+      18,
+      13,
+      4
+    ],
+    "conservative_weight_kg": 0.06,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黄色飞机行李牌登机牌，硅胶软质"
+  },
+  {
+    "task_id": 68,
+    "excel_row": 69,
+    "image": "商品图片/IMG_068.png",
+    "product_type": "ice_pack_sleep_mask_dup",
+    "category_type": "general",
+    "material": "fabric_gel",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      22,
+      20,
+      2
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      22,
+      20,
+      4
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      25,
+      23,
+      7
+    ],
+    "conservative_weight_kg": 0.13,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色冰敷睡眠眼罩（同#65）"
+  },
+  {
+    "task_id": 69,
+    "excel_row": 70,
+    "image": "商品图片/IMG_069.png",
+    "product_type": "black_drawstring_pouch_dup",
+    "category_type": "bag",
+    "material": "nonwoven",
+    "rigidity": "soft",
+    "fragility": "low",
+    "normal_size_cm": [
+      28,
+      18,
+      6
+    ],
+    "normal_weight_kg": 0.06,
+    "conservative_size_cm": [
+      33,
+      23,
+      9
+    ],
+    "conservative_weight_kg": 0.1,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色抽绳收纳袋（同#62）"
+  },
+  {
+    "task_id": 70,
+    "excel_row": 71,
+    "image": "商品图片/IMG_070.png",
+    "product_type": "pearl_charm_bracelet",
+    "category_type": "general",
+    "material": "alloy_pearl",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      8,
+      1,
+      8
+    ],
+    "bare_weight_kg": 0.02,
+    "normal_size_cm": [
+      12,
+      4,
+      12
+    ],
+    "normal_weight_kg": 0.03,
+    "conservative_size_cm": [
+      16,
+      7,
+      16
+    ],
+    "conservative_weight_kg": 0.055,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "银色珍珠手链，合金+珍珠装饰"
+  },
+  {
+    "task_id": 71,
+    "excel_row": 72,
+    "image": "商品图片/IMG_071.png",
+    "product_type": "black_ankle_socks_dup",
+    "category_type": "general",
+    "material": "cotton",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      4
+    ],
+    "bare_weight_kg": 0.04,
+    "normal_size_cm": [
+      14,
+      10,
+      5
+    ],
+    "normal_weight_kg": 0.05,
+    "conservative_size_cm": [
+      17,
+      13,
+      7
+    ],
+    "conservative_weight_kg": 0.09,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色短袜船袜（同#60）"
+  },
+  {
+    "task_id": 72,
+    "excel_row": 73,
+    "image": "商品图片/IMG_072.png",
+    "product_type": "beige_ice_silk_toe_socks",
+    "category_type": "general",
+    "material": "ice_silk_nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      1.5
+    ],
+    "bare_weight_kg": 0.018,
+    "normal_size_cm": [
+      14,
+      10,
+      2
+    ],
+    "normal_weight_kg": 0.025,
+    "conservative_size_cm": [
+      16,
+      12,
+      3
+    ],
+    "conservative_weight_kg": 0.045,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "杏色冰丝分趾隐形袜，超薄软质"
+  },
+  {
+    "task_id": 73,
+    "excel_row": 74,
+    "image": "商品图片/IMG_073.png",
+    "product_type": "pink_apple_squishy",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      9,
+      9,
+      9
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      12,
+      12,
+      12
+    ],
+    "normal_weight_kg": 0.14,
+    "conservative_size_cm": [
+      15,
+      15,
+      15
+    ],
+    "conservative_weight_kg": 0.2,
+    "packaging_method": "OPP袋+气泡",
+    "confidence": "medium",
+    "reasoning": "粉色苹果硅胶捏捏乐（同#58类）"
+  },
+  {
+    "task_id": 74,
+    "excel_row": 75,
+    "image": "商品图片/IMG_074.png",
+    "product_type": "cherry_keychain_charm",
+    "category_type": "general",
+    "material": "metal_enamel",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      4,
+      3,
+      6
+    ],
+    "bare_weight_kg": 0.025,
+    "normal_size_cm": [
+      8,
+      6,
+      10
+    ],
+    "normal_weight_kg": 0.035,
+    "conservative_size_cm": [
+      11,
+      9,
+      14
+    ],
+    "conservative_weight_kg": 0.06,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "樱桃造型钥匙扣挂件，金属珐琅"
+  },
+  {
+    "task_id": 75,
+    "excel_row": 76,
+    "image": "商品图片/IMG_075.png",
+    "product_type": "foldable_phone_stand",
+    "category_type": "general",
+    "material": "abs_plastic",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      10,
+      2
+    ],
+    "bare_weight_kg": 0.06,
+    "normal_size_cm": [
+      16,
+      13,
+      5
+    ],
+    "normal_weight_kg": 0.08,
+    "conservative_size_cm": [
+      20,
+      17,
+      8
+    ],
+    "conservative_weight_kg": 0.13,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "手机桌面支架，ABS硬塑可折叠"
+  },
+  {
+    "task_id": 76,
+    "excel_row": 77,
+    "image": "商品图片/IMG_076.png",
+    "product_type": "golden_incense_holder_dup",
+    "category_type": "general",
+    "material": "metal",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      16,
+      8,
+      22
+    ],
+    "bare_weight_kg": 0.18,
+    "normal_size_cm": [
+      20,
+      12,
+      27
+    ],
+    "normal_weight_kg": 0.22,
+    "conservative_size_cm": [
+      25,
+      16,
+      33
+    ],
+    "conservative_weight_kg": 0.3,
+    "packaging_method": "气泡袋",
+    "confidence": "medium",
+    "reasoning": "金色蚊香盘架（同#64）"
+  },
+  {
+    "task_id": 77,
+    "excel_row": 78,
+    "image": "商品图片/IMG_077.png",
+    "product_type": "metal_card_wallet",
+    "category_type": "general",
+    "material": "metal_rubber",
+    "rigidity": "hard",
+    "fragility": "low",
+    "bare_size_cm": [
+      11,
+      2,
+      7
+    ],
+    "bare_weight_kg": 0.1,
+    "normal_size_cm": [
+      14,
+      5,
+      10
+    ],
+    "normal_weight_kg": 0.12,
+    "conservative_size_cm": [
+      18,
+      8,
+      14
+    ],
+    "conservative_weight_kg": 0.18,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "黑色金属卡包钱夹，金属+橡胶硬质"
+  },
+  {
+    "task_id": 78,
+    "excel_row": 79,
+    "image": "商品图片/IMG_078.png",
+    "product_type": "white_toe_liner_socks_dup",
+    "category_type": "general",
+    "material": "cotton_nylon",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      12,
+      8,
+      1.5
+    ],
+    "bare_weight_kg": 0.02,
+    "normal_size_cm": [
+      14,
+      10,
+      2
+    ],
+    "normal_weight_kg": 0.03,
+    "conservative_size_cm": [
+      16,
+      12,
+      3
+    ],
+    "conservative_weight_kg": 0.05,
+    "packaging_method": "OPP袋",
+    "confidence": "medium",
+    "reasoning": "白色分趾隐形袜（同#36/#1类）"
+  },
+  {
+    "task_id": 79,
+    "excel_row": 80,
+    "image": "商品图片/IMG_079.png",
+    "product_type": "yellow_green_apple_squishy",
+    "category_type": "general",
+    "material": "silicone",
+    "rigidity": "soft",
+    "fragility": "low",
+    "bare_size_cm": [
+      9,
+      9,
+      9
+    ],
+    "bare_weight_kg": 0.12,
+    "normal_size_cm": [
+      12,
+      12,
+      12
+    ],
+    "normal_weight_kg": 0.14,
+    "conservative_size_cm": [
+      15,
+      15,
+      15
+    ],
+    "conservative_weight_kg": 0.2,
+    "packaging_method": "OPP袋+气泡",
+    "confidence": "medium",
+    "reasoning": "黄绿苹果硅胶捏捏乐（同#58/#73类）"
+  }
+]

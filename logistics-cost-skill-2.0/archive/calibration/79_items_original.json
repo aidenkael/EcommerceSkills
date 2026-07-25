@@ -1,0 +1,2214 @@
+[
+  {
+    "task_id": 1,
+    "image": "商品图片/IMG_001.png",
+    "product_type": "toe_socks",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      14.0,
+      10.0,
+      2.0
+    ],
+    "normal_weight": 0.03,
+    "cons_head_cost": 7.2,
+    "cons_chargeable_weight": 0.072,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "肤色分趾隐形袜，超薄尼龙软质可折叠"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "肤色分趾隐形袜，超薄尼龙软质可折叠",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 2,
+    "image": "商品图片/IMG_002.png",
+    "product_type": "socks_5pack",
+    "category_type": "general",
+    "E_head_cost": 12.6,
+    "F_chargeable_weight": 0.126,
+    "normal_size": [
+      18.0,
+      14.0,
+      4.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 26.4,
+    "cons_chargeable_weight": 0.264,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "5双装白色隐形袜，软质可压缩"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "5双装白色隐形袜，软质可压缩",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 3,
+    "image": "商品图片/IMG_003.png",
+    "product_type": "measuring_spoon_set",
+    "category_type": "general",
+    "E_head_cost": 4.46,
+    "F_chargeable_weight": 0.045,
+    "normal_size": [
+      17.0,
+      7.0,
+      3.0
+    ],
+    "normal_weight": 0.025,
+    "cons_head_cost": 9.0,
+    "cons_chargeable_weight": 0.09,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "绿色塑料量勺套装(1PC)，硬质不可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "绿色塑料量勺套装(1PC)，硬质不可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 4,
+    "image": "商品图片/IMG_004.png",
+    "product_type": "mini_wallet",
+    "category_type": "bag",
+    "E_head_cost": 8.0,
+    "F_chargeable_weight": 0.1,
+    "normal_size": [
+      18.0,
+      10.0,
+      4.0
+    ],
+    "normal_weight": 0.1,
+    "cons_head_cost": 12.0,
+    "cons_chargeable_weight": 0.15,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑粉拼色迷你钱包带链条环，PU半硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑粉拼色迷你钱包带链条环，PU半硬质",
+    "packaging_method": "气泡袋",
+    "G_judgment": "包类·气泡袋"
+  },
+  {
+    "task_id": 5,
+    "image": "商品图片/IMG_005.png",
+    "product_type": "brooch_set",
+    "category_type": "general",
+    "E_head_cost": 6.0,
+    "F_chargeable_weight": 0.06,
+    "normal_size": [
+      10.0,
+      8.0,
+      2.0
+    ],
+    "normal_weight": 0.06,
+    "cons_head_cost": 9.0,
+    "cons_chargeable_weight": 0.09,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "金属珐琅胸针3枚装，硬质易损需气泡保护"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "金属珐琅胸针3枚装，硬质易损需气泡保护",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 6,
+    "image": "商品图片/IMG_006.png",
+    "product_type": "yoga_toe_socks",
+    "category_type": "general",
+    "E_head_cost": 7.2,
+    "F_chargeable_weight": 0.072,
+    "normal_size": [
+      16.0,
+      12.0,
+      3.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 12.6,
+    "cons_chargeable_weight": 0.126,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粉色绑带瑜伽五指袜，棉尼混纺软质可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粉色绑带瑜伽五指袜，棉尼混纺软质可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 7,
+    "image": "商品图片/IMG_007.png",
+    "product_type": "quilted_shoulder_bag",
+    "category_type": "bag",
+    "E_head_cost": 51.84,
+    "F_chargeable_weight": 0.648,
+    "normal_size": [
+      24.0,
+      12.0,
+      18.0
+    ],
+    "normal_weight": 0.35,
+    "cons_head_cost": 88.2,
+    "cons_chargeable_weight": 1.103,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "棕色绗缝链条单肩包，PU中硬有型"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "棕色绗缝链条单肩包，PU中硬有型",
+    "packaging_method": "气泡袋+外箱",
+    "G_judgment": "包类·气泡袋+外箱"
+  },
+  {
+    "task_id": 8,
+    "image": "商品图片/IMG_008.png",
+    "product_type": "shell_brooch",
+    "category_type": "general",
+    "E_head_cost": 4.0,
+    "F_chargeable_weight": 0.04,
+    "normal_size": [
+      9.0,
+      7.0,
+      3.0
+    ],
+    "normal_weight": 0.04,
+    "cons_head_cost": 7.0,
+    "cons_chargeable_weight": 0.07,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "金色贝壳胸针，合金树脂硬质易损"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "金色贝壳胸针，合金树脂硬质易损",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 9,
+    "image": "商品图片/IMG_009.png",
+    "product_type": "waterproof_phone_pouch",
+    "category_type": "general",
+    "E_head_cost": 6.5,
+    "F_chargeable_weight": 0.065,
+    "normal_size": [
+      20.0,
+      13.0,
+      2.0
+    ],
+    "normal_weight": 0.04,
+    "cons_head_cost": 12.94,
+    "cons_chargeable_weight": 0.129,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "透明防水手机袋，PVC软质可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "透明防水手机袋，PVC软质可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 10,
+    "image": "商品图片/IMG_010.png",
+    "product_type": "fingerless_gym_gloves",
+    "category_type": "general",
+    "E_head_cost": 8.1,
+    "F_chargeable_weight": 0.081,
+    "normal_size": [
+      18.0,
+      12.0,
+      3.0
+    ],
+    "normal_weight": 0.06,
+    "cons_head_cost": 14.0,
+    "cons_chargeable_weight": 0.14,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色露指健身手套，涤纶+硅胶软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色露指健身手套，涤纶+硅胶软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 11,
+    "image": "商品图片/IMG_011.png",
+    "product_type": "lace_arm_warmers",
+    "category_type": "general",
+    "E_head_cost": 24.5,
+    "F_chargeable_weight": 0.245,
+    "normal_size": [
+      35.0,
+      14.0,
+      4.0
+    ],
+    "normal_weight": 0.07,
+    "cons_head_cost": 47.25,
+    "cons_chargeable_weight": 0.472,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色绑带蕾丝长袖套，蕾丝软质可卷折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色绑带蕾丝长袖套，蕾丝软质可卷折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 12,
+    "image": "商品图片/IMG_012.png",
+    "product_type": "cat_figurine",
+    "category_type": "general",
+    "E_head_cost": 18.0,
+    "F_chargeable_weight": 0.18,
+    "normal_size": [
+      12.0,
+      10.0,
+      12.0
+    ],
+    "normal_weight": 0.15,
+    "cons_head_cost": 36.56,
+    "cons_chargeable_weight": 0.366,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "银色猫咪金属摆件，合金硬质易损需保护"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "银色猫咪金属摆件，合金硬质易损需保护",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 13,
+    "image": "商品图片/IMG_013.png",
+    "product_type": "baby_teether",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      10.0,
+      8.0,
+      3.0
+    ],
+    "normal_weight": 0.035,
+    "cons_head_cost": 6.5,
+    "cons_chargeable_weight": 0.065,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "蓝色硅胶婴儿牙胶，食品级硅胶软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "蓝色硅胶婴儿牙胶，食品级硅胶软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 14,
+    "image": "商品图片/IMG_014.png",
+    "product_type": "insulated_tumbler",
+    "category_type": "general",
+    "E_head_cost": 43.86,
+    "F_chargeable_weight": 0.439,
+    "normal_size": [
+      11.0,
+      11.0,
+      29.0
+    ],
+    "normal_weight": 0.42,
+    "cons_head_cost": 67.6,
+    "cons_chargeable_weight": 0.676,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "绿色不锈钢保温杯，硬质不变形"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "绿色不锈钢保温杯，硬质不变形",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 15,
+    "image": "商品图片/IMG_015.png",
+    "product_type": "cosplay_wig",
+    "category_type": "general",
+    "E_head_cost": 341.25,
+    "F_chargeable_weight": 3.413,
+    "normal_size": [
+      30.0,
+      14.0,
+      65.0
+    ],
+    "normal_weight": 0.28,
+    "cons_head_cost": 438.75,
+    "cons_chargeable_weight": 4.388,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "紫色长卷发假发，化纤软质可大幅压缩"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "紫色长卷发假发，化纤软质可大幅压缩",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 16,
+    "image": "商品图片/IMG_016.png",
+    "product_type": "strawberry_bikini",
+    "category_type": "general",
+    "E_head_cost": 26.4,
+    "F_chargeable_weight": 0.264,
+    "normal_size": [
+      24.0,
+      22.0,
+      4.0
+    ],
+    "normal_weight": 0.1,
+    "cons_head_cost": 54.6,
+    "cons_chargeable_weight": 0.546,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粉色草莓印花比基尼，涤纶软质可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粉色草莓印花比基尼，涤纶软质可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 17,
+    "image": "商品图片/IMG_017.png",
+    "product_type": "mini_strawberry_backpack",
+    "category_type": "bag",
+    "E_head_cost": 22.4,
+    "F_chargeable_weight": 0.28,
+    "normal_size": [
+      14.0,
+      8.0,
+      20.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 44.88,
+    "cons_chargeable_weight": 0.561,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "草莓迷你双肩包，布艺软质小包"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "草莓迷你双肩包，布艺软质小包",
+    "packaging_method": "OPP袋",
+    "G_judgment": "包类·OPP袋"
+  },
+  {
+    "task_id": 18,
+    "image": "商品图片/IMG_018.png",
+    "product_type": "pet_car_seatbelt",
+    "category_type": "general",
+    "E_head_cost": 20.0,
+    "F_chargeable_weight": 0.2,
+    "normal_size": [
+      32.0,
+      10.0,
+      5.0
+    ],
+    "normal_weight": 0.12,
+    "cons_head_cost": 44.1,
+    "cons_chargeable_weight": 0.441,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "宠物车载安全带套装，尼龙+塑料扣件"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "宠物车载安全带套装，尼龙+塑料扣件",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 19,
+    "image": "商品图片/IMG_019.png",
+    "product_type": "shower_cap",
+    "category_type": "general",
+    "E_head_cost": 58.8,
+    "F_chargeable_weight": 0.588,
+    "normal_size": [
+      28.0,
+      12.0,
+      14.0
+    ],
+    "normal_weight": 0.03,
+    "cons_head_cost": 78.4,
+    "cons_chargeable_weight": 0.784,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色防水浴帽，PEVA软质可扁平包装"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色防水浴帽，PEVA软质可扁平包装",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 20,
+    "image": "商品图片/IMG_020.png",
+    "product_type": "mistletoe_ornament",
+    "category_type": "general",
+    "E_head_cost": 55.0,
+    "F_chargeable_weight": 0.55,
+    "normal_size": [
+      22.0,
+      8.0,
+      25.0
+    ],
+    "normal_weight": 0.055,
+    "cons_head_cost": 97.5,
+    "cons_chargeable_weight": 0.975,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "槲寄生装饰挂件，布艺+铁丝骨架"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "槲寄生装饰挂件，布艺+铁丝骨架",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 21,
+    "image": "商品图片/IMG_021.png",
+    "product_type": "kazoo_instrument",
+    "category_type": "general",
+    "E_head_cost": 13.2,
+    "F_chargeable_weight": 0.132,
+    "normal_size": [
+      8.0,
+      6.0,
+      22.0
+    ],
+    "normal_weight": 0.09,
+    "cons_head_cost": 40.5,
+    "cons_chargeable_weight": 0.405,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "卡祖笛含盒+5膜，塑料+金属硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "卡祖笛含盒+5膜，塑料+金属硬质",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 22,
+    "image": "商品图片/IMG_022.png",
+    "product_type": "silicone_ice_tray",
+    "category_type": "general",
+    "E_head_cost": 8.4,
+    "F_chargeable_weight": 0.084,
+    "normal_size": [
+      14.0,
+      12.0,
+      4.0
+    ],
+    "normal_weight": 0.07,
+    "cons_head_cost": 19.12,
+    "cons_chargeable_weight": 0.191,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "绿色硅胶冰格模具，软质可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "绿色硅胶冰格模具，软质可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 23,
+    "image": "商品图片/IMG_023.png",
+    "product_type": "monogram_long_wallet",
+    "category_type": "bag",
+    "E_head_cost": 14.4,
+    "F_chargeable_weight": 0.18,
+    "normal_size": [
+      26.0,
+      13.0,
+      3.0
+    ],
+    "normal_weight": 0.18,
+    "cons_head_cost": 24.0,
+    "cons_chargeable_weight": 0.3,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "老花长款钱包手拿包，PU中硬有型"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "老花长款钱包手拿包，PU中硬有型",
+    "packaging_method": "气泡袋",
+    "G_judgment": "包类·气泡袋"
+  },
+  {
+    "task_id": 24,
+    "image": "商品图片/IMG_024.png",
+    "product_type": "embossed_chain_bag",
+    "category_type": "bag",
+    "E_head_cost": 48.0,
+    "F_chargeable_weight": 0.6,
+    "normal_size": [
+      24.0,
+      10.0,
+      20.0
+    ],
+    "normal_weight": 0.32,
+    "cons_head_cost": 94.08,
+    "cons_chargeable_weight": 1.176,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色浮雕链条单肩包，PU中硬"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色浮雕链条单肩包，PU中硬",
+    "packaging_method": "气泡袋+外箱",
+    "G_judgment": "包类·气泡袋+外箱"
+  },
+  {
+    "task_id": 25,
+    "image": "商品图片/IMG_025.png",
+    "product_type": "seatbelt_buckle_2pcs",
+    "category_type": "general",
+    "E_head_cost": 6.0,
+    "F_chargeable_weight": 0.06,
+    "normal_size": [
+      10.0,
+      8.0,
+      5.0
+    ],
+    "normal_weight": 0.06,
+    "cons_head_cost": 13.48,
+    "cons_chargeable_weight": 0.135,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "安全带插扣2个，硬塑+金属件"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "安全带插扣2个，硬塑+金属件",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 26,
+    "image": "商品图片/IMG_026.png",
+    "product_type": "quick_connect_fitting",
+    "category_type": "general",
+    "E_head_cost": 18.0,
+    "F_chargeable_weight": 0.18,
+    "normal_size": [
+      10.0,
+      10.0,
+      14.0
+    ],
+    "normal_weight": 0.18,
+    "cons_head_cost": 38.02,
+    "cons_chargeable_weight": 0.38,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "不锈钢快速气动接头，金属硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "不锈钢快速气动接头，金属硬质",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 27,
+    "image": "商品图片/IMG_027.png",
+    "product_type": "batman_latex_mask",
+    "category_type": "general",
+    "E_head_cost": 140.4,
+    "F_chargeable_weight": 1.404,
+    "normal_size": [
+      24.0,
+      18.0,
+      26.0
+    ],
+    "normal_weight": 0.14,
+    "cons_head_cost": 185.9,
+    "cons_chargeable_weight": 1.859,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "蝙蝠侠乳胶面具，乳胶软质但易撕裂"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "蝙蝠侠乳胶面具，乳胶软质但易撕裂",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 28,
+    "image": "商品图片/IMG_028.png",
+    "product_type": "chain_sweater_brooch",
+    "category_type": "general",
+    "E_head_cost": 9.62,
+    "F_chargeable_weight": 0.096,
+    "normal_size": [
+      14.0,
+      5.0,
+      11.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 25.2,
+    "cons_chargeable_weight": 0.252,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "银色链条装饰胸针，合金硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "银色链条装饰胸针，合金硬质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 29,
+    "image": "商品图片/IMG_029.png",
+    "product_type": "miffy_fabric_patches_2pcs",
+    "category_type": "general",
+    "E_head_cost": 12.6,
+    "F_chargeable_weight": 0.126,
+    "normal_size": [
+      12.0,
+      6.0,
+      14.0
+    ],
+    "normal_weight": 0.02,
+    "cons_head_cost": 32.4,
+    "cons_chargeable_weight": 0.324,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "米菲兔刺绣布贴2枚，布艺软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "米菲兔刺绣布贴2枚，布艺软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 30,
+    "image": "商品图片/IMG_030.png",
+    "product_type": "silicone_earplugs_set",
+    "category_type": "general",
+    "E_head_cost": 5.0,
+    "F_chargeable_weight": 0.05,
+    "normal_size": [
+      10.0,
+      8.0,
+      5.0
+    ],
+    "normal_weight": 0.03,
+    "cons_head_cost": 12.51,
+    "cons_chargeable_weight": 0.125,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粉色硅胶降噪耳塞套装含收纳盒"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粉色硅胶降噪耳塞套装含收纳盒",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 31,
+    "image": "商品图片/IMG_031.png",
+    "product_type": "thin_beanie",
+    "category_type": "general",
+    "E_head_cost": 18.0,
+    "F_chargeable_weight": 0.18,
+    "normal_size": [
+      20.0,
+      18.0,
+      4.0
+    ],
+    "normal_weight": 0.04,
+    "cons_head_cost": 33.0,
+    "cons_chargeable_weight": 0.33,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白色薄款瓜皮帽冷帽，棉质超薄可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白色薄款瓜皮帽冷帽，棉质超薄可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 32,
+    "image": "商品图片/IMG_032.png",
+    "product_type": "makeup_brushes_2pcs",
+    "category_type": "general",
+    "E_head_cost": 12.0,
+    "F_chargeable_weight": 0.12,
+    "normal_size": [
+      8.0,
+      6.0,
+      20.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 33.75,
+    "cons_chargeable_weight": 0.338,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "化妆刷2支装，刷柄硬质刷毛软"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "化妆刷2支装，刷柄硬质刷毛软",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 33,
+    "image": "商品图片/IMG_033.png",
+    "product_type": "gold_geometric_choker",
+    "category_type": "general",
+    "E_head_cost": 6.75,
+    "F_chargeable_weight": 0.068,
+    "normal_size": [
+      18.0,
+      3.0,
+      10.0
+    ],
+    "normal_weight": 0.035,
+    "cons_head_cost": 19.25,
+    "cons_chargeable_weight": 0.193,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "金色几何回纹颈链，合金硬质细链"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "金色几何回纹颈链，合金硬质细链",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 34,
+    "image": "商品图片/IMG_034.png",
+    "product_type": "car_vent_freshener_8pcs",
+    "category_type": "general",
+    "E_head_cost": 13.2,
+    "F_chargeable_weight": 0.132,
+    "normal_size": [
+      22.0,
+      8.0,
+      6.0
+    ],
+    "normal_weight": 0.12,
+    "cons_head_cost": 35.1,
+    "cons_chargeable_weight": 0.351,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "汽车出风口香薰夹8件套，硬塑"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "汽车出风口香薰夹8件套，硬塑",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 35,
+    "image": "商品图片/IMG_035.png",
+    "product_type": "car_key_case_2pcs",
+    "category_type": "general",
+    "E_head_cost": 7.5,
+    "F_chargeable_weight": 0.075,
+    "normal_size": [
+      12.0,
+      10.0,
+      5.0
+    ],
+    "normal_weight": 0.06,
+    "cons_head_cost": 19.6,
+    "cons_chargeable_weight": 0.196,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "车钥匙保护壳2个，TPU硬壳"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "车钥匙保护壳2个，TPU硬壳",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 36,
+    "image": "商品图片/IMG_036.png",
+    "product_type": "white_toe_liner_socks",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      14.0,
+      10.0,
+      2.0
+    ],
+    "normal_weight": 0.03,
+    "cons_head_cost": 7.2,
+    "cons_chargeable_weight": 0.072,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白色分趾船袜，薄棉尼混纺软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白色分趾船袜，薄棉尼混纺软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 37,
+    "image": "商品图片/IMG_037.png",
+    "product_type": "yoga_goddess_statue",
+    "category_type": "general",
+    "E_head_cost": 51.19,
+    "F_chargeable_weight": 0.512,
+    "normal_size": [
+      15.0,
+      13.0,
+      21.0
+    ],
+    "normal_weight": 0.26,
+    "cons_head_cost": 104.97,
+    "cons_chargeable_weight": 1.05,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "青铜瑜伽女神摆件，树脂硬质极易损"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "青铜瑜伽女神摆件，树脂硬质极易损",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 38,
+    "image": "商品图片/IMG_038.png",
+    "product_type": "spray_gun",
+    "category_type": "general",
+    "E_head_cost": 93.6,
+    "F_chargeable_weight": 0.936,
+    "normal_size": [
+      18.0,
+      16.0,
+      26.0
+    ],
+    "normal_weight": 0.18,
+    "cons_head_cost": 170.5,
+    "cons_chargeable_weight": 1.705,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑红喷壶喷雾枪，硬塑大体积"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑红喷壶喷雾枪，硬塑大体积",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 39,
+    "image": "商品图片/IMG_039.png",
+    "product_type": "camera_wrist_strap",
+    "category_type": "general",
+    "E_head_cost": 14.4,
+    "F_chargeable_weight": 0.144,
+    "normal_size": [
+      24.0,
+      12.0,
+      4.0
+    ],
+    "normal_weight": 0.04,
+    "cons_head_cost": 28.8,
+    "cons_chargeable_weight": 0.288,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "军绿色相机腕带，尼龙织带软质可卷"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "军绿色相机腕带，尼龙织带软质可卷",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 40,
+    "image": "商品图片/IMG_040.png",
+    "product_type": "hair_extensions_3bundles",
+    "category_type": "general",
+    "E_head_cost": 76.8,
+    "F_chargeable_weight": 0.768,
+    "normal_size": [
+      16.0,
+      12.0,
+      32.0
+    ],
+    "normal_weight": 0.2,
+    "cons_head_cost": 128.0,
+    "cons_chargeable_weight": 1.28,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色直发假发发束3束，软质可压"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色直发假发发束3束，软质可压",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 41,
+    "image": "商品图片/IMG_041.png",
+    "product_type": "hair_weft_piece",
+    "category_type": "general",
+    "E_head_cost": 29.4,
+    "F_chargeable_weight": 0.294,
+    "normal_size": [
+      14.0,
+      6.0,
+      28.0
+    ],
+    "normal_weight": 0.07,
+    "cons_head_cost": 63.0,
+    "cons_chargeable_weight": 0.63,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色接发片1B#，化纤软质可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色接发片1B#，化纤软质可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 42,
+    "image": "商品图片/IMG_042.png",
+    "product_type": "ganesh_statue_white",
+    "category_type": "general",
+    "E_head_cost": 81.94,
+    "F_chargeable_weight": 0.819,
+    "normal_size": [
+      19.0,
+      15.0,
+      23.0
+    ],
+    "normal_weight": 0.31,
+    "cons_head_cost": 174.0,
+    "cons_chargeable_weight": 1.74,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白色象头神迦内什摆件，树脂陶瓷易碎"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白色象头神迦内什摆件，树脂陶瓷易碎",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 43,
+    "image": "商品图片/IMG_043.png",
+    "product_type": "uv_arm_sleeves",
+    "category_type": "general",
+    "E_head_cost": 132.3,
+    "F_chargeable_weight": 1.323,
+    "normal_size": [
+      18.0,
+      14.0,
+      42.0
+    ],
+    "normal_weight": 0.07,
+    "cons_head_cost": 239.4,
+    "cons_chargeable_weight": 2.394,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粉紫色防晒冰袖，弹力面料软质可卷"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粉紫色防晒冰袖，弹力面料软质可卷",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 44,
+    "image": "商品图片/IMG_044.png",
+    "product_type": "round_tin_wallet",
+    "category_type": "bag",
+    "E_head_cost": 9.6,
+    "F_chargeable_weight": 0.12,
+    "normal_size": [
+      10.0,
+      10.0,
+      4.0
+    ],
+    "normal_weight": 0.12,
+    "cons_head_cost": 13.6,
+    "cons_chargeable_weight": 0.17,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "银色迷你圆盒零钱包，马口铁硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "银色迷你圆盒零钱包，马口铁硬质",
+    "packaging_method": "气泡袋",
+    "G_judgment": "包类·气泡袋"
+  },
+  {
+    "task_id": 45,
+    "image": "商品图片/IMG_045.png",
+    "product_type": "seatbelt_extender",
+    "category_type": "general",
+    "E_head_cost": 16.0,
+    "F_chargeable_weight": 0.16,
+    "normal_size": [
+      10.0,
+      8.0,
+      16.0
+    ],
+    "normal_weight": 0.09,
+    "cons_head_cost": 40.42,
+    "cons_chargeable_weight": 0.404,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "汽车安全带延长卡扣，硬塑+金属"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "汽车安全带延长卡扣，硬塑+金属",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 46,
+    "image": "商品图片/IMG_046.png",
+    "product_type": "airpods_cartoon_case",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      8.0,
+      7.0,
+      5.0
+    ],
+    "normal_weight": 0.035,
+    "cons_head_cost": 9.62,
+    "cons_chargeable_weight": 0.096,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白色AirPods卡通保护壳，TPU硬壳"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白色AirPods卡通保护壳，TPU硬壳",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 47,
+    "image": "商品图片/IMG_047.png",
+    "product_type": "pet_deshedding_brush_L",
+    "category_type": "general",
+    "E_head_cost": 18.9,
+    "F_chargeable_weight": 0.189,
+    "normal_size": [
+      21.0,
+      12.0,
+      6.0
+    ],
+    "normal_weight": 0.14,
+    "cons_head_cost": 46.8,
+    "cons_chargeable_weight": 0.468,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "宠物去毛梳L号(17*9cm)，硬塑+钢齿"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "宠物去毛梳L号(17*9cm)，硬塑+钢齿",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 48,
+    "image": "商品图片/IMG_048.png",
+    "product_type": "black_envelope_clutch",
+    "category_type": "bag",
+    "E_head_cost": 20.0,
+    "F_chargeable_weight": 0.25,
+    "normal_size": [
+      28.0,
+      14.0,
+      4.0
+    ],
+    "normal_weight": 0.25,
+    "cons_head_cost": 34.56,
+    "cons_chargeable_weight": 0.432,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色长款信封手拿包，PU中硬"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色长款信封手拿包，PU中硬",
+    "packaging_method": "气泡袋",
+    "G_judgment": "包类·气泡袋"
+  },
+  {
+    "task_id": 49,
+    "image": "商品图片/IMG_049.png",
+    "product_type": "beige_structured_handbag",
+    "category_type": "bag",
+    "E_head_cost": 87.36,
+    "F_chargeable_weight": 1.092,
+    "normal_size": [
+      26.0,
+      14.0,
+      24.0
+    ],
+    "normal_weight": 0.4,
+    "cons_head_cost": 156.6,
+    "cons_chargeable_weight": 1.958,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "米白色结构手提单肩包，PU中硬有型"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "米白色结构手提单肩包，PU中硬有型",
+    "packaging_method": "气泡袋+外箱",
+    "G_judgment": "包类·气泡袋+外箱"
+  },
+  {
+    "task_id": 50,
+    "image": "商品图片/IMG_050.png",
+    "product_type": "cotton_swabs_500pcs",
+    "category_type": "general",
+    "E_head_cost": 19.8,
+    "F_chargeable_weight": 0.198,
+    "normal_size": [
+      12.0,
+      12.0,
+      11.0
+    ],
+    "normal_weight": 0.18,
+    "cons_head_cost": 39.38,
+    "cons_chargeable_weight": 0.394,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "棉签桶装500支，圆筒纸盒装"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "棉签桶装500支，圆筒纸盒装",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 51,
+    "image": "商品图片/IMG_051.png",
+    "product_type": "pet_leash_collars_red",
+    "category_type": "general",
+    "E_head_cost": 35.0,
+    "F_chargeable_weight": 0.35,
+    "normal_size": [
+      35.0,
+      16.0,
+      5.0
+    ],
+    "normal_weight": 0.1,
+    "cons_head_cost": 73.5,
+    "cons_chargeable_weight": 0.735,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "红色宠物牵引绳+项圈，尼龙织带"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "红色宠物牵引绳+项圈，尼龙织带",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 52,
+    "image": "商品图片/IMG_052.png",
+    "product_type": "pvc_floral_cosmetic_bag",
+    "category_type": "bag",
+    "E_head_cost": 21.56,
+    "F_chargeable_weight": 0.27,
+    "normal_size": [
+      22.0,
+      14.0,
+      7.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 46.8,
+    "cons_chargeable_weight": 0.585,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "透明PVC印花化妆包，软质可折"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "透明PVC印花化妆包，软质可折",
+    "packaging_method": "OPP袋",
+    "G_judgment": "包类·OPP袋"
+  },
+  {
+    "task_id": 53,
+    "image": "商品图片/IMG_053.png",
+    "product_type": "cherry_hair_claw",
+    "category_type": "general",
+    "E_head_cost": 7.96,
+    "F_chargeable_weight": 0.08,
+    "normal_size": [
+      13.0,
+      7.0,
+      7.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 21.25,
+    "cons_chargeable_weight": 0.212,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粉色樱桃图案发夹，硬塑材质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粉色樱桃图案发夹，硬塑材质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 54,
+    "image": "商品图片/IMG_054.png",
+    "product_type": "large_heart_hair_claw",
+    "category_type": "general",
+    "E_head_cost": 17.6,
+    "F_chargeable_weight": 0.176,
+    "normal_size": [
+      16.0,
+      8.0,
+      11.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 41.25,
+    "cons_chargeable_weight": 0.412,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白底蓝心大号发夹，硬塑大尺寸"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白底蓝心大号发夹，硬塑大尺寸",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 55,
+    "image": "商品图片/IMG_055.png",
+    "product_type": "collapsible_travel_cup",
+    "category_type": "general",
+    "E_head_cost": 25.0,
+    "F_chargeable_weight": 0.25,
+    "normal_size": [
+      10.0,
+      10.0,
+      20.0
+    ],
+    "normal_weight": 0.13,
+    "cons_head_cost": 42.25,
+    "cons_chargeable_weight": 0.422,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "绿白折叠便携水杯，硅胶可折叠"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "绿白折叠便携水杯，硅胶可折叠",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 56,
+    "image": "商品图片/IMG_056.png",
+    "product_type": "transparent_cosmetic_bag_21x11",
+    "category_type": "bag",
+    "E_head_cost": 16.17,
+    "F_chargeable_weight": 0.202,
+    "normal_size": [
+      21.0,
+      11.0,
+      7.0
+    ],
+    "normal_weight": 0.1,
+    "cons_head_cost": 37.5,
+    "cons_chargeable_weight": 0.469,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "棕色透明化妆收纳包(21x11cm)"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "棕色透明化妆收纳包(21x11cm)",
+    "packaging_method": "OPP袋",
+    "G_judgment": "包类·OPP袋"
+  },
+  {
+    "task_id": 57,
+    "image": "商品图片/IMG_057.png",
+    "product_type": "pet_carrier_backpack_blue",
+    "category_type": "bag",
+    "E_head_cost": 376.32,
+    "F_chargeable_weight": 4.704,
+    "normal_size": [
+      32.0,
+      28.0,
+      42.0
+    ],
+    "normal_weight": 0.85,
+    "cons_head_cost": 633.08,
+    "cons_chargeable_weight": 7.913,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "蓝色宠物背包猫包，牛津布+网眼中硬"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "蓝色宠物背包猫包，牛津布+网眼中硬",
+    "packaging_method": "外箱",
+    "G_judgment": "包类·外箱"
+  },
+  {
+    "task_id": 58,
+    "image": "商品图片/IMG_058.png",
+    "product_type": "apple_squishy_green",
+    "category_type": "general",
+    "E_head_cost": 21.6,
+    "F_chargeable_weight": 0.216,
+    "normal_size": [
+      12.0,
+      12.0,
+      12.0
+    ],
+    "normal_weight": 0.14,
+    "cons_head_cost": 42.19,
+    "cons_chargeable_weight": 0.422,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "绿色苹果硅胶捏捏乐，软质回弹"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "绿色苹果硅胶捏捏乐，软质回弹",
+    "packaging_method": "OPP袋+气泡",
+    "G_judgment": "非包类·OPP袋+气泡"
+  },
+  {
+    "task_id": 59,
+    "image": "商品图片/IMG_059.png",
+    "product_type": "silicone_no_show_socks",
+    "category_type": "general",
+    "E_head_cost": 9.0,
+    "F_chargeable_weight": 0.09,
+    "normal_size": [
+      24.0,
+      10.0,
+      3.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 22.75,
+    "cons_chargeable_weight": 0.228,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "浅绿硅胶隐形船袜(22×8cm标注)"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "浅绿硅胶隐形船袜(22×8cm标注)",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 60,
+    "image": "商品图片/IMG_060.png",
+    "product_type": "black_ankle_socks",
+    "category_type": "general",
+    "E_head_cost": 8.75,
+    "F_chargeable_weight": 0.087,
+    "normal_size": [
+      14.0,
+      10.0,
+      5.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 19.34,
+    "cons_chargeable_weight": 0.193,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色短袜船袜，棉质软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色短袜船袜，棉质软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 61,
+    "image": "商品图片/IMG_061.png",
+    "product_type": "cleaning_sponge_block",
+    "category_type": "general",
+    "E_head_cost": 14.4,
+    "F_chargeable_weight": 0.144,
+    "normal_size": [
+      12.0,
+      12.0,
+      8.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 30.94,
+    "cons_chargeable_weight": 0.309,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白色清洁海绵块，多孔海绵软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白色清洁海绵块，多孔海绵软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 62,
+    "image": "商品图片/IMG_062.png",
+    "product_type": "black_drawstring_pouch",
+    "category_type": "bag",
+    "E_head_cost": 30.24,
+    "F_chargeable_weight": 0.378,
+    "normal_size": [
+      28.0,
+      18.0,
+      6.0
+    ],
+    "normal_weight": 0.06,
+    "cons_head_cost": 68.31,
+    "cons_chargeable_weight": 0.854,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色抽绳收纳束口袋，无纺布软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色抽绳收纳束口袋，无纺布软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "包类·OPP袋"
+  },
+  {
+    "task_id": 63,
+    "image": "商品图片/IMG_063.png",
+    "product_type": "lint_roller_set",
+    "category_type": "general",
+    "E_head_cost": 21.6,
+    "F_chargeable_weight": 0.216,
+    "normal_size": [
+      18.0,
+      12.0,
+      8.0
+    ],
+    "normal_weight": 0.13,
+    "cons_head_cost": 50.6,
+    "cons_chargeable_weight": 0.506,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粘毛滚筒套装含替换芯，硬塑筒身"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粘毛滚筒套装含替换芯，硬塑筒身",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 64,
+    "image": "商品图片/IMG_064.png",
+    "product_type": "golden_incense_holder",
+    "category_type": "general",
+    "E_head_cost": 81.0,
+    "F_chargeable_weight": 0.81,
+    "normal_size": [
+      20.0,
+      12.0,
+      27.0
+    ],
+    "normal_weight": 0.22,
+    "cons_head_cost": 165.0,
+    "cons_chargeable_weight": 1.65,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "金色蚊香盘架香薰托，金属硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "金色蚊香盘架香薰托，金属硬质",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 65,
+    "image": "商品图片/IMG_065.png",
+    "product_type": "ice_pack_sleep_mask",
+    "category_type": "general",
+    "E_head_cost": 22.0,
+    "F_chargeable_weight": 0.22,
+    "normal_size": [
+      22.0,
+      20.0,
+      4.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 50.31,
+    "cons_chargeable_weight": 0.503,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色冰敷睡眠眼罩，布料+凝胶软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色冰敷睡眠眼罩，布料+凝胶软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 66,
+    "image": "商品图片/IMG_066.png",
+    "product_type": "metal_yoyo",
+    "category_type": "general",
+    "E_head_cost": 11.0,
+    "F_chargeable_weight": 0.11,
+    "normal_size": [
+      11.0,
+      9.0,
+      8.0
+    ],
+    "normal_weight": 0.11,
+    "cons_head_cost": 29.25,
+    "cons_chargeable_weight": 0.292,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "红色金属悠悠球，合金硬质精密"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "红色金属悠悠球，合金硬质精密",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 67,
+    "image": "商品图片/IMG_067.png",
+    "product_type": "airplane_luggage_tag",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      14.0,
+      10.0,
+      2.0
+    ],
+    "normal_weight": 0.035,
+    "cons_head_cost": 11.7,
+    "cons_chargeable_weight": 0.117,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黄色飞机行李牌登机牌，硅胶软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黄色飞机行李牌登机牌，硅胶软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 68,
+    "image": "商品图片/IMG_068.png",
+    "product_type": "ice_pack_sleep_mask_dup",
+    "category_type": "general",
+    "E_head_cost": 22.0,
+    "F_chargeable_weight": 0.22,
+    "normal_size": [
+      22.0,
+      20.0,
+      4.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 50.31,
+    "cons_chargeable_weight": 0.503,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色冰敷睡眠眼罩（同#65）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色冰敷睡眠眼罩（同#65）",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 69,
+    "image": "商品图片/IMG_069.png",
+    "product_type": "black_drawstring_pouch_dup",
+    "category_type": "bag",
+    "E_head_cost": 30.24,
+    "F_chargeable_weight": 0.378,
+    "normal_size": [
+      28.0,
+      18.0,
+      6.0
+    ],
+    "normal_weight": 0.06,
+    "cons_head_cost": 68.31,
+    "cons_chargeable_weight": 0.854,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色抽绳收纳袋（同#62）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色抽绳收纳袋（同#62）",
+    "packaging_method": "OPP袋",
+    "G_judgment": "包类·OPP袋"
+  },
+  {
+    "task_id": 70,
+    "image": "商品图片/IMG_070.png",
+    "product_type": "pearl_charm_bracelet",
+    "category_type": "general",
+    "E_head_cost": 7.2,
+    "F_chargeable_weight": 0.072,
+    "normal_size": [
+      12.0,
+      4.0,
+      12.0
+    ],
+    "normal_weight": 0.03,
+    "cons_head_cost": 22.4,
+    "cons_chargeable_weight": 0.224,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "银色珍珠手链，合金+珍珠装饰"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "银色珍珠手链，合金+珍珠装饰",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 71,
+    "image": "商品图片/IMG_071.png",
+    "product_type": "black_ankle_socks_dup",
+    "category_type": "general",
+    "E_head_cost": 8.75,
+    "F_chargeable_weight": 0.087,
+    "normal_size": [
+      14.0,
+      10.0,
+      5.0
+    ],
+    "normal_weight": 0.05,
+    "cons_head_cost": 19.34,
+    "cons_chargeable_weight": 0.193,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色短袜船袜（同#60）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色短袜船袜（同#60）",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 72,
+    "image": "商品图片/IMG_072.png",
+    "product_type": "beige_ice_silk_toe_socks",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      14.0,
+      10.0,
+      2.0
+    ],
+    "normal_weight": 0.025,
+    "cons_head_cost": 7.2,
+    "cons_chargeable_weight": 0.072,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "杏色冰丝分趾隐形袜，超薄软质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "杏色冰丝分趾隐形袜，超薄软质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 73,
+    "image": "商品图片/IMG_073.png",
+    "product_type": "pink_apple_squishy",
+    "category_type": "general",
+    "E_head_cost": 21.6,
+    "F_chargeable_weight": 0.216,
+    "normal_size": [
+      12.0,
+      12.0,
+      12.0
+    ],
+    "normal_weight": 0.14,
+    "cons_head_cost": 42.19,
+    "cons_chargeable_weight": 0.422,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "粉色苹果硅胶捏捏乐（同#58类）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "粉色苹果硅胶捏捏乐（同#58类）",
+    "packaging_method": "OPP袋+气泡",
+    "G_judgment": "非包类·OPP袋+气泡"
+  },
+  {
+    "task_id": 74,
+    "image": "商品图片/IMG_074.png",
+    "product_type": "cherry_keychain_charm",
+    "category_type": "general",
+    "E_head_cost": 6.0,
+    "F_chargeable_weight": 0.06,
+    "normal_size": [
+      8.0,
+      6.0,
+      10.0
+    ],
+    "normal_weight": 0.035,
+    "cons_head_cost": 17.32,
+    "cons_chargeable_weight": 0.173,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "樱桃造型钥匙扣挂件，金属珐琅"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "樱桃造型钥匙扣挂件，金属珐琅",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 75,
+    "image": "商品图片/IMG_075.png",
+    "product_type": "foldable_phone_stand",
+    "category_type": "general",
+    "E_head_cost": 13.0,
+    "F_chargeable_weight": 0.13,
+    "normal_size": [
+      16.0,
+      13.0,
+      5.0
+    ],
+    "normal_weight": 0.08,
+    "cons_head_cost": 34.0,
+    "cons_chargeable_weight": 0.34,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "手机桌面支架，ABS硬塑可折叠"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "手机桌面支架，ABS硬塑可折叠",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 76,
+    "image": "商品图片/IMG_076.png",
+    "product_type": "golden_incense_holder_dup",
+    "category_type": "general",
+    "E_head_cost": 81.0,
+    "F_chargeable_weight": 0.81,
+    "normal_size": [
+      20.0,
+      12.0,
+      27.0
+    ],
+    "normal_weight": 0.22,
+    "cons_head_cost": 165.0,
+    "cons_chargeable_weight": 1.65,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "金色蚊香盘架（同#64）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "金色蚊香盘架（同#64）",
+    "packaging_method": "气泡袋",
+    "G_judgment": "非包类·气泡袋"
+  },
+  {
+    "task_id": 77,
+    "image": "商品图片/IMG_077.png",
+    "product_type": "metal_card_wallet",
+    "category_type": "general",
+    "E_head_cost": 12.0,
+    "F_chargeable_weight": 0.12,
+    "normal_size": [
+      14.0,
+      5.0,
+      10.0
+    ],
+    "normal_weight": 0.12,
+    "cons_head_cost": 25.2,
+    "cons_chargeable_weight": 0.252,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黑色金属卡包钱夹，金属+橡胶硬质"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黑色金属卡包钱夹，金属+橡胶硬质",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 78,
+    "image": "商品图片/IMG_078.png",
+    "product_type": "white_toe_liner_socks_dup",
+    "category_type": "general",
+    "E_head_cost": 3.5,
+    "F_chargeable_weight": 0.035,
+    "normal_size": [
+      14.0,
+      10.0,
+      2.0
+    ],
+    "normal_weight": 0.03,
+    "cons_head_cost": 7.2,
+    "cons_chargeable_weight": 0.072,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "白色分趾隐形袜（同#36/#1类）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "白色分趾隐形袜（同#36/#1类）",
+    "packaging_method": "OPP袋",
+    "G_judgment": "非包类·OPP袋"
+  },
+  {
+    "task_id": 79,
+    "image": "商品图片/IMG_079.png",
+    "product_type": "yellow_green_apple_squishy",
+    "category_type": "general",
+    "E_head_cost": 21.6,
+    "F_chargeable_weight": 0.216,
+    "normal_size": [
+      12.0,
+      12.0,
+      12.0
+    ],
+    "normal_weight": 0.14,
+    "cons_head_cost": 42.19,
+    "cons_chargeable_weight": 0.422,
+    "confidence": "medium",
+    "needs_review": true,
+    "review_reasons": [
+      "采用的尺寸证据不是高置信度",
+      "采用的重量证据不是高置信度",
+      "黄绿苹果硅胶捏捏乐（同#58/#73类）"
+    ],
+    "status": "calculated",
+    "J": "需复核",
+    "reasoning": "黄绿苹果硅胶捏捏乐（同#58/#73类）",
+    "packaging_method": "OPP袋+气泡",
+    "G_judgment": "非包类·OPP袋+气泡"
+  }
+]
