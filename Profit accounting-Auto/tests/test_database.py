@@ -1,8 +1,8 @@
 """
-数据库模块测试 — Schema v2
+数据库模块测试 — Schema v3
 
 P0修复：
-- schema version 2
+- schema version 3
 - route_config 表
 - 不再有全局 head_haul_rate/fixed_service_fee config
 """
@@ -24,8 +24,8 @@ class TestDatabase:
         import shutil
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
 
-    def test_schema_version_is_2(self):
-        assert self.db.get_schema_version() == 2
+    def test_schema_version_is_3(self):
+        assert self.db.get_schema_version() == 3
 
     def test_config_defaults(self):
         assert float(self.db.get_config("exchange_rate", "0")) == 7.20

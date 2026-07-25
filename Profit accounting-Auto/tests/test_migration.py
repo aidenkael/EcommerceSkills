@@ -1,8 +1,8 @@
 """
-旧数据库迁移测试 — v0/v1 → v2
+旧数据库迁移测试 — v0/v1 → v3
 
 模拟旧版DB(无freight_forwarder, 无route_config, schema v1)
-验证：迁移后 schema=2, 货代表存在, 旧数据保留
+验证：迁移后 schema=3, 货代表存在, 旧数据保留
 """
 
 import sys, os, shutil, tempfile, sqlite3, json
@@ -57,9 +57,9 @@ class TestMigration:
     def teardown_class(cls):
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
 
-    def test_migration_to_v2(self):
+    def test_migration_to_v3(self):
         db = DatabaseManager(self.db_path)
-        assert db.get_schema_version() == 2
+        assert db.get_schema_version() == 3
 
     def test_route_config_created(self):
         db = DatabaseManager(self.db_path)
@@ -84,4 +84,4 @@ class TestMigration:
         db1 = DatabaseManager(self.db_path)
         v1 = db1.get_schema_version()
         db2 = DatabaseManager(self.db_path)
-        assert v1 == db2.get_schema_version() == 2
+        assert v1 == db2.get_schema_version() == 3
