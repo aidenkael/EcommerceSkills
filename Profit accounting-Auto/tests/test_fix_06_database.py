@@ -108,6 +108,41 @@ def test_v0_without_products_table_migrates_to_v3(tmp_path):
         conn.close()
 
 
+def test_v0_snapshot_record_missing_all_rule_columns_migrates(tmp_path):
+    path = str(tmp_path / "minimal-v0.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE products (
+            id TEXT PRIMARY KEY, name TEXT, created_at TEXT, updated_at TEXT
+        );
+        CREATE TABLE product_snapshots (
+            id TEXT PRIMARY KEY, product_id TEXT, snapshot_data TEXT, created_at TEXT
+        );
+        INSERT INTO products VALUES ('p1', '旧商品', 'old', 'old');
+        """
+    )
+    conn.execute(
+        "INSERT INTO product_snapshots VALUES ('s1', 'p1', ?, 'old')",
+        (json.dumps({"name": "旧商品"}, ensure_ascii=False),),
+    )
+    conn.commit()
+    conn.close()
+
+    db = DatabaseManager(path)
+
+    snapshot = db.get_snapshot("p1")
+    product = db.get_product("p1")
+    assert db.get_schema_version() == 3
+    assert snapshot["name"] == "旧商品"
+    assert snapshot["_snapshot_exchange_rate"] is None
+    assert snapshot["_snapshot_head_haul_rate"] is None
+    assert snapshot["_snapshot_fixed_service_fee"] is None
+    assert snapshot["_snapshot_rule_version"] == 1
+    assert product["cost"] is None
+    assert product["_current_rule_snapshot"] is None
+
+
 def test_existing_rule_version_one_is_upgraded(tmp_path):
     path = str(tmp_path / "rule-v1.db")
     conn = sqlite3.connect(path)

@@ -83,6 +83,7 @@ class DatabaseManager:
         else:
             self._init_db()
             self._seed_current_data()
+        self._validate_database_file()
 
     def _peek_schema_version(self) -> int:
         """只读连接读取版本号，读完后立即关闭"""
@@ -103,6 +104,7 @@ class DatabaseManager:
 
         conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
         try:
+            conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("BEGIN TRANSACTION")
             self._apply_migration(conn, old_version)
             conn.execute("COMMIT")
@@ -150,11 +152,35 @@ class DatabaseManager:
             conn.execute(stmt)
 
         product_columns = {
+            "name": "TEXT DEFAULT ''",
+            "cost": "REAL",
+            "domestic_shipping": "REAL",
+            "net_weight": "REAL",
+            "net_length": "REAL",
+            "net_width": "REAL",
+            "net_height": "REAL",
+            "packaged_weight": "REAL",
+            "packaged_length": "REAL",
+            "packaged_width": "REAL",
+            "packaged_height": "REAL",
             "freight_forwarder": "TEXT DEFAULT NULL",
+            "head_haul_cost": "REAL",
+            "fixed_service_fee": "REAL",
+            "tail_haul_cost": "REAL",
+            "shein_price": "REAL",
+            "selling_price_rmb": "REAL",
+            "selling_price_usd": "REAL",
+            "target_profit_rate": "REAL",
+            "promotion_reserve_rate": "REAL",
             "current_rule_snapshot": "TEXT",
             "current_calculation_results": "TEXT",
             "calculation_schema_version": f"INTEGER DEFAULT {CALCULATION_SCHEMA_VERSION}",
             "calculated_at": "TEXT",
+            "notes": "TEXT DEFAULT ''",
+            "status": "TEXT DEFAULT 'active'",
+            "image_path": "TEXT DEFAULT ''",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
         }
         snapshot_columns = {
             "exchange_rate": "REAL",
@@ -164,7 +190,12 @@ class DatabaseManager:
             "volume_divisor": "INTEGER DEFAULT 8000",
             "rule_version": "INTEGER DEFAULT 1",
             "rule_snapshot": "TEXT",
+            "created_at": "TEXT",
         }
+        self._require_columns(conn, "products", {"id"})
+        self._require_columns(
+            conn, "product_snapshots", {"id", "product_id", "snapshot_data"}
+        )
         for column, column_type in product_columns.items():
             self._add_column_if_missing(conn, "products", column, column_type)
         for column, column_type in snapshot_columns.items():
@@ -183,6 +214,7 @@ class DatabaseManager:
             conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (key, value))
 
         self._backfill_current_state(conn)
+        self._validate_migrated_schema(conn)
         conn.execute(
             "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?,?)",
             (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()),
@@ -218,6 +250,48 @@ class DatabaseManager:
                        WHERE id=?""",
                     (rule_json, calc_json, CALCULATION_SCHEMA_VERSION, row["id"]),
                 )
+
+    @staticmethod
+    def _table_columns(conn, table):
+        return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+    def _require_columns(self, conn, table, required):
+        missing = required - self._table_columns(conn, table)
+        if missing:
+            raise RuntimeError(f"{table} 缺少不可安全推断的关键字段: {sorted(missing)}")
+
+    def _validate_migrated_schema(self, conn):
+        required_product_columns = {
+            "id", "name", "cost", "domestic_shipping",
+            "net_weight", "net_length", "net_width", "net_height",
+            "packaged_weight", "packaged_length", "packaged_width", "packaged_height",
+            "freight_forwarder", "head_haul_cost", "fixed_service_fee", "tail_haul_cost",
+            "shein_price", "selling_price_rmb", "selling_price_usd",
+            "target_profit_rate", "promotion_reserve_rate",
+            "current_rule_snapshot", "current_calculation_results",
+            "calculation_schema_version", "calculated_at",
+            "notes", "status", "image_path", "created_at", "updated_at",
+        }
+        required_snapshot_columns = {
+            "id", "product_id", "snapshot_data", "exchange_rate", "head_haul_rate",
+            "fixed_service_fee", "tail_haul_cost", "volume_divisor", "rule_version",
+            "rule_snapshot",
+        }
+        self._require_columns(conn, "products", required_product_columns)
+        self._require_columns(conn, "product_snapshots", required_snapshot_columns)
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise RuntimeError(f"数据库完整性检查失败: {integrity}")
+        foreign_key_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise RuntimeError("数据库外键检查失败")
+
+    def _validate_database_file(self):
+        conn = self._get_conn()
+        try:
+            self._validate_migrated_schema(conn)
+        finally:
+            conn.close()
 
     def _init_db(self):
         """建表（不写版本号，不写种子数据）"""
