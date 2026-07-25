@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific - 暂不跟踪原有脚本目录
+Image Search/
+Information extraction/
+logistics-cost-skill-1.0/
+logistics-cost-skill-2.0/
+logistics-cost-skill-1.0.zip
+logistics-cost-skill-2.0.zip
+
+# 测试缓存
+.pytest_cache/
+
+# 日志
+*.log
+
+# 数据库正式数据（只保留结构）
+# Profit accounting-Auto/data/*.db
