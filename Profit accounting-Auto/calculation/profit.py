@@ -15,16 +15,24 @@
 
 def total_cost(product_cost, domestic_shipping, logistics_cost):
     """
-    计算总成本
+    计算总成本（严格模式：任意一项缺失返回 None）
 
     Args:
         product_cost:      商品成本 (元)
-        domestic_shipping: 发往义乌中转仓运费 (元)
+        domestic_shipping: 发往中转仓运费 (元)
         logistics_cost:    总物流成本 (元)
 
     Returns:
-        float: 总成本 (元)，缺失项按 0 计算
+        float: 总成本 (元)
+        None:  任一参数为 None
     """
+    if product_cost is None or domestic_shipping is None or logistics_cost is None:
+        return None
+    return product_cost + domestic_shipping + logistics_cost
+
+
+def known_total_cost_subtotal(product_cost, domestic_shipping, logistics_cost):
+    """计算已知成本之和（仅用于界面显示）"""
     total = 0.0
     if product_cost is not None:
         total += product_cost

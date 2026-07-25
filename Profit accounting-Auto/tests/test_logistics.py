@@ -10,10 +10,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from calculation.logistics import (
-    volumetric_weight,
-    chargeable_weight,
-    head_haul_cost,
-    total_logistics_cost,
+    volumetric_weight, chargeable_weight, head_haul_cost,
+    total_logistics_cost, known_logistics_subtotal,
 )
 
 
@@ -84,18 +82,21 @@ class TestHeadHaulCost:
 
 
 class TestTotalLogisticsCost:
-    """总物流成本"""
+    """总物流成本 — 严格模式"""
 
     def test_all_present(self):
         assert total_logistics_cost(350.0, 36.0, 50.0) == 436.0
 
     def test_some_none(self):
-        # None 按 0 算
-        assert total_logistics_cost(350.0, None, 50.0) == 400.0
-        assert total_logistics_cost(None, 36.0, None) == 36.0
+        assert total_logistics_cost(350.0, None, 50.0) is None
+        assert total_logistics_cost(None, 36.0, None) is None
 
     def test_all_none(self):
-        assert total_logistics_cost(None, None, None) == 0.0
+        assert total_logistics_cost(None, None, None) is None
 
     def test_zero_values(self):
         assert total_logistics_cost(0, 0, 0) == 0.0
+
+    def test_known_subtotal(self):
+        assert known_logistics_subtotal(350.0, None, 50.0) == 400.0
+        assert known_logistics_subtotal(None, None, None) == 0.0

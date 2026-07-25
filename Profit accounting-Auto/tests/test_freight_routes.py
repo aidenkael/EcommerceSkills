@@ -10,7 +10,8 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from calculation import (
     volumetric_weight, chargeable_weight, head_haul_cost,
-    total_logistics_cost, total_cost, net_profit_amount, net_profit_rate,
+    total_logistics_cost, known_logistics_subtotal,
+    total_cost, net_profit_amount, net_profit_rate,
     suggested_price_from_rate,
 )
 
@@ -87,9 +88,12 @@ class TestMissingCost:
         assert head is None
 
     def test_logistics_with_missing_head_partial(self):
-        # 头程缺失但其他有值 → 仅显示已知部分
+        # 严格模式：头程缺失 → None
         log = total_logistics_cost(None, 6.0, 40.0)
-        assert log == 46.0
+        assert log is None
+        # 已知部分用于显示
+        known = known_logistics_subtotal(None, 6.0, 40.0)
+        assert known == 46.0
 
     def test_missing_key_cost_no_false_profit(self):
         """关键费用缺失不应产生确定利润"""
