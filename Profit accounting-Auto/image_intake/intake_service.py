@@ -136,6 +136,41 @@ class IntakeService:
         session.images.append(record)
         return record
 
+    def add_image_bytes(self, session: IntakeSession, data: bytes,
+                        original_filename: str, image_type) -> dict:
+        """将图片字节数据保存到会话 original 目录。
+
+        - data: 图片字节内容（PNG/JPEG等）；
+        - original_filename: 显示用的原始文件名（如 clipboard_20260727_120000.png）；
+        - image_type: ImageType 枚举；
+        - 返回 image_record，与 add_image 格式一致。
+        """
+        if not isinstance(image_type, ImageType):
+            raise ValueError(f"非法 image_type: {image_type!r}，必须是 ImageType 枚举")
+        if not isinstance(data, bytes) or len(data) == 0:
+            raise ValueError("数据不能为空")
+        # 使用 .png 作为默认存储扩展名
+        ext = ".png"
+        image_id = uuid.uuid4().hex
+        stored_filename = f"{image_id}{ext}"
+        session_dir = Path(session.session_dir)
+        original_dir = session_dir / "original"
+        original_dir.mkdir(parents=True, exist_ok=True)
+        stored_path = original_dir / stored_filename
+        with open(stored_path, "wb") as f:
+            f.write(data)
+        record = {
+            "image_id": image_id,
+            "original_filename": original_filename,
+            "stored_filename": stored_filename,
+            "stored_path": str(stored_path),
+            "image_type": image_type.value,
+            "added_at": datetime.now().isoformat(timespec="seconds"),
+            "source": "clipboard",
+        }
+        session.images.append(record)
+        return record
+
     # ─── session.json 读写 ──────────────────────────────────
 
     def save_session(self, session: IntakeSession) -> Path:

@@ -233,7 +233,7 @@ class TestConfirmResult:
 class TestDialogInstantiation:
     """UI 实例化（最小，不测像素）。"""
 
-    def test_dialog_can_instantiate(self):
+    def test_dialog_can_instantiate(self, tmp_path):
         tkinter = pytest.importorskip("tkinter")
         try:
             root = tkinter.Tk()
@@ -243,7 +243,7 @@ class TestDialogInstantiation:
         try:
             from ui.ocr_intake_dialog import OcrIntakeDialog
             ctrl = OcrIntakeController()
-            dlg = OcrIntakeDialog(root, controller=ctrl)
+            dlg = OcrIntakeDialog(root, controller=ctrl, session_root=str(tmp_path / "sessions"))
             assert dlg.result is None
             assert dlg.controller is ctrl
             dlg.destroy()

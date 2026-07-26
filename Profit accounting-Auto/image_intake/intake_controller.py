@@ -79,6 +79,18 @@ class OcrIntakeController:
         })
         return image_id
 
+    def register_image(self, image_id: str, path: str, image_type, filename: str) -> None:
+        """注册已由 IntakeService 保存的图片（不验证文件、不生成新 ID）。
+
+        用于对话框同步 IntakeService 的图片记录到控制器逻辑状态。
+        """
+        self._images.append({
+            "image_id": image_id,
+            "path": path,
+            "image_type": image_type if isinstance(image_type, ImageType) else image_type,
+            "filename": filename,
+        })
+
     def remove_image(self, image_id: str) -> None:
         """移除图片及其候选和相关选择。"""
         self._images = [img for img in self._images if img["image_id"] != image_id]
