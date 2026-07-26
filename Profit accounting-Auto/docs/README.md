@@ -17,6 +17,14 @@ python app.py
 
 首次启动会创建 `data/profit_accounting.db`。
 
+Windows 打包：
+
+```text
+双击 build_windows.bat
+```
+
+生成文件为 `dist\ProfitAccountingAuto.exe`。打包版的数据不会写入临时解压目录，而是固定保存在 `%LOCALAPPDATA%\ProfitAccountingAuto\profit_accounting.db`。
+
 ## 功能
 
 ### 新商品测算
@@ -50,6 +58,8 @@ python app.py
 - 动态货代规则
 
 设置分为全局设置与动态货代管理。货代可不限数量新增，使用不可修改的 UUID 作为内部标识；每个货代独立维护显示名称、头程单价、固定服务费、体积重除数和启用状态。货代列表支持滚动。未被历史商品或快照引用的货代可永久删除；被引用的货代会停用并归档，以保留历史关联。归档货代可恢复，恢复后默认保持停用，需人工确认规则并重新启用。新商品下拉框只显示启用且未归档的货代。
+
+“设置”菜单还提供整库备份与恢复。备份包含商品、首次快照、当前计算结果、货代和全局设置。恢复前会验证备份、迁移旧版本，并自动保留一份当前数据库的 `before_restore` 安全备份；恢复失败时不替换当前数据。
 
 ## 当前业务规则
 
@@ -96,7 +106,9 @@ python app.py
 
 ## 数据库
 
-数据库：`data/profit_accounting.db`
+源码运行数据库：`data/profit_accounting.db`
+
+打包运行数据库：`%LOCALAPPDATA%\ProfitAccountingAuto\profit_accounting.db`
 
 主要表：
 
@@ -116,7 +128,7 @@ python -m pip install -r requirements.txt
 python -m pytest tests -q
 ```
 
-测试覆盖计算公式、输入校验、动态货代规则、归档/删除/恢复、真实 v4 迁移、严格缺失传播、数据库 CRUD、首次快照、当前状态、迁移回滚、规则切换保存和历史结果冻结。
+测试覆盖计算公式、输入校验、动态货代规则、归档/删除/恢复、真实 v4 迁移、手工备份/安全恢复、打包数据目录、严格缺失传播、数据库 CRUD、首次快照、当前状态、迁移回滚、规则切换保存和历史结果冻结。
 
 ## 已知边界
 

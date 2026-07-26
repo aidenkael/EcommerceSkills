@@ -5,10 +5,11 @@
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import math
 import sys
 import os
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -337,6 +338,9 @@ class MainWindow:
 
         settings_menu = tk.Menu(menubar, tearoff=0)
         settings_menu.add_command(label="汇率与费用设置...", command=self._open_settings)
+        settings_menu.add_separator()
+        settings_menu.add_command(label="备份全部数据...", command=self._backup_data)
+        settings_menu.add_command(label="从备份恢复...", command=self._restore_data)
         menubar.add_cascade(label="设置", menu=settings_menu)
 
     def _open_settings(self):
@@ -346,6 +350,61 @@ class MainWindow:
         """设置保存后刷新计算"""
         self._product_page._refresh_route_choices()
         self._product_page.recalculate()
+
+    def _backup_data(self):
+        initial_dir = os.path.dirname(os.path.abspath(self._db.db_path))
+        initial_name = "profit_accounting_backup_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".db"
+        destination = filedialog.asksaveasfilename(
+            parent=self._root,
+            title="备份全部数据",
+            initialdir=initial_dir,
+            initialfile=initial_name,
+            defaultextension=".db",
+            filetypes=[("数据库备份", "*.db"), ("所有文件", "*.*")],
+        )
+        if not destination:
+            return
+        try:
+            saved_path = self._db.backup_to(destination)
+        except Exception as exc:
+            messagebox.showerror("备份失败", str(exc), parent=self._root)
+            return
+        messagebox.showinfo(
+            "备份完成",
+            f"商品、历史快照和全部设置已备份到：\n{saved_path}",
+            parent=self._root,
+        )
+
+    def _restore_data(self):
+        initial_dir = os.path.dirname(os.path.abspath(self._db.db_path))
+        source = filedialog.askopenfilename(
+            parent=self._root,
+            title="选择数据库备份",
+            initialdir=initial_dir,
+            filetypes=[("数据库备份", "*.db"), ("所有文件", "*.*")],
+        )
+        if not source:
+            return
+        if not messagebox.askyesno(
+            "确认恢复",
+            "恢复会用所选备份替换当前商品、历史快照和全部设置。\n"
+            "软件会先自动备份当前数据。确定继续吗？",
+            parent=self._root,
+        ):
+            return
+        try:
+            safety_path = self._db.restore_from(source)
+            self._product_page.new_product()
+            self._product_page._refresh_route_choices()
+            self._history_page.refresh_list()
+        except Exception as exc:
+            messagebox.showerror("恢复失败", str(exc), parent=self._root)
+            return
+        messagebox.showinfo(
+            "恢复完成",
+            f"已恢复所选备份。\n恢复前的数据已自动保存到：\n{safety_path}",
+            parent=self._root,
+        )
 
     def _open_product_from_history(self, product_id):
         """从历史记录打开商品"""

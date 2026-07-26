@@ -427,6 +427,80 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON"); return conn
 
+    def backup_to(self, destination: str) -> str:
+        """Create a consistent SQLite backup and atomically replace destination."""
+        destination = os.path.abspath(destination)
+        source_path = os.path.abspath(self.db_path)
+        if destination == source_path:
+            raise ValueError("备份文件不能覆盖当前正在使用的数据库")
+        os.makedirs(os.path.dirname(destination) or ".", exist_ok=True)
+        temp_path = destination + f".tmp-{uuid.uuid4().hex}"
+        source = self._get_conn()
+        target = sqlite3.connect(temp_path)
+        try:
+            source.backup(target)
+            integrity = target.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise RuntimeError(f"备份完整性检查失败: {integrity}")
+            target.commit()
+            target.close()
+            source.close()
+            os.replace(temp_path, destination)
+            return destination
+        except Exception:
+            try:
+                target.close()
+            finally:
+                source.close()
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+
+    def restore_from(self, source_path: str) -> str:
+        """Validate/migrate a backup copy, then atomically restore it.
+
+        Returns the safety backup path of the database state before restoration.
+        """
+        source_path = os.path.abspath(source_path)
+        current_path = os.path.abspath(self.db_path)
+        if source_path == current_path:
+            raise ValueError("不能从当前正在使用的数据库恢复")
+        if not os.path.isfile(source_path):
+            raise ValueError("所选备份文件不存在")
+        with open(source_path, "rb") as source_file:
+            if source_file.read(16) != b"SQLite format 3\x00":
+                raise ValueError("所选文件不是有效的 SQLite 数据库备份")
+
+        target_dir = os.path.dirname(current_path)
+        candidate_path = os.path.join(
+            target_dir, f".restore_candidate_{uuid.uuid4().hex}.db"
+        )
+        shutil.copy2(source_path, candidate_path)
+        safety_path = self.db_path + (
+            ".before_restore_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            + ".db"
+        )
+        replaced = False
+        try:
+            DatabaseManager(candidate_path)
+            self.backup_to(safety_path)
+            os.replace(candidate_path, current_path)
+            replaced = True
+            self._validate_database_file()
+            return safety_path
+        except Exception:
+            if replaced and os.path.exists(safety_path):
+                shutil.copy2(safety_path, current_path)
+            raise
+        finally:
+            if os.path.exists(candidate_path):
+                os.remove(candidate_path)
+            candidate_name = os.path.basename(candidate_path)
+            for name in os.listdir(target_dir):
+                if name.startswith(candidate_name + ".backup_"):
+                    os.remove(os.path.join(target_dir, name))
+
     def get_schema_version(self) -> int:
         conn = self._get_conn()
         try:
