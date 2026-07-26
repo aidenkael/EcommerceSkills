@@ -98,6 +98,8 @@ class DatabaseManager:
         else:
             self._init_db()
             self._seed_current_data()
+            # 利润调整规则仅在首次建库时种子
+            self._seed_profit_adjustment_rules_first_time()
         self._validate_database_file()
 
     def _peek_schema_version(self) -> int:
@@ -284,6 +286,24 @@ class DatabaseManager:
         conn.execute("ALTER TABLE route_config_v6_rebuild RENAME TO route_config")
         return legacy_to_id
 
+    def _seed_profit_adjustment_rules_first_time(self):
+        """仅在首次建库时种子利润调整规则（不依赖名称重复检查）。"""
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM profit_adjustment_rules").fetchone()[0]
+            if count == 0:
+                now = datetime.now().isoformat()
+                conn.execute("""INSERT INTO profit_adjustment_rules
+                    (rule_id,display_name,condition_field,condition_operator,condition_value,
+                     adjustment_direction,adjustment_type,adjustment_value,currency,percentage_base,
+                     is_enabled,is_archived,description,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (str(uuid.uuid4()), "SHEIN 29美元以下运费补贴", "final_price_usd", "<", 29.0,
+                     "income", "fixed", 2.99, "USD", None, 1, 0, "", now, now))
+                conn.commit()
+        finally:
+            conn.close()
+
     @staticmethod
     def _seed_profit_adjustment_rules(conn):
         now = datetime.now().isoformat()
@@ -392,7 +412,7 @@ class DatabaseManager:
             conn.close()
 
     def _seed_current_data(self):
-        """确保当前版本号、配置和货代种子存在。"""
+        """确保当前版本号、配置和货代种子存在。利润调整规则不在此处种子。"""
         conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
         try:
             conn.execute("INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?,?)",
@@ -403,7 +423,7 @@ class DatabaseManager:
                 conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (k, v))
             if not conn.execute("SELECT 1 FROM route_config LIMIT 1").fetchone():
                 self._seed_routes_in_conn(conn)
-            self._seed_profit_adjustment_rules(conn)
+            # 利润调整规则只在首次建库或迁移时种子，不在每次启动时重复
             conn.commit()
         finally:
             conn.close()

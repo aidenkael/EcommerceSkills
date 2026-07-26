@@ -20,55 +20,268 @@ from config.profit_adjustment_manager import ProfitAdjustmentManager
 
 
 class ProfitRulesDialog(tk.Toplevel):
-    """Compact CRUD editor for the intentionally limited Phase 1.6 rule model."""
+    """利润调整规则编辑器 — Phase 1.6 review 修复版
+
+    修复：
+    - 中文映射下拉框替代英文代码输入
+    - 增加 description 字段
+    - 未保存修改保护（新增/切换/关闭）
+    - 归档规则禁止通过保存恢复
+    - 字段联动（无条件/固定金额/百分比）
+    """
+
+    # 中文 ↔ 内部值映射
+    CONDITION_FIELDS = [("", "无条件"), ("final_price_usd", "最终售价（美元）"), ("final_price_rmb", "最终售价（人民币）"), ("product_cost_rmb", "商品成本（人民币）"), ("logistics_cost_rmb", "物流成本（人民币）")]
+    OPERATORS = [("<", "小于"), ("<=", "小于等于"), (">", "大于"), (">=", "大于等于"), ("==", "等于")]
+    DIRECTIONS = [("income", "增加收入"), ("cost", "增加成本")]
+    TYPES = [("fixed", "固定金额"), ("percent", "百分比")]
+    CURRENCIES = [("USD", "美元"), ("RMB", "人民币")]
+    PERCENTAGE_BASES = [("", ""), ("final_price_rmb", "最终售价人民币"), ("product_cost_rmb", "商品成本人民币"), ("logistics_cost_rmb", "物流成本人民币")]
+
     def __init__(self, parent, config_manager, on_change=None):
-        super().__init__(parent); self._cfg = config_manager; self._manager = ProfitAdjustmentManager(config_manager._db); self._on_change = on_change
-        self.title("利润调整规则"); self.geometry("820x430"); self.transient(parent); self.grab_set()
-        self._selected_id = None; self._vars = {key: tk.StringVar() for key in ("display_name", "condition_field", "condition_operator", "condition_value", "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base")}; self._enabled = tk.BooleanVar(value=True)
+        super().__init__(parent)
+        self._cfg = config_manager
+        self._manager = ProfitAdjustmentManager(config_manager._db)
+        self._on_change = on_change
+        self.title("利润调整规则"); self.geometry("900x500"); self.transient(parent); self.grab_set()
+        self._selected_id = None
+        self._dirty = False  # 未保存修改标志
+        self._vars = {key: tk.StringVar() for key in ("display_name", "condition_field", "condition_operator", "condition_value", "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base", "description")}
+        self._enabled = tk.BooleanVar(value=True)
+        # 跟踪修改
+        for var in self._vars.values():
+            var.trace_add("write", lambda *_, v=self: setattr(v, "_dirty", True))
+        self._enabled.trace_add("write", lambda *_, v=self: setattr(v, "_dirty", True))
+        self._build_ui()
+        self._refresh()
+
+    def _build_ui(self):
         outer = ttk.Frame(self, padding=10); outer.pack(fill=tk.BOTH, expand=True)
-        self._list = tk.Listbox(outer, height=9); self._list.grid(row=0, column=0, columnspan=5, sticky="nsew"); self._list.bind("<<ListboxSelect>>", self._select)
-        labels = [("display_name", "名称"), ("condition_field", "条件字段"), ("condition_operator", "比较"), ("condition_value", "阈值"), ("adjustment_direction", "方向"), ("adjustment_type", "类型"), ("adjustment_value", "金额/比例"), ("currency", "币种"), ("percentage_base", "百分比基数")]
-        for index, (key, label) in enumerate(labels):
-            row, col = 1 + index // 3, (index % 3) * 2
-            ttk.Label(outer, text=label).grid(row=row, column=col, sticky=tk.W, padx=3, pady=3)
-            ttk.Entry(outer, textvariable=self._vars[key], width=18).grid(row=row, column=col + 1, sticky=tk.EW, padx=3, pady=3)
-        ttk.Checkbutton(outer, text="启用", variable=self._enabled).grid(row=4, column=0, sticky=tk.W)
-        bar = ttk.Frame(outer); bar.grid(row=5, column=0, columnspan=6, pady=8)
-        for text, command in [("新增", self._new), ("保存", self._save), ("归档/删除", self._archive), ("恢复", self._restore), ("关闭", self.destroy)]: ttk.Button(bar, text=text, command=command).pack(side=tk.LEFT, padx=3)
-        outer.columnconfigure(1, weight=1); outer.columnconfigure(3, weight=1); outer.columnconfigure(5, weight=1); self._refresh()
+        self._list = tk.Listbox(outer, height=10, width=60); self._list.grid(row=0, column=0, columnspan=6, sticky="nsew")
+        self._list.bind("<<ListboxSelect>>", self._select)
+        # 表单行 1
+        r = 1
+        ttk.Label(outer, text="名称：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
+        ttk.Entry(outer, textvariable=self._vars["display_name"], width=25).grid(row=r, column=1, columnspan=2, sticky=tk.EW, padx=3, pady=3)
+        # 行 2：条件
+        r += 1
+        ttk.Label(outer, text="条件：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
+        self._cond_cb = ttk.Combobox(outer, textvariable=self._vars["condition_field"], values=[v[1] for v in self.CONDITION_FIELDS], state="readonly", width=18)
+        self._cond_cb.grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3); self._cond_cb.bind("<<ComboboxSelected>>", self._on_condition_change)
+        self._op_cb = ttk.Combobox(outer, textvariable=self._vars["condition_operator"], values=[v[1] for v in self.OPERATORS], state="readonly", width=10)
+        self._op_cb.grid(row=r, column=2, sticky=tk.EW, padx=3, pady=3)
+        self._cond_val_entry = ttk.Entry(outer, textvariable=self._vars["condition_value"], width=12)
+        self._cond_val_entry.grid(row=r, column=3, sticky=tk.EW, padx=3, pady=3)
+        # 行 3：调整
+        r += 1
+        ttk.Label(outer, text="调整方向：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
+        ttk.Combobox(outer, textvariable=self._vars["adjustment_direction"], values=[v[1] for v in self.DIRECTIONS], state="readonly", width=15).grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3)
+        ttk.Label(outer, text="类型：").grid(row=r, column=2, sticky=tk.W, padx=3, pady=3)
+        self._type_cb = ttk.Combobox(outer, textvariable=self._vars["adjustment_type"], values=[v[1] for v in self.TYPES], state="readonly", width=12)
+        self._type_cb.grid(row=r, column=3, sticky=tk.EW, padx=3, pady=3); self._type_cb.bind("<<ComboboxSelected>>", self._on_type_change)
+        # 行 4：金额/比例
+        r += 1
+        self._val_label = ttk.Label(outer, text="金额：")
+        self._val_label.grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
+        ttk.Entry(outer, textvariable=self._vars["adjustment_value"], width=15).grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3)
+        ttk.Label(outer, text="币种：").grid(row=r, column=2, sticky=tk.W, padx=3, pady=3)
+        self._currency_cb = ttk.Combobox(outer, textvariable=self._vars["currency"], values=[v[1] for v in self.CURRENCIES], state="readonly", width=8)
+        self._currency_cb.grid(row=r, column=3, sticky=tk.EW, padx=3, pady=3)
+        # 行 5：百分比基数
+        r += 1
+        ttk.Label(outer, text="百分比基数：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
+        self._base_cb = ttk.Combobox(outer, textvariable=self._vars["percentage_base"], values=[v[1] for v in self.PERCENTAGE_BASES if v[0]], state="readonly", width=18)
+        self._base_cb.grid(row=r, column=1, columnspan=2, sticky=tk.EW, padx=3, pady=3)
+        # 行 6：说明
+        r += 1
+        ttk.Label(outer, text="说明：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
+        ttk.Entry(outer, textvariable=self._vars["description"], width=50).grid(row=r, column=1, columnspan=4, sticky=tk.EW, padx=3, pady=3)
+        # 行 7
+        r += 1
+        ttk.Checkbutton(outer, text="启用", variable=self._enabled).grid(row=r, column=0, sticky=tk.W)
+        self._status_var = tk.StringVar(); ttk.Label(outer, textvariable=self._status_var, foreground="gray").grid(row=r, column=1, columnspan=4, sticky=tk.W)
+        # 按钮
+        r += 1
+        bar = ttk.Frame(outer); bar.grid(row=r, column=0, columnspan=6, pady=8)
+        for text, cmd in [("新增", self._new), ("保存", self._save), ("归档/删除", self._archive), ("恢复", self._restore), ("关闭", self._try_close)]:
+            ttk.Button(bar, text=text, command=cmd).pack(side=tk.LEFT, padx=3)
+        outer.columnconfigure(1, weight=1); outer.columnconfigure(3, weight=1); outer.columnconfigure(5, weight=1)
+
+    def _get_internal(self, display_str, mapping):
+        for key, label in mapping:
+            if label == display_str: return key
+        return display_str if display_str else None
+
+    def _get_display(self, internal, mapping):
+        for key, label in mapping:
+            if key == internal: return label
+        return internal or ""
+
+    def _on_condition_change(self, _event=None):
+        cond = self._vars["condition_field"].get()
+        if cond == "无条件" or not cond:
+            self._op_cb.config(state="disabled"); self._vars["condition_operator"].set("")
+            self._cond_val_entry.config(state="disabled"); self._vars["condition_value"].set("")
+        else:
+            self._op_cb.config(state="readonly"); self._cond_val_entry.config(state="normal")
+            if not self._vars["condition_operator"].get(): self._vars["condition_operator"].set("小于")
+
+    def _on_type_change(self, _event=None):
+        typ = self._vars["adjustment_type"].get()
+        if typ == "固定金额":
+            self._val_label.config(text="金额：")
+            self._base_cb.config(state="disabled"); self._vars["percentage_base"].set("")
+            self._currency_cb.config(state="readonly")
+        else:
+            self._val_label.config(text="比例 (%)：")
+            self._base_cb.config(state="readonly")
+            if not self._vars["percentage_base"].get(): self._vars["percentage_base"].set("最终售价人民币")
+            self._currency_cb.config(state="disabled"); self._vars["currency"].set("")
+
+    def _check_dirty(self, action_desc="操作"):
+        """检查未保存修改，返回 True 继续 / False 取消"""
+        if not self._dirty: return True
+        result = messagebox.askyesnocancel(
+            "未保存修改", f"当前规则有未保存的修改。\n是否保存后再{action_desc}？\n\n是 = 保存并继续\n否 = 放弃修改并继续\n取消 = 保持当前编辑",
+            parent=self, default=messagebox.CANCEL)
+        if result is None: return False  # 取消
+        if result:  # 是 = 保存并继续
+            return self._save_internal()
+        # 否 = 放弃修改
+        self._dirty = False; self._load_current()
+        return True
+
+    def _save_internal(self):
+        """内部保存，返回 True 成功"""
+        try:
+            if self._selected_id is None:
+                self._selected_id = self._manager.create(self._values())
+            else:
+                self._manager.update(self._selected_id, self._values())
+            self._dirty = False; self._refresh()
+            return True
+        except ValueError as exc:
+            messagebox.showerror("规则错误", str(exc), parent=self)
+            return False
 
     def _refresh(self):
-        self._rows = self._manager.list(True); self._list.delete(0, tk.END)
-        for item in self._rows: self._list.insert(tk.END, f"{'[归档] ' if item['is_archived'] else ''}{item['display_name']} | {item['condition_field'] or '无条件'} | {item['adjustment_direction']}/{item['adjustment_type']} {item['adjustment_value']} {item['currency']}")
+        self._rows = self._manager.list(True)
+        self._list.delete(0, tk.END)
+        for item in self._rows:
+            prefix = "[归档] " if item["is_archived"] else ("[停用] " if not item["is_enabled"] else "")
+            cond = item.get("condition_field") or "无条件"
+            op = item.get("condition_operator") or ""
+            cv = item.get("condition_value") or ""
+            typ = "固定金额" if item.get("adjustment_type") == "fixed" else "百分比"
+            cur = item.get("currency") or ""
+            val = item.get("adjustment_value") or 0
+            direction = "增加收入" if item.get("adjustment_direction") == "income" else "增加成本"
+            self._list.insert(tk.END, f"{prefix}{item['display_name']} | {cond} {op} {cv} | {direction}/{typ} {val} {cur}")
         if self._on_change: self._on_change()
 
     def _new(self):
-        self._selected_id = None
-        defaults = {"display_name":"", "condition_field":"final_price_usd", "condition_operator":"<", "condition_value":"", "adjustment_direction":"income", "adjustment_type":"fixed", "adjustment_value":"", "currency":"USD", "percentage_base":""}
+        if not self._check_dirty("新建"): return
+        self._selected_id = None; self._dirty = False
+        defaults = {"display_name":"", "condition_field":"无条件", "condition_operator":"", "condition_value":"",
+                    "adjustment_direction":"增加收入", "adjustment_type":"固定金额", "adjustment_value":"",
+                    "currency":"美元", "percentage_base":"", "description":""}
         for key, value in defaults.items(): self._vars[key].set(value)
-        self._enabled.set(True)
+        self._enabled.set(True); self._on_condition_change(); self._on_type_change()
 
     def _select(self, _event):
-        selected = self._list.curselection()
-        if not selected: return
-        item = self._rows[selected[0]]; self._selected_id = item["rule_id"]
-        for key, var in self._vars.items(): var.set("" if item.get(key) is None else str(item.get(key)))
-        self._enabled.set(item["is_enabled"])
+        sel = self._list.curselection()
+        if not sel: return
+        if not self._check_dirty("切换规则"): return
+        item = self._rows[sel[0]]; self._selected_id = item["rule_id"]
+        self._vars["display_name"].set(item.get("display_name", ""))
+        self._vars["condition_field"].set(self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件")
+        self._vars["condition_operator"].set(self._get_display(item.get("condition_operator"), self.OPERATORS) or "")
+        self._vars["condition_value"].set(str(item.get("condition_value") or ""))
+        self._vars["adjustment_direction"].set(self._get_display(item.get("adjustment_direction"), self.DIRECTIONS) or "增加收入")
+        self._vars["adjustment_type"].set(self._get_display(item.get("adjustment_type"), self.TYPES) or "固定金额")
+        self._vars["adjustment_value"].set(str(item.get("adjustment_value") or ""))
+        self._vars["currency"].set(self._get_display(item.get("currency"), self.CURRENCIES) or "美元")
+        self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
+        self._vars["description"].set(item.get("description", ""))
+        self._enabled.set(item.get("is_enabled", True))
+        self._dirty = False; self._on_condition_change(); self._on_type_change()
+        self._update_status()
+
+    def _load_current(self):
+        """重新载入当前选中规则的数据库值"""
+        if self._selected_id:
+            item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
+            if item:
+                self._vars["display_name"].set(item.get("display_name", ""))
+                self._vars["condition_field"].set(self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件")
+                self._vars["condition_operator"].set(self._get_display(item.get("condition_operator"), self.OPERATORS) or "")
+                self._vars["condition_value"].set(str(item.get("condition_value") or ""))
+                self._vars["adjustment_direction"].set(self._get_display(item.get("adjustment_direction"), self.DIRECTIONS) or "增加收入")
+                self._vars["adjustment_type"].set(self._get_display(item.get("adjustment_type"), self.TYPES) or "固定金额")
+                self._vars["adjustment_value"].set(str(item.get("adjustment_value") or ""))
+                self._vars["currency"].set(self._get_display(item.get("currency"), self.CURRENCIES) or "美元")
+                self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
+                self._vars["description"].set(item.get("description", ""))
+                self._enabled.set(item.get("is_enabled", True))
+
+    def _update_status(self):
+        item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None) if self._selected_id else None
+        if item and item.get("is_archived"):
+            self._status_var.set("已归档（只读）— 点恢复后可编辑")
+        elif item and not item.get("is_enabled"):
+            self._status_var.set("已停用")
+        else:
+            self._status_var.set("")
 
     def _values(self):
-        data = {key: var.get().strip() or None for key, var in self._vars.items()}; data["is_enabled"] = self._enabled.get(); data["is_archived"] = False
-        return data
+        is_archived = False
+        if self._selected_id:
+            item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
+            if item: is_archived = item.get("is_archived", False)
+        return {
+            "display_name": self._vars["display_name"].get().strip(),
+            "condition_field": self._get_internal(self._vars["condition_field"].get(), self.CONDITION_FIELDS),
+            "condition_operator": self._get_internal(self._vars["condition_operator"].get(), self.OPERATORS) or None,
+            "condition_value": self._vars["condition_value"].get().strip() or None,
+            "adjustment_direction": self._get_internal(self._vars["adjustment_direction"].get(), self.DIRECTIONS) or "income",
+            "adjustment_type": self._get_internal(self._vars["adjustment_type"].get(), self.TYPES) or "fixed",
+            "adjustment_value": self._vars["adjustment_value"].get().strip() or 0,
+            "currency": self._get_internal(self._vars["currency"].get(), self.CURRENCIES) or "USD",
+            "percentage_base": self._get_internal(self._vars["percentage_base"].get(), self.PERCENTAGE_BASES) or None,
+            "is_enabled": self._enabled.get(), "is_archived": is_archived,
+            "description": self._vars["description"].get().strip(),
+        }
 
     def _save(self):
-        try: self._manager.create(self._values()) if self._selected_id is None else self._manager.update(self._selected_id, self._values())
-        except ValueError as exc: messagebox.showerror("规则错误", str(exc), parent=self); return
-        self._refresh()
+        # 归档规则不能直接保存
+        if self._selected_id:
+            item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
+            if item and item.get("is_archived"):
+                messagebox.showwarning("提示", "已归档规则无法编辑，请先点击「恢复」。", parent=self)
+                return
+        if not self._save_internal(): return
 
     def _archive(self):
-        if self._selected_id and messagebox.askyesno("确认", "归档或删除所选规则？", parent=self): self._manager.archive_or_delete(self._selected_id); self._new(); self._refresh()
+        if not self._selected_id: return
+        item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
+        name = item["display_name"] if item else self._selected_id
+        if not messagebox.askyesno("确认", f"确定要归档或删除规则「{name}」吗？", parent=self): return
+        try: self._manager.archive_or_delete(self._selected_id)
+        except Exception as e: messagebox.showerror("错误", str(e), parent=self); return
+        self._selected_id = None; self._dirty = False; self._new(); self._refresh()
 
     def _restore(self):
-        if self._selected_id: self._manager.restore(self._selected_id); self._refresh()
+        if not self._selected_id: return
+        item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
+        name = item["display_name"] if item else self._selected_id
+        if not messagebox.askyesno("确认", f"确定要恢复规则「{name}」吗？恢复后默认为停用状态。", parent=self): return
+        try: self._manager.restore(self._selected_id)
+        except Exception as e: messagebox.showerror("错误", str(e), parent=self); return
+        self._refresh(); self._load_current(); self._dirty = False; self._update_status()
+
+    def _try_close(self):
+        if self._check_dirty("关闭"):
+            self.destroy()
 
 
 class SettingsDialog(tk.Toplevel):

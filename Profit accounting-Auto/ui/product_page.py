@@ -457,7 +457,16 @@ class ProductPage(ttk.Frame):
 
     def _apply_profit_adjustment(self, base_profit, price_rmb, exchange_rate, logistics):
         rule_id = self._get_profit_rule_id()
-        rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
+        # 优先使用冻结规则副本（历史商品），否则读取当前DB
+        rule = None
+        if rule_id and self._saved_rule_context:
+            frozen_pa = (self._saved_rule_context or {}).get("profit_adjustment") or {}
+            frozen_rule = frozen_pa.get("rule") if isinstance(frozen_pa, dict) else None
+            if frozen_rule and frozen_rule.get("rule_id") == rule_id:
+                rule = frozen_rule
+        if rule is None:
+            rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
+
         price_usd = _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get())
         if price_usd is None:
             price_usd = rmb_to_usd(price_rmb, exchange_rate)
@@ -524,11 +533,17 @@ class ProductPage(ttk.Frame):
         self._calc_direction = None; self._last_modified = None
         self._saved_rule_context = None; self._show_rate_banner = False
         self._show_rate_notice(None); self._forwarder_var.set(""); self.clear_form()
+        self._reset_profit_adjustment_display()
+
+    def _reset_profit_adjustment_display(self):
+        if hasattr(self, "_profit_adjustment_var") and self._profit_adjustment_var is not None:
+            self._profit_adjustment_var.set("未选择规则")
 
     def clear_form(self):
         self._product_id = None; self._has_snapshot = False
         self._saved_rule_context = None; self._show_rate_banner = False
         self._calc_direction = None; self._last_modified = None; self._show_rate_notice(None)
+        self._reset_profit_adjustment_display()
         self._programmatic = True
         try:
             for n, v in self._entry_vars.items(): v.set(str(self._cfg.default_tail_haul) if n == "tail" else "")
@@ -705,6 +720,10 @@ class ProductPage(ttk.Frame):
         self._set_result("converted_usd", converted_usd, " $")
         self._set_result("suggested_price", suggested, " 元")
 
+        # 恢复利润调整结果（Phase 1.6 冻结规则）
+        _, profit_before_adj = self._saved_result(calc, "profit_before_adjustment")
+        _, profit_adjustment = self._saved_result(calc, "profit_adjustment")
+
         self._computed = {
             "head_haul": head, "head_haul_rate": rule_context.get("head_haul_rate"),
             "fixed_service_fee": fixed, "tail_haul_cost": tail,
@@ -720,6 +739,8 @@ class ProductPage(ttk.Frame):
             "volumetric_weight": vol_w, "chargeable_weight": chg_w,
             "profit": net_profit, "profit_rate": net_rate,
             "suggested_price": suggested, "converted_usd": converted_usd,
+            "profit_before_adjustment": profit_before_adj,
+            "profit_adjustment": profit_adjustment,
         }
 
     def _check_rate_changes(self):
