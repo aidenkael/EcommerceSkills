@@ -327,6 +327,7 @@ def test_settings_refresh_guard_supports_save_or_explicit_discard():
     dialog._has_unsaved_changes = lambda: True
     calls = []
     dialog._save = lambda **kwargs: calls.append(kwargs) or True
+    dialog._reload_persisted_values = lambda: calls.append({"reloaded": True})
 
     with patch("ui.main_window.messagebox.askyesnocancel", return_value=True):
         assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is True
@@ -334,4 +335,39 @@ def test_settings_refresh_guard_supports_save_or_explicit_discard():
 
     with patch("ui.main_window.messagebox.askyesnocancel", return_value=False):
         assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is True
-    assert calls == [{"close_after": False}]
+    assert calls == [{"close_after": False}, {"reloaded": True}]
+
+
+def test_settings_refresh_guard_stops_when_save_fails_or_no_changes_exist():
+    dialog = object.__new__(SettingsDialog)
+    dialog._has_unsaved_changes = lambda: True
+    dialog._save = lambda **_kwargs: False
+
+    with patch("ui.main_window.messagebox.askyesnocancel", return_value=True):
+        assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is False
+
+    dialog._has_unsaved_changes = lambda: False
+    with patch("ui.main_window.messagebox.askyesnocancel") as prompt:
+        assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is True
+    prompt.assert_not_called()
+
+
+def test_discard_then_cancel_add_or_archive_keeps_reloaded_values():
+    events = []
+    dialog = object.__new__(SettingsDialog)
+    dialog._reload_persisted_values = lambda: events.append("reload")
+    dialog._has_unsaved_changes = lambda: True
+    dialog._cfg = SimpleNamespace(get_route_rates=lambda _route_id: {"display_name": "数据库货代"})
+    dialog._forwarders = SimpleNamespace(is_referenced=lambda _route_id: False)
+
+    with patch("ui.main_window.messagebox.askyesnocancel", return_value=False), patch(
+        "ui.main_window.simpledialog.askstring", return_value=None
+    ):
+        SettingsDialog._add_route(dialog)
+    assert events == ["reload"]
+
+    with patch("ui.main_window.messagebox.askyesnocancel", return_value=False), patch(
+        "ui.main_window.messagebox.askyesno", return_value=False
+    ):
+        SettingsDialog._archive_or_delete(dialog, "route-1")
+    assert events == ["reload", "reload"]

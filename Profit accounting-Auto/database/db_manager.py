@@ -1,8 +1,8 @@
 """
-SQLite 数据库管理 — Schema v5
+SQLite 数据库管理 — Schema v6
 
 迁移规则：
-- 新数据库：直接创建完整 v5 schema，不备份不迁移
+- 新数据库：直接创建完整 v6 schema，不备份不迁移
 - 旧数据库：先只读检查→关闭→备份→事务迁移→提交/回滚
 - 当前商品状态与首次快照在同一事务中保存
 """
@@ -10,7 +10,7 @@ SQLite 数据库管理 — Schema v5
 import sqlite3, json, uuid, os, shutil, sys
 from datetime import datetime, timedelta
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 CURRENT_RULE_VERSION = 3
 CALCULATION_SCHEMA_VERSION = 1
 VOLUME_DIVISOR = 8000
@@ -210,7 +210,7 @@ class DatabaseManager:
         for column, column_type in snapshot_columns.items():
             self._add_column_if_missing(conn, "product_snapshots", column, column_type)
 
-        legacy_to_id = self._rebuild_route_config_v5(conn)
+        legacy_to_id = self._rebuild_route_config_v6(conn)
         for legacy_id, route_id in legacy_to_id.items():
             conn.execute("UPDATE products SET freight_forwarder=? WHERE freight_forwarder=?", (route_id, legacy_id))
 
@@ -232,17 +232,17 @@ class DatabaseManager:
             (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()),
         )
 
-    def _rebuild_route_config_v5(self, conn):
-        """Rebuild v4's route-key table so route_id is a real non-null PK.
+    def _rebuild_route_config_v6(self, conn):
+        """Rebuild pre-v6 route tables so route_id is a real non-null PK.
 
         SQLite cannot add a primary-key constraint with ALTER TABLE.  Building
         a replacement table inside the caller's migration transaction keeps
-        this operation atomic and makes a successfully migrated v5 database a
+        this operation atomic and makes a successfully migrated v6 database a
         no-op on subsequent opens.
         """
         info = conn.execute("PRAGMA table_info(route_config)").fetchall()
-        is_v5_pk = any(row["name"] == "route_id" and row["pk"] == 1 and row["notnull"] == 1 for row in info)
-        if is_v5_pk:
+        is_v6_pk = any(row["name"] == "route_id" and row["pk"] == 1 and row["notnull"] == 1 for row in info)
+        if is_v6_pk:
             return {}
         rows = [dict(row) for row in conn.execute("SELECT * FROM route_config").fetchall()]
         now = datetime.now()
@@ -261,18 +261,18 @@ class DatabaseManager:
                             int(row.get("is_archived", 0) if row.get("is_archived") is not None else 0),
                             row.get("description") or "", row.get("created_at") or timestamp,
                             row.get("updated_at") or timestamp))
-        conn.execute("DROP TABLE IF EXISTS route_config_v5_rebuild")
-        conn.execute("""CREATE TABLE route_config_v5_rebuild (
+        conn.execute("DROP TABLE IF EXISTS route_config_v6_rebuild")
+        conn.execute("""CREATE TABLE route_config_v6_rebuild (
             route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0),
             display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL,
             fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000,
             is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0,
             description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
-        conn.executemany("""INSERT INTO route_config_v5_rebuild
+        conn.executemany("""INSERT INTO route_config_v6_rebuild
             (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,is_archived,description,created_at,updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?)""", records)
         conn.execute("DROP TABLE route_config")
-        conn.execute("ALTER TABLE route_config_v5_rebuild RENAME TO route_config")
+        conn.execute("ALTER TABLE route_config_v6_rebuild RENAME TO route_config")
         return legacy_to_id
 
     def _backfill_current_state(self, conn):

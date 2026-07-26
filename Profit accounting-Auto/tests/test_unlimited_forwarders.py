@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from unittest.mock import patch
 
 import pytest
 
@@ -98,7 +99,7 @@ def test_v4_keys_migrate_to_uuid_in_products_and_snapshots(tmp_path):
     migrated = DatabaseManager(path)
     routes = {route["display_name"]: route for route in migrated.get_all_routes()}
     route_id = routes["深圳旧名"]["route_id"]
-    assert migrated.get_schema_version() == 5
+    assert migrated.get_schema_version() == 6
     assert all(len(r["route_id"]) == 36 for r in migrated.get_all_routes())
     conn = sqlite3.connect(path)
     route_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(route_config)")}
@@ -121,6 +122,60 @@ def test_v4_keys_migrate_to_uuid_in_products_and_snapshots(tmp_path):
     assert migrated.get_route_rates(extra)["display_name"] == "迁移后新增"
     reopened = DatabaseManager(path)
     assert reopened.get_product("p1")["freight_forwarder"] == route_id
+
+
+def _make_legacy_v5(path):
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+        INSERT INTO schema_version VALUES (5, 'old');
+        CREATE TABLE products (id TEXT PRIMARY KEY, name TEXT, freight_forwarder TEXT,
+            current_rule_snapshot TEXT, created_at TEXT, updated_at TEXT);
+        CREATE TABLE product_snapshots (id TEXT PRIMARY KEY, product_id TEXT NOT NULL UNIQUE,
+            snapshot_data TEXT NOT NULL, rule_snapshot TEXT, created_at TEXT);
+        CREATE TABLE route_config (route_id TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+            head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL,
+            volume_divisor REAL NOT NULL, is_enabled INTEGER NOT NULL,
+            is_archived INTEGER NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    """)
+    route_id = "legacy-v5-route"
+    rules = {"route_id": route_id, "route_display_name": "V5旧货代", "forwarder": route_id}
+    conn.execute("INSERT INTO route_config VALUES (?,?,?,?,?,?,?,?,?,?)",
+                 (route_id, "V5旧货代", 88, 7, 7000, 1, 0, "old", "old", "old"))
+    conn.execute("INSERT INTO products VALUES (?,?,?,?,?,?)",
+                 ("p-v5", "v5商品", route_id, json.dumps(rules), "old", "old"))
+    conn.execute("INSERT INTO product_snapshots VALUES (?,?,?,?,?)",
+                 ("s-v5", "p-v5", json.dumps({"freight_forwarder": route_id}), json.dumps(rules), "old"))
+    conn.commit(); conn.close()
+    return route_id
+
+
+def test_legacy_non_strict_v5_migrates_to_v6_without_changing_uuid_or_snapshots(tmp_path):
+    path = str(tmp_path / "legacy-v5.db")
+    route_id = _make_legacy_v5(path)
+    db = DatabaseManager(path)
+    conn = sqlite3.connect(path)
+    info = {row[1]: row for row in conn.execute("PRAGMA table_info(route_config)")}
+    conn.close()
+    assert db.get_schema_version() == 6
+    assert info["route_id"][3] == 1 and info["route_id"][5] == 1
+    assert db.get_product("p-v5")["freight_forwarder"] == route_id
+    assert db.get_product("p-v5")["_current_rule_snapshot"]["route_display_name"] == "V5旧货代"
+    assert db.get_snapshot("p-v5")["_snapshot_rule_full"]["route_id"] == route_id
+    assert DatabaseManager(path).get_route_rates(route_id)["display_name"] == "V5旧货代"
+
+
+def test_legacy_v5_rebuild_failure_restores_original_database(tmp_path):
+    path = str(tmp_path / "v5-fail.db")
+    _make_legacy_v5(path)
+    with patch.object(DatabaseManager, "_rebuild_route_config_v6", side_effect=RuntimeError("forced")):
+        with pytest.raises(RuntimeError, match="forced"):
+            DatabaseManager(path)
+    conn = sqlite3.connect(path)
+    assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 5
+    assert {row[1]: row for row in conn.execute("PRAGMA table_info(route_config)")}["route_id"][3] == 0
+    conn.close()
 
 
 def test_atomic_settings_reject_case_insensitive_duplicate_names(tmp_path):

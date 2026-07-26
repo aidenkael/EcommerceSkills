@@ -182,6 +182,11 @@ class SettingsDialog(tk.Toplevel):
         self._var_rate.set(str(self._cfg.exchange_rate))
         self._var_tail.set(str(self._cfg.default_tail_haul))
 
+    def _reload_persisted_values(self):
+        """Discard edits by rebuilding every editable value from the database."""
+        self._load_values()
+        self._render_routes()
+
     def _has_unsaved_changes(self):
         """Compare editable widgets with persisted settings without mutating them."""
         if not hasattr(self, "_var_rate") or not hasattr(self, "_route_vars"):
@@ -214,6 +219,7 @@ class SettingsDialog(tk.Toplevel):
             return False
         if choice:
             return self._save(close_after=False)
+        self._reload_persisted_values()
         return True
 
     def _save(self, close_after=True):
@@ -299,7 +305,7 @@ class SettingsDialog(tk.Toplevel):
         if not messagebox.askyesno(
             f"确认{action}",
             f"确定要{action}货代「{route['display_name']}」吗？\n{detail}\n"
-            "列表会刷新，尚未保存的其他费率修改将丢失。",
+            "列表会刷新。",
             parent=self,
         ):
             return
