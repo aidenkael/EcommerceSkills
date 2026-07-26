@@ -249,3 +249,121 @@ class TestDialogInstantiation:
             dlg.destroy()
         finally:
             root.destroy()
+
+
+class TestManualConfirmation:
+    """步骤A：无单位候选人工确认规则。"""
+
+    def _setup(self, img_factory, text, image_type=ImageType.SHEIN_PRICING):
+        p = img_factory()
+        engine = FakeEngine({p: [OcrTextLine(text=text, confidence=0.9)]})
+        ctrl = OcrIntakeController(engine=engine)
+        ctrl.add_image(p, image_type)
+        ctrl.process_all()
+        return ctrl
+
+    def test_unselectable_not_edited_cannot_confirm(self, img_factory):
+        """1. 无单位候选未编辑时不能确认。"""
+        ctrl = self._setup(img_factory, "核价：12.80")
+        cid = ctrl.candidates[0].candidate_id
+        assert ctrl.candidates[0].selectable is False
+        ctrl.select_candidate("shein_price_usd", cid)
+        assert ctrl.can_confirm() is False
+        with pytest.raises(RuntimeError):
+            ctrl.confirm()
+
+    def test_manual_confirm_allows_unselectable(self, img_factory):
+        """2. 用户填写合法数值和单位后可以确认。"""
+        ctrl = self._setup(img_factory, "核价：12.80")
+        cid = ctrl.candidates[0].candidate_id
+        ctrl.confirm_candidate_manual("shein_price_usd", cid, 12.80, "usd")
+        assert ctrl.can_confirm() is True
+        result = ctrl.confirm()
+        assert result["shein_price_usd"].confirmed_value == 12.80
+
+    def test_original_candidate_unchanged(self, img_factory):
+        """3. 原 OcrCandidate 内容保持不变。"""
+        ctrl = self._setup(img_factory, "核价：12.80")
+        c = ctrl.candidates[0]
+        orig_parsed = c.parsed_value
+        orig_raw = c.raw_text
+        orig_selectable = c.selectable
+        ctrl.confirm_candidate_manual("shein_price_usd", c.candidate_id, 99.99, "usd")
+        c2 = ctrl.candidate_by_id(c.candidate_id)
+        assert c2.parsed_value == orig_parsed
+        assert c2.raw_text == orig_raw
+        assert c2.selectable == orig_selectable
+
+    def test_user_modified_true(self, img_factory):
+        """4. FieldSelection 记录 user_modified=True。"""
+        ctrl = self._setup(img_factory, "核价：12.80")
+        cid = ctrl.candidates[0].candidate_id
+        sel = ctrl.confirm_candidate_manual("shein_price_usd", cid, 12.80, "usd")
+        assert sel.user_modified is True
+
+    def test_kg_to_g(self, img_factory):
+        """5. kg 正确换算为 g。"""
+        ctrl = self._setup(img_factory, "500g", ImageType.DIMENSIONS_WEIGHT)
+        cid = ctrl.candidates[0].candidate_id
+        sel = ctrl.confirm_candidate_manual("weight_g", cid, 0.5, "kg")
+        assert sel.confirmed_value == 500.0
+        assert sel.confirmed_unit == "g"
+
+    def test_mm_to_cm(self, img_factory):
+        """6. mm 正确换算为 cm。"""
+        ctrl = self._setup(img_factory, "10cm", ImageType.DIMENSIONS_WEIGHT)
+        cid = ctrl.candidates[0].candidate_id
+        sel = ctrl.confirm_candidate_manual("length_cm", cid, 100, "mm")
+        assert sel.confirmed_value == 10.0
+        assert sel.confirmed_unit == "cm"
+
+    def test_invalid_weight_unit_rejected(self, img_factory):
+        """7. 非法重量单位被拒绝。"""
+        ctrl = self._setup(img_factory, "500g", ImageType.DIMENSIONS_WEIGHT)
+        cid = ctrl.candidates[0].candidate_id
+        with pytest.raises(ValueError):
+            ctrl.confirm_candidate_manual("weight_g", cid, 500, "吨")
+
+    def test_invalid_dim_unit_rejected(self, img_factory):
+        """8. 非法尺寸单位被拒绝。"""
+        ctrl = self._setup(img_factory, "10cm", ImageType.DIMENSIONS_WEIGHT)
+        cid = ctrl.candidates[0].candidate_id
+        with pytest.raises(ValueError):
+            ctrl.confirm_candidate_manual("length_cm", cid, 10, "英寸")
+
+    def test_price_field_unit_restriction(self, img_factory):
+        """9. 价格字段只允许对应货币单位。"""
+        ctrl = self._setup(img_factory, "$12.99")
+        cid = ctrl.candidates[0].candidate_id
+        # shein 不接受人民币
+        with pytest.raises(ValueError):
+            ctrl.confirm_candidate_manual("shein_price_usd", cid, 12.99, "元")
+
+    def test_price_scope_forced_not_applicable(self, img_factory):
+        """10. 价格字段 scope 强制 not_applicable。"""
+        ctrl = self._setup(img_factory, "$12.99")
+        cid = ctrl.candidates[0].candidate_id
+        sel = ctrl.confirm_candidate_manual("shein_price_usd", cid, 12.99, "usd")
+        assert sel.measurement_scope == MeasurementScope.NOT_APPLICABLE
+        # select 后设 bare 应被拒
+        ctrl.select_candidate("shein_price_usd", cid)
+        with pytest.raises(ValueError):
+            ctrl.set_measurement_scope("shein_price_usd", MeasurementScope.BARE)
+
+    def test_dimension_scopes(self, img_factory):
+        """11. 尺寸和重量支持 bare、packaged、unknown，不支持 not_applicable。"""
+        ctrl = self._setup(img_factory, "10cm", ImageType.DIMENSIONS_WEIGHT)
+        cid = ctrl.candidates[0].candidate_id
+        for scope in (MeasurementScope.BARE, MeasurementScope.PACKAGED, MeasurementScope.UNKNOWN):
+            sel = ctrl.confirm_candidate_manual("length_cm", cid, 10, "cm", scope=scope)
+            assert sel.measurement_scope == scope
+        with pytest.raises(ValueError):
+            ctrl.confirm_candidate_manual("length_cm", cid, 10, "cm", scope=MeasurementScope.NOT_APPLICABLE)
+
+    def test_invalid_values_rejected(self, img_factory):
+        """12. 空值、NaN 和 Infinity 被拒绝。"""
+        ctrl = self._setup(img_factory, "$12.99")
+        cid = ctrl.candidates[0].candidate_id
+        for bad in (None, "nan", "inf", "abc", ""):
+            with pytest.raises(ValueError):
+                ctrl.confirm_candidate_manual("shein_price_usd", cid, bad, "usd")

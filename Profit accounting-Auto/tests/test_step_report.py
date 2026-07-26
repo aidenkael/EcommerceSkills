@@ -70,3 +70,32 @@ class TestGenerate:
         assert result["status"] == "FAIL"
         assert result["summary"]["failed"] == 1
         assert out_path.is_file()
+
+
+class TestPythonPlaceholder:
+    """报告工具 {python} 占位符替换（环境无关）。"""
+
+    def test_config_uses_python_placeholder(self):
+        cfg = load_config()
+        assert "{python}" in cfg["test_command"]
+
+    def test_python_placeholder_replaced_in_run_tests(self, monkeypatch):
+        """run_tests 把 {python} 替换为 sys.executable。"""
+        import sys
+        from tools import generate_step_report as mod
+        captured = {}
+
+        class _R:
+            stdout = "1 passed"
+            stderr = ""
+            returncode = 0
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return _R()
+
+        monkeypatch.setattr(mod.subprocess, "run", fake_run)
+        mod.run_tests("{python} -m pytest")
+        assert sys.executable in captured["cmd"]
+        # 不再含字面 {python}
+        assert "{python}" not in captured["cmd"]

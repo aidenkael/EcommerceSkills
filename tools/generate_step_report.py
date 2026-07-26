@@ -51,9 +51,14 @@ def collect_file_changes():
 
 
 def run_tests(test_cmd):
-    """执行测试命令，返回 (output, returncode)。"""
+    """执行测试命令，返回 (output, returncode)。
+
+    test_cmd 中的 {python} 占位符替换为 sys.executable（加引号），避免硬编码虚拟环境路径。
+    """
+    py = f'"{sys.executable}"'
+    cmd = test_cmd.replace("{python}", py)
     result = subprocess.run(
-        test_cmd, cwd=REPO_ROOT, shell=True, capture_output=True, text=True, encoding="utf-8"
+        cmd, cwd=REPO_ROOT, shell=True, capture_output=True, text=True, encoding="utf-8"
     )
     out = (result.stdout or "") + (result.stderr or "")
     return out, result.returncode
@@ -97,6 +102,7 @@ def generate(phase=None, output_path=None, test_runner=None):
     md = f"""# 步骤报告
 
 生成时间：{now}
+Python：`{sys.executable}`
 
 ## Git 信息
 
