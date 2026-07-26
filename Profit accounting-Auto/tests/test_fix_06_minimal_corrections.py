@@ -1,0 +1,245 @@
+"""phase_01_fix_06 最小修正：历史尾程缺失与有限配置值。"""
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+
+from config.config_manager import ConfigManager
+from database.db_manager import DatabaseManager
+from ui.main_window import SettingsDialog
+from ui.product_page import ProductPage
+
+
+class FakeVar:
+    def __init__(self, value=""):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+def _page_fields(default_tail=40.0):
+    page = object.__new__(ProductPage)
+    page._cfg = SimpleNamespace(default_tail_haul=default_tail)
+    page._programmatic = False
+    page._entry_vars = {"tail": FakeVar("old")}
+    page._var_name = FakeVar()
+    page._var_notes = FakeVar()
+    page._forwarder_var = FakeVar()
+    page._result_labels = {
+        key: FakeVar()
+        for key in [
+            "vol_weight",
+            "charge_weight",
+            "head_haul",
+            "total_logistics",
+            "total_cost",
+            "profit",
+            "profit_rate",
+            "suggested_price",
+            "converted_usd",
+        ]
+    }
+    page._show_rate_notice = lambda _diffs: None
+    return page
+
+
+def _missing_tail_data(notes=""):
+    return {
+        "name": "历史缺尾程商品",
+        "cost": 50.0,
+        "domestic_shipping": 8.0,
+        "freight_forwarder": "yiwu",
+        "head_haul_cost": 75.0,
+        "fixed_service_fee": 6.0,
+        "tail_haul_cost": None,
+        "selling_price_rmb": 200.0,
+        "notes": notes,
+    }
+
+
+def _missing_tail_rules():
+    return {
+        "exchange_rate": 7.2,
+        "head_haul_rate": 100.0,
+        "fixed_service_fee": 6.0,
+        "tail_haul_cost": None,
+        "volume_divisor": 8000,
+        "forwarder": "yiwu",
+        "rule_version": 2,
+    }
+
+
+def _missing_tail_results():
+    return {
+        "calculation_schema_version": 1,
+        "volumetric_weight": None,
+        "chargeable_weight": None,
+        "head_haul_cost": 75.0,
+        "total_logistics_cost": None,
+        "total_cost": None,
+        "net_profit_amount": None,
+        "net_profit_rate": None,
+        "suggested_price_rmb": None,
+        "converted_usd": None,
+    }
+
+
+def test_history_product_missing_tail_loads_as_blank(tmp_path):
+    db = DatabaseManager(str(tmp_path / "history.db"))
+    pid = db.save_product_state(
+        _missing_tail_data(), _missing_tail_rules(), _missing_tail_results()
+    )
+    page = _page_fields(default_tail=99.0)
+    page._db = db
+    page._check_rate_changes = lambda: None
+
+    ProductPage.load_product(page, pid)
+
+    assert page._entry_vars["tail"].get() == ""
+    assert db.get_product(pid)["tail_haul_cost"] is None
+    for key in ["total_logistics", "total_cost", "profit", "profit_rate"]:
+        assert page._result_labels[key].get().startswith("数据不足")
+
+
+def test_note_only_save_keeps_missing_tail_as_none(tmp_path):
+    db = DatabaseManager(str(tmp_path / "note.db"))
+    data = _missing_tail_data()
+    rules = _missing_tail_rules()
+    results = _missing_tail_results()
+    pid = db.save_product_state(data, rules, results)
+
+    page = object.__new__(ProductPage)
+    page._db = db
+    page._product_id = pid
+    page._has_snapshot = True
+    page._saved_rule_context = dict(rules)
+    page._computed = {
+        "exchange_rate": 7.2,
+        "head_haul_rate": 100.0,
+        "fixed_service_fee": 6.0,
+        "tail_haul_cost": None,
+        "volume_divisor": 8000,
+        "forwarder": "yiwu",
+        "rule_version": 2,
+        "calculation_schema_version": 1,
+        "volumetric_weight": None,
+        "chargeable_weight": None,
+        "head_haul": 75.0,
+        "total_logistics": None,
+        "total_cost": None,
+        "profit": None,
+        "profit_rate": None,
+        "suggested_price": None,
+        "converted_usd": None,
+    }
+    page._get_invalid_list = lambda: []
+    page._gather_data = lambda: _missing_tail_data(notes="只改备注")
+
+    with patch("ui.product_page.messagebox.showinfo"), patch(
+        "ui.product_page.messagebox.showerror"
+    ):
+        ProductPage.save_product(page)
+
+    saved = db.get_product(pid)
+    assert saved["notes"] == "只改备注"
+    assert saved["tail_haul_cost"] is None
+    assert saved["_current_rule_snapshot"]["tail_haul_cost"] is None
+
+
+def test_restore_snapshot_missing_tail_keeps_input_blank(tmp_path):
+    db = DatabaseManager(str(tmp_path / "restore.db"))
+    pid = db.save_product_state(
+        _missing_tail_data(), _missing_tail_rules(), _missing_tail_results()
+    )
+    page = _page_fields(default_tail=88.0)
+    page._db = db
+    page._product_id = pid
+
+    with patch("ui.product_page.messagebox.showinfo"):
+        ProductPage.restore_product(page)
+
+    assert page._entry_vars["tail"].get() == ""
+    assert page._saved_rule_context["tail_haul_cost"] is None
+    for key in ["total_logistics", "total_cost", "profit", "profit_rate"]:
+        assert page._result_labels[key].get().startswith("数据不足")
+
+
+def test_new_product_still_uses_current_default_tail():
+    page = _page_fields(default_tail=55.0)
+
+    ProductPage.new_product(page)
+
+    assert page._entry_vars["tail"].get() == "55.0"
+
+
+class ConfigDb:
+    def __init__(self, value):
+        self.value = value
+
+    def get_config(self, _key):
+        return self.value
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity", "not-a-number"])
+def test_config_get_float_rejects_non_finite_or_non_numeric(value):
+    cfg = ConfigManager(ConfigDb(value))
+    assert cfg.get_float("setting", 12.5) == 12.5
+
+
+def _settings_dialog(rate, tail):
+    dialog = object.__new__(SettingsDialog)
+    dialog._var_rate = FakeVar(rate)
+    dialog._var_tail = FakeVar(tail)
+    dialog._cfg = SimpleNamespace(exchange_rate=7.2, default_tail_haul=40.0)
+    dialog._on_save = None
+    dialog.destroy = lambda: None
+    return dialog
+
+
+@pytest.mark.parametrize(
+    "rate,tail",
+    [
+        ("NaN", "40"),
+        ("Infinity", "40"),
+        ("-Infinity", "40"),
+        ("abc", "40"),
+        ("0", "40"),
+        ("-1", "40"),
+        ("7.2", "NaN"),
+        ("7.2", "Infinity"),
+        ("7.2", "-Infinity"),
+        ("7.2", "abc"),
+        ("7.2", "-1"),
+    ],
+)
+def test_settings_reject_invalid_rate_and_tail(rate, tail):
+    dialog = _settings_dialog(rate, tail)
+
+    with patch("ui.main_window.messagebox.showerror") as showerror, patch(
+        "ui.main_window.messagebox.showinfo"
+    ) as showinfo:
+        SettingsDialog._save(dialog)
+
+    assert dialog._cfg.exchange_rate == 7.2
+    assert dialog._cfg.default_tail_haul == 40.0
+    showerror.assert_called_once()
+    showinfo.assert_not_called()
+
+
+def test_settings_accept_finite_positive_rate_and_zero_tail():
+    dialog = _settings_dialog("7.3", "0")
+
+    with patch("ui.main_window.messagebox.showerror") as showerror, patch(
+        "ui.main_window.messagebox.showinfo"
+    ) as showinfo:
+        SettingsDialog._save(dialog)
+
+    assert dialog._cfg.exchange_rate == 7.3
+    assert dialog._cfg.default_tail_haul == 0.0
+    showerror.assert_not_called()
+    showinfo.assert_called_once()

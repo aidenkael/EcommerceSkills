@@ -4,6 +4,8 @@
 支持双货代规则（深圳/义乌），通过 DatabaseManager 的 route_config 表持久化。
 """
 
+import math
+
 VOLUME_DIVISOR = 8000
 DEFAULT_TAIL_HAUL = 40.0
 
@@ -24,7 +26,8 @@ class ConfigManager:
         if val is None:
             return default
         try:
-            return float(val)
+            number = float(val)
+            return number if math.isfinite(number) else default
         except (ValueError, TypeError):
             return default
 

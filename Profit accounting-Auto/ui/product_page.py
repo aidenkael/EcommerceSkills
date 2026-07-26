@@ -680,7 +680,6 @@ class ProductPage(ttk.Frame):
             for en, dk in fm.items():
                 if en in self._entry_vars:
                     v = data.get(dk)
-                    if en == "tail" and v is None: v = self._cfg.default_tail_haul
                     self._entry_vars[en].set(self._fmt(v))
             self._var_name.set(data.get("name","") or ""); self._var_notes.set(data.get("notes","") or "")
         finally: self._programmatic = False

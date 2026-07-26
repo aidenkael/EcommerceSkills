@@ -6,6 +6,7 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import math
 import sys
 import os
 
@@ -56,11 +57,11 @@ class SettingsDialog(tk.Toplevel):
     def _save(self):
         try:
             rate = float(self._var_rate.get())
-            if rate <= 0:
-                raise ValueError("汇率必须大于 0")
+            if not math.isfinite(rate) or rate <= 0:
+                raise ValueError("汇率必须是大于 0 的有限数字")
             tail = float(self._var_tail.get())
-            if tail < 0:
-                raise ValueError("尾程费用不能为负数")
+            if not math.isfinite(tail) or tail < 0:
+                raise ValueError("尾程费用必须是大于等于 0 的有限数字")
         except ValueError as e:
             messagebox.showerror("输入错误", f"请输入有效数字：{e}")
             return
