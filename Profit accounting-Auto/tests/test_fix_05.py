@@ -199,7 +199,7 @@ class TestMigrationStrict:
         path = os.path.join(self.tmpdir, "new_test.db")
         if os.path.exists(path): os.remove(path)
         db = DatabaseManager(path)
-        assert db.get_schema_version() == 3
+        assert db.get_schema_version() == 4
         # 不应该有备份文件
         assert not os.path.exists(path + ".backup")
 
@@ -249,7 +249,7 @@ class TestMigrationStrict:
         conn.execute("INSERT INTO config VALUES ('exchange_rate','7.20')")
         conn.commit(); conn.close()
         db = DatabaseManager(path)
-        assert db.get_schema_version() == 3
+        assert db.get_schema_version() == 4
 
     def test_v2_no_backup_on_normal_start(self):
         path = os.path.join(self.tmpdir, "v2_test.db")

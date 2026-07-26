@@ -10,14 +10,14 @@ SQLite 数据库管理 — Schema v3
 import sqlite3, json, uuid, os, shutil
 from datetime import datetime
 
-CURRENT_SCHEMA_VERSION = 3
-CURRENT_RULE_VERSION = 2
+CURRENT_SCHEMA_VERSION = 4
+CURRENT_RULE_VERSION = 3
 CALCULATION_SCHEMA_VERSION = 1
 VOLUME_DIVISOR = 8000
 
 DEFAULT_ROUTES = {
-    "shenzhen": {"head_haul_rate": 80.0, "fixed_service_fee": 10.0, "description": "深圳货代"},
-    "yiwu":     {"head_haul_rate": 100.0, "fixed_service_fee": 6.0, "description": "义乌货代"},
+    "shenzhen": {"display_name": "深圳", "head_haul_rate": 80.0, "fixed_service_fee": 10.0, "volume_divisor": 8000, "is_enabled": 1, "description": ""},
+    "yiwu": {"display_name": "义乌", "head_haul_rate": 100.0, "fixed_service_fee": 6.0, "volume_divisor": 8000, "is_enabled": 1, "description": ""},
 }
 
 SCHEMA_SQL = """
@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS products (
     head_haul_cost REAL, fixed_service_fee REAL, tail_haul_cost REAL,
     shein_price REAL, selling_price_rmb REAL, selling_price_usd REAL,
     target_profit_rate REAL, promotion_reserve_rate REAL,
+    weight_unit_version TEXT DEFAULT 'g_v1',
     current_rule_snapshot TEXT, current_calculation_results TEXT,
     calculation_schema_version INTEGER DEFAULT 1, calculated_at TEXT,
     notes TEXT DEFAULT '', status TEXT DEFAULT 'active', image_path TEXT DEFAULT '',
@@ -43,8 +44,10 @@ CREATE TABLE IF NOT EXISTS product_snapshots (
     rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS route_config (
-    forwarder TEXT PRIMARY KEY, head_haul_rate REAL NOT NULL,
-    fixed_service_fee REAL NOT NULL, description TEXT DEFAULT '');
+    route_key TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+    head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL,
+    volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1,
+    description TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
@@ -146,7 +149,7 @@ class DatabaseManager:
                 fixed_service_fee REAL, tail_haul_cost REAL, volume_divisor INTEGER DEFAULT 8000,
                 rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
                 FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE)""",
-            "CREATE TABLE IF NOT EXISTS route_config (forwarder TEXT PRIMARY KEY, head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL, description TEXT DEFAULT '')",
+            "CREATE TABLE IF NOT EXISTS route_config (route_key TEXT PRIMARY KEY, display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1, description TEXT DEFAULT '')",
             "CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         ]:
             conn.execute(stmt)
@@ -181,6 +184,7 @@ class DatabaseManager:
             "image_path": "TEXT DEFAULT ''",
             "created_at": "TEXT",
             "updated_at": "TEXT",
+            "weight_unit_version": "TEXT DEFAULT 'legacy_unknown'",
         }
         snapshot_columns = {
             "exchange_rate": "REAL",
@@ -201,11 +205,19 @@ class DatabaseManager:
         for column, column_type in snapshot_columns.items():
             self._add_column_if_missing(conn, "product_snapshots", column, column_type)
 
-        for fwd, rates in DEFAULT_ROUTES.items():
-            conn.execute(
-                "INSERT OR IGNORE INTO route_config VALUES (?,?,?,?)",
-                (fwd, rates["head_haul_rate"], rates["fixed_service_fee"], rates["description"]),
-            )
+        route_columns = {
+            "route_key": "TEXT", "display_name": "TEXT", "volume_divisor": "REAL DEFAULT 8000",
+            "is_enabled": "INTEGER DEFAULT 1", "description": "TEXT DEFAULT ''",
+        }
+        for column, column_type in route_columns.items():
+            self._add_column_if_missing(conn, "route_config", column, column_type)
+        route_names = {"shenzhen": "深圳", "yiwu": "义乌"}
+        if "forwarder" in self._table_columns(conn, "route_config"):
+            conn.execute("UPDATE route_config SET route_key=COALESCE(route_key, forwarder), display_name=COALESCE(display_name, CASE forwarder WHEN 'shenzhen' THEN '深圳' WHEN 'yiwu' THEN '义乌' ELSE forwarder END), volume_divisor=COALESCE(volume_divisor, 8000), is_enabled=COALESCE(is_enabled, 1)")
+
+        for key, rates in DEFAULT_ROUTES.items():
+            conn.execute("INSERT OR IGNORE INTO route_config (route_key,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,description) VALUES (?,?,?,?,?,?,?)", (key, rates["display_name"], rates["head_haul_rate"], rates["fixed_service_fee"], rates["volume_divisor"], rates["is_enabled"], rates["description"]))
+        conn.execute("UPDATE products SET weight_unit_version='legacy_unknown' WHERE weight_unit_version IS NULL OR weight_unit_version='' ")
         conn.execute(
             "INSERT OR IGNORE INTO business_rule_version (version, description, applied_at) VALUES (?,?,?)",
             (CURRENT_RULE_VERSION, "双货代规则", datetime.now().isoformat()),
@@ -271,6 +283,7 @@ class DatabaseManager:
             "current_rule_snapshot", "current_calculation_results",
             "calculation_schema_version", "calculated_at",
             "notes", "status", "image_path", "created_at", "updated_at",
+            "weight_unit_version",
         }
         required_snapshot_columns = {
             "id", "product_id", "snapshot_data", "exchange_rate", "head_haul_rate",
@@ -312,9 +325,8 @@ class DatabaseManager:
                          (CURRENT_RULE_VERSION, "双货代规则", datetime.now().isoformat()))
             for k, v in DEFAULT_CONFIG.items():
                 conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (k, v))
-            for fwd, rates in DEFAULT_ROUTES.items():
-                conn.execute("INSERT OR IGNORE INTO route_config VALUES (?,?,?,?)",
-                             (fwd, rates["head_haul_rate"], rates["fixed_service_fee"], rates["description"]))
+            for key, rates in DEFAULT_ROUTES.items():
+                conn.execute("INSERT OR IGNORE INTO route_config (route_key,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,description) VALUES (?,?,?,?,?,?,?)", (key, rates["display_name"], rates["head_haul_rate"], rates["fixed_service_fee"], rates["volume_divisor"], rates["is_enabled"], rates["description"]))
             conn.commit()
         finally:
             conn.close()
@@ -349,13 +361,36 @@ class DatabaseManager:
     def get_route_rates(self, fwd: str) -> dict | None:
         conn = self._get_conn()
         try:
-            r = conn.execute("SELECT head_haul_rate, fixed_service_fee FROM route_config WHERE forwarder = ?", (fwd,)).fetchone()
-            return {"head_haul_rate": r["head_haul_rate"], "fixed_service_fee": r["fixed_service_fee"]} if r else None
+            cols = self._table_columns(conn, "route_config")
+            where = "route_key=?" if "route_key" in cols else "forwarder=?"
+            r = conn.execute(f"SELECT * FROM route_config WHERE {where}", (fwd,)).fetchone()
+            if not r: return None
+            d = dict(r); d["route_key"] = d.get("route_key") or d.get("forwarder"); d["forwarder"] = d["route_key"]
+            d["display_name"] = d.get("display_name") or DEFAULT_ROUTES.get(d["route_key"], {}).get("display_name", d["route_key"])
+            d["volume_divisor"] = d.get("volume_divisor") or VOLUME_DIVISOR
+            d["is_enabled"] = bool(d.get("is_enabled", 1))
+            return d
         finally: conn.close()
 
     def get_all_routes(self) -> list[dict]:
         conn = self._get_conn()
-        try: return [dict(r) for r in conn.execute("SELECT * FROM route_config").fetchall()]
+        try:
+            return [self.get_route_rates((dict(r).get("route_key") or dict(r).get("forwarder"))) for r in conn.execute("SELECT * FROM route_config").fetchall()]
+        finally: conn.close()
+
+    def save_settings_and_routes(self, global_values: dict, routes: list[dict]):
+        """原子保存全局设置和两个固定货代槽位。"""
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN TRANSACTION")
+            for key, value in global_values.items():
+                conn.execute("INSERT OR REPLACE INTO config (key,value) VALUES (?,?)", (key, str(value)))
+            for route in routes:
+                conn.execute("UPDATE route_config SET display_name=?,head_haul_rate=?,fixed_service_fee=?,volume_divisor=?,is_enabled=? WHERE route_key=?", (route["display_name"], route["head_haul_rate"], route["fixed_service_fee"], route["volume_divisor"], int(route["is_enabled"]), route["route_key"]))
+                if conn.total_changes == 0: raise RuntimeError("未找到货代配置")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK"); raise
         finally: conn.close()
 
     # ─── CRUD ────────────────────────────────────────────
@@ -422,24 +457,24 @@ class DatabaseManager:
             packaged_weight,packaged_length,packaged_width,packaged_height,
             freight_forwarder,head_haul_cost,fixed_service_fee,tail_haul_cost,
             shein_price,selling_price_rmb,selling_price_usd,
-            target_profit_rate,promotion_reserve_rate,
+            target_profit_rate,promotion_reserve_rate,weight_unit_version,
             current_rule_snapshot,current_calculation_results,
             calculation_schema_version,calculated_at,
             notes,status,image_path,created_at,updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (pid, data.get("name",""), data.get("cost"), data.get("domestic_shipping"),
              data.get("net_weight"), data.get("net_length"), data.get("net_width"), data.get("net_height"),
              data.get("packaged_weight"), data.get("packaged_length"), data.get("packaged_width"), data.get("packaged_height"),
              data.get("freight_forwarder"), data.get("head_haul_cost"), data.get("fixed_service_fee"), data.get("tail_haul_cost"),
              data.get("shein_price"), data.get("selling_price_rmb"), data.get("selling_price_usd"),
-             data.get("target_profit_rate"), data.get("promotion_reserve_rate"),
+             data.get("target_profit_rate"), data.get("promotion_reserve_rate"), data.get("weight_unit_version", "g_v1"),
              rule_json, calc_json, CALCULATION_SCHEMA_VERSION, now,
              data.get("notes",""), data.get("status","active"), data.get("image_path",""), now, now))
 
     def _update_product_in_conn(self, conn, pid, data, now, rule_json, calc_json):
         assignments = []
         values = []
-        for field in NUMERIC_FIELDS + ["name", "freight_forwarder", "notes", "status", "image_path"]:
+        for field in NUMERIC_FIELDS + ["name", "freight_forwarder", "weight_unit_version", "notes", "status", "image_path"]:
             if field in data:
                 assignments.append(f"{field}=?")
                 values.append(data[field])

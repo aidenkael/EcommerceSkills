@@ -17,14 +17,14 @@ from .history_page import HistoryPage
 
 
 class SettingsDialog(tk.Toplevel):
-    """设置对话框 — v2：仅汇率和默认尾程"""
+    """全局设置和两个固定货代槽位。"""
 
     def __init__(self, parent, config_manager, on_save=None):
         super().__init__(parent)
         self._cfg = config_manager
         self._on_save = on_save
         self.title("设置")
-        self.geometry("300x160")
+        self.geometry("560x520")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -35,6 +35,7 @@ class SettingsDialog(tk.Toplevel):
         frame = ttk.Frame(self, padding=15)
         frame.pack(fill=tk.BOTH, expand=True)
         r = 0
+        ttk.Label(frame, text="全局设置", font=("", 10, "bold")).grid(row=r, column=0, columnspan=2, sticky=tk.W); r += 1
         ttk.Label(frame, text="汇率 (1 USD = ? RMB)：").grid(row=r, column=0, sticky=tk.W, pady=5)
         self._var_rate = tk.StringVar()
         ttk.Entry(frame, textvariable=self._var_rate, width=12).grid(row=r, column=1, pady=5); r += 1
@@ -43,7 +44,17 @@ class SettingsDialog(tk.Toplevel):
         self._var_tail = tk.StringVar()
         ttk.Entry(frame, textvariable=self._var_tail, width=12).grid(row=r, column=1, pady=5); r += 1
 
-        ttk.Label(frame, text="头程/固定费由货代选择决定", foreground="gray", font=("", 8)).grid(row=r, column=0, columnspan=2, pady=5); r += 1
+        self._route_vars = {}
+        for route in self._cfg.get_all_routes()[:2]:
+            box = ttk.LabelFrame(frame, text=f"货代：{route['route_key']}", padding=8)
+            box.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=6); r += 1
+            vars_ = {key: tk.StringVar() for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor")}
+            vars_["is_enabled"] = tk.BooleanVar()
+            for idx, (key, label) in enumerate((("display_name", "名称"), ("head_haul_rate", "头程单价 (元/kg)"), ("fixed_service_fee", "固定服务费 (元)"), ("volume_divisor", "体积重除数"))):
+                ttk.Label(box, text=label + "：").grid(row=idx, column=0, sticky=tk.W)
+                ttk.Entry(box, textvariable=vars_[key], width=20).grid(row=idx, column=1, sticky=tk.W)
+            ttk.Checkbutton(box, text="启用", variable=vars_["is_enabled"]).grid(row=4, column=0, columnspan=2, sticky=tk.W)
+            self._route_vars[route["route_key"]] = vars_
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=r, column=0, columnspan=2, pady=5)
@@ -53,6 +64,11 @@ class SettingsDialog(tk.Toplevel):
     def _load_values(self):
         self._var_rate.set(str(self._cfg.exchange_rate))
         self._var_tail.set(str(self._cfg.default_tail_haul))
+        for route in self._cfg.get_all_routes()[:2]:
+            vars_ = self._route_vars[route["route_key"]]
+            for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor"):
+                vars_[key].set(str(route[key]))
+            vars_["is_enabled"].set(bool(route["is_enabled"]))
 
     def _save(self):
         try:
@@ -62,11 +78,29 @@ class SettingsDialog(tk.Toplevel):
             tail = float(self._var_tail.get())
             if not math.isfinite(tail) or tail < 0:
                 raise ValueError("尾程费用必须是大于等于 0 的有限数字")
+            if not hasattr(self, "_route_vars"):
+                self._cfg.exchange_rate = rate; self._cfg.default_tail_haul = tail
+                if self._on_save: self._on_save()
+                messagebox.showinfo("提示", "设置已保存。")
+                self.destroy(); return
+            routes = []
+            enabled_names = []
+            for key, vars_ in self._route_vars.items():
+                name = vars_["display_name"].get().strip()
+                head = float(vars_["head_haul_rate"].get())
+                fixed = float(vars_["fixed_service_fee"].get())
+                divisor = float(vars_["volume_divisor"].get())
+                enabled = bool(vars_["is_enabled"].get())
+                if not name or len(name) > 30: raise ValueError(f"货代 {key} 名称不能为空且最多30字符")
+                if not all(math.isfinite(v) for v in (head, fixed, divisor)) or head <= 0 or fixed < 0 or divisor <= 0: raise ValueError(f"货代 {name} 规则无效")
+                if enabled: enabled_names.append(name)
+                routes.append({"route_key": key, "display_name": name, "head_haul_rate": head, "fixed_service_fee": fixed, "volume_divisor": divisor, "is_enabled": enabled})
+            if not enabled_names: raise ValueError("至少启用一个货代")
+            if len(enabled_names) != len(set(enabled_names)): raise ValueError("启用货代名称不能重复")
         except ValueError as e:
             messagebox.showerror("输入错误", f"请输入有效数字：{e}")
             return
-        self._cfg.exchange_rate = rate
-        self._cfg.default_tail_haul = tail
+        self._cfg.save_settings_and_routes(rate, tail, routes)
         if self._on_save:
             self._on_save()
         messagebox.showinfo("提示", "设置已保存。")
@@ -118,6 +152,7 @@ class MainWindow:
 
     def _on_settings_saved(self):
         """设置保存后刷新计算"""
+        self._product_page._refresh_route_choices()
         self._product_page.recalculate()
 
     def _open_product_from_history(self, product_id):

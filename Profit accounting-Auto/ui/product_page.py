@@ -69,6 +69,8 @@ class ProductPage(ttk.Frame):
         self._computed = {}
         self._entry_vars = {}
         self._entry_widgets = {}
+        self._weight_unit_version = "g_v1"
+        self._weight_confirmed = True
         self._build_ui()
         self.new_product()
 
@@ -118,18 +120,20 @@ class ProductPage(ttk.Frame):
         ff = ttk.Frame(pf); ff.grid(row=r, column=0, columnspan=2, sticky=tk.W, padx=5, pady=2)
         ttk.Label(ff, text="货代：").pack(side=tk.LEFT)
         self._forwarder_var = tk.StringVar(value="")
-        cb = ttk.Combobox(ff, textvariable=self._forwarder_var, values=["", "深圳", "义乌"], state="readonly", width=10)
+        self._forwarder_combo = ttk.Combobox(ff, textvariable=self._forwarder_var, values=[""], state="readonly", width=16)
+        self._refresh_route_choices()
+        cb = self._forwarder_combo
         cb.pack(side=tk.LEFT, padx=5); cb.bind("<<ComboboxSelected>>", lambda e: self._on_forwarder_changed())
         ttk.Label(ff, text="(留空=未选择)", foreground="gray", font=("", 8)).pack(side=tk.LEFT, padx=5); r += 1
 
         self._make_section(pf, "裸件数据", r); r += 1
-        self._var_net_w = self._make_number_entry(pf, "裸重 (kg)：", r, "net_w"); r += 1
+        self._var_net_w = self._make_number_entry(pf, "裸重 (g)：", r, "net_w"); r += 1
         self._var_net_l = self._make_number_entry(pf, "裸长 (cm)：", r, "net_l"); r += 1
         self._var_net_wi = self._make_number_entry(pf, "裸宽 (cm)：", r, "net_wi"); r += 1
         self._var_net_h = self._make_number_entry(pf, "裸高 (cm)：", r, "net_h"); r += 1
 
         self._make_section(pf, "包��数据", r); r += 1
-        self._var_pkg_w = self._make_number_entry(pf, "包装后重量 (kg)：", r, "pkg_w"); r += 1
+        self._var_pkg_w = self._make_number_entry(pf, "包装后重量 (g)：", r, "pkg_w"); r += 1
         self._var_pkg_l = self._make_number_entry(pf, "包装后长 (cm)：", r, "pkg_l"); r += 1
         self._var_pkg_wi = self._make_number_entry(pf, "包装后宽 (cm)：", r, "pkg_wi"); r += 1
         self._var_pkg_h = self._make_number_entry(pf, "包装后高 (cm)：", r, "pkg_h"); r += 1
@@ -138,7 +142,7 @@ class ProductPage(ttk.Frame):
         self._var_tail_haul = self._make_number_entry(pf, "尾程费用 (元)：", r, "tail", default=str(self._cfg.default_tail_haul)); r += 1
 
         self._make_section(pf, "售价与利润", r); r += 1
-        self._var_shein = self._make_number_entry(pf, "SHEIN二次核价 (元)：", r, "shein"); r += 1
+        self._var_shein = self._make_number_entry(pf, "SHEIN二次核价 ($)：", r, "shein"); r += 1
         self._var_price_rmb = self._make_number_entry(pf, "当前售价人民币 (元)：", r, "price_rmb"); r += 1
         self._var_price_usd = self._make_number_entry(pf, "当前售价美元 ($)：", r, "price_usd"); r += 1
         self._var_target_rate = self._make_number_entry(pf, "目标净利率 (%)：", r, "target_rate"); r += 1
@@ -150,7 +154,7 @@ class ProductPage(ttk.Frame):
         pf.columnconfigure(1, weight=1)
 
         for n in ["cost","domestic","net_w","net_l","net_wi","net_h","pkg_w","pkg_l","pkg_wi","pkg_h","tail","shein"]:
-            if n in self._entry_vars: self._entry_vars[n].trace_add("write", lambda *_, x=n: self._on_field_changed("cost"))
+            if n in self._entry_vars: self._entry_vars[n].trace_add("write", lambda *_, x=n: self._on_field_changed(x))
         for n in ["price_rmb","price_usd","target_rate","promo_rate"]:
             if n in self._entry_vars: self._entry_vars[n].trace_add("write", lambda *_, x=n: self._on_field_changed(x))
 
@@ -198,11 +202,13 @@ class ProductPage(ttk.Frame):
         route = self._cfg.get_route_rates(fwd) if fwd else {}
         return {
             "forwarder": fwd,
+            "route_key": fwd,
+            "route_display_name": route.get("display_name") if route else None,
             "head_haul_rate": route.get("head_haul_rate") if route else None,
             "fixed_service_fee": route.get("fixed_service_fee") if route else None,
             "tail_haul_cost": _safe_float(self._entry_vars.get("tail", tk.StringVar()).get()) if "tail" in self._entry_vars else self._cfg.default_tail_haul,
             "exchange_rate": self._cfg.exchange_rate,
-            "volume_divisor": self._cfg.volume_divisor,
+            "volume_divisor": route.get("volume_divisor") if route else None,
             "rule_version": self._cfg.rule_version,
         }
 
@@ -256,6 +262,8 @@ class ProductPage(ttk.Frame):
 
     def _on_field_changed(self, field_type):
         if self._programmatic: return
+        if field_type in ("net_w", "pkg_w"):
+            self._weight_confirmed = True
         if field_type in ("price_rmb","price_usd"): self._calc_direction = "price"; self._last_modified = field_type
         elif field_type == "target_rate": self._calc_direction = "rate"
         # 不改变 _saved_rule_context — 历史规则仅在显式切换时改变
@@ -297,6 +305,12 @@ class ProductPage(ttk.Frame):
         target_rate = _safe_float(self._entry_vars.get("target_rate", tk.StringVar()).get())
         promo_rate = _safe_float(self._entry_vars.get("promo_rate", tk.StringVar()).get())
 
+        if self._weight_unit_version == "legacy_unknown" and not self._weight_confirmed:
+            for key in ("head_haul", "total_logistics", "total_cost", "profit", "profit_rate"):
+                self._set_result(key, None, partial=True)
+            self._rate_notice_var.set("历史重量单位待确认，请核对后重新填写克数并保存。")
+            return
+        actual_weight_kg = pkg_w / 1000.0 if pkg_w is not None else None
         head_rate = ctx.get("head_haul_rate")
         fixed_fee = ctx.get("fixed_service_fee")
         exchange_rate = ctx.get("exchange_rate")
@@ -333,11 +347,11 @@ class ProductPage(ttk.Frame):
                 self._last_modified = "price_rmb"
 
         vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h, volume_divisor)
-        chg_w = chargeable_weight(pkg_w, vol_w)
+        chg_w = chargeable_weight(actual_weight_kg, vol_w)
         head_cost = head_haul_cost(chg_w, head_rate)
         head_partial = (head_cost is None)
 
-        fwd_label = FORWARDER_LABELS.get(forwarder, forwarder or "")
+        fwd_label = ctx.get("route_display_name") or self._cfg.get_forwarder_label(forwarder)
         self._set_result("vol_weight", vol_w, " kg")
         self._set_result("charge_weight", chg_w, " kg")
         self._set_result("head_haul", head_cost, f" 元({fwd_label})" if head_cost is not None else "", partial=head_partial)
@@ -363,6 +377,8 @@ class ProductPage(ttk.Frame):
         self._computed["total_cost"] = tc
         self._computed["volumetric_weight"] = vol_w
         self._computed["chargeable_weight"] = chg_w
+        self._computed["actual_weight_g"] = pkg_w
+        self._computed["actual_weight_kg"] = actual_weight_kg
 
         if head_partial or logistics is None or tc is None:
             self._set_result("profit", None, partial=True)
@@ -438,13 +454,17 @@ class ProductPage(ttk.Frame):
     # ─── 按钮 ─────────────────────────────────────────────
 
     def _get_forwarder_key(self):
-        lb = self._forwarder_var.get()
-        if lb == "深圳": return "shenzhen"
-        if lb == "义乌": return "yiwu"
-        return None
+        return self._route_display_to_key.get(self._forwarder_var.get())
 
     def _set_forwarder_key(self, key):
-        self._forwarder_var.set(FORWARDER_LABELS.get(key, ""))
+        route = self._cfg.get_route_rates(key) if key and hasattr(self._cfg, "get_route_rates") else None
+        self._forwarder_var.set((route or {}).get("display_name") or FORWARDER_LABELS.get(key, ""))
+
+    def _refresh_route_choices(self):
+        routes = self._cfg.get_enabled_routes()
+        self._route_display_to_key = {r["display_name"]: r["route_key"] for r in routes}
+        if hasattr(self, "_forwarder_combo"):
+            self._forwarder_combo["values"] = [""] + list(self._route_display_to_key)
 
     def new_product(self):
         self._product_id = None; self._has_snapshot = False
@@ -466,6 +486,8 @@ class ProductPage(ttk.Frame):
 
     def _build_rule_snapshot(self):
         return {
+            "route_key": self._computed.get("forwarder"),
+            "route_display_name": self._cfg.get_forwarder_label(self._computed.get("forwarder")) if hasattr(self, "_cfg") and hasattr(self._cfg, "get_forwarder_label") else FORWARDER_LABELS.get(self._computed.get("forwarder")),
             "exchange_rate": self._computed.get("exchange_rate"),
             "head_haul_rate": self._computed.get("head_haul_rate"),
             "fixed_service_fee": self._computed.get("fixed_service_fee"),
@@ -473,12 +495,15 @@ class ProductPage(ttk.Frame):
             "volume_divisor": self._computed.get("volume_divisor"),
             "forwarder": self._computed.get("forwarder"),
             "rule_version": self._computed.get("rule_version"),
+            "weight_unit": getattr(self, "_weight_unit_version", "g_v1"),
         }
 
     def _build_calculation_snapshot(self):
         return {
             "calculation_schema_version": CALCULATION_SCHEMA_VERSION,
             "volumetric_weight": self._computed.get("volumetric_weight"),
+            "actual_weight_g": self._computed.get("actual_weight_g"),
+            "actual_weight_kg": self._computed.get("actual_weight_kg"),
             "chargeable_weight": self._computed.get("chargeable_weight"),
             "head_haul_cost": self._computed.get("head_haul"),
             "total_logistics_cost": self._computed.get("total_logistics"),
@@ -665,10 +690,13 @@ class ProductPage(ttk.Frame):
             "selling_price_usd": _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get()),
             "target_profit_rate": _safe_float(self._entry_vars.get("target_rate", tk.StringVar()).get()),
             "promotion_reserve_rate": _safe_float(self._entry_vars.get("promo_rate", tk.StringVar()).get()),
+            "weight_unit_version": "g_v1" if getattr(self, "_weight_confirmed", True) else self._weight_unit_version,
             "notes": self._var_notes.get(),
         }
 
     def _load_data(self, data: dict):
+        self._weight_unit_version = data.get("weight_unit_version") or "legacy_unknown"
+        self._weight_confirmed = self._weight_unit_version == "g_v1"
         self._programmatic = True
         try:
             fm = {"cost":"cost","domestic":"domestic_shipping",

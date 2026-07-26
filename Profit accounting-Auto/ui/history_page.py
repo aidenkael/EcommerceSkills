@@ -98,15 +98,9 @@ class HistoryPage(ttk.Frame):
         for p in products:
             pid = p.get("id", "")
             name = p.get("name", "")
+            rules = p.get("_current_rule_snapshot") or {}
             fwd = p.get("freight_forwarder")
-            if fwd == "shenzhen":
-                fwd_str = "深圳"
-            elif fwd == "yiwu":
-                fwd_str = "义乌"
-            elif fwd:
-                fwd_str = fwd
-            else:
-                fwd_str = "未知"
+            fwd_str = rules.get("route_display_name") or (self._db.get_route_rates(fwd) or {}).get("display_name") or fwd or "未知"
 
             cost_val = p.get("cost")
             cost_str = f"{cost_val:.2f}" if cost_val is not None else ""

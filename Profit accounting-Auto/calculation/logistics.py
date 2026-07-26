@@ -13,6 +13,13 @@
 VOLUME_DIVISOR = 8000  # 体积重除数 (cm³ → kg)
 
 
+def grams_to_kg(weight_g):
+    """将商品页面输入的克数转换为计费公斤。"""
+    if weight_g is None or weight_g < 0:
+        return None
+    return weight_g / 1000.0
+
+
 def volumetric_weight(length_cm, width_cm, height_cm, volume_divisor=VOLUME_DIVISOR):
     """
     计算体积重 (kg)

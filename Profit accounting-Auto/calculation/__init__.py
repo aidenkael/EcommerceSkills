@@ -1,6 +1,6 @@
 # 计算模块
 from .logistics import (
-    volumetric_weight, chargeable_weight, head_haul_cost,
+    grams_to_kg, volumetric_weight, chargeable_weight, head_haul_cost,
     total_logistics_cost, known_logistics_subtotal,
 )
 from .profit import (

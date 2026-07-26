@@ -65,8 +65,17 @@ class ConfigManager:
     def get_all_routes(self) -> list[dict]:
         return self._db.get_all_routes()
 
+    def get_enabled_routes(self) -> list[dict]:
+        return [route for route in self.get_all_routes() if route.get("is_enabled")]
+
+    def save_settings_and_routes(self, exchange_rate, default_tail_haul, routes):
+        self._db.save_settings_and_routes(
+            {"exchange_rate": exchange_rate, "default_tail_haul": default_tail_haul}, routes
+        )
+
     def get_forwarder_label(self, forwarder: str) -> str:
-        return FORWARDER_LABELS.get(forwarder, forwarder or "未知")
+        route = self.get_route_rates(forwarder) if forwarder else None
+        return route.get("display_name") if route else FORWARDER_LABELS.get(forwarder, forwarder or "未知")
 
     @property
     def rule_version(self) -> int:
