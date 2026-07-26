@@ -11,11 +11,9 @@ from database.db_manager import DatabaseManager
 
 def test_default_routes_are_independent_and_named(tmp_path):
     cfg = ConfigManager(DatabaseManager(str(tmp_path / "new.db")))
-    routes = {route["route_key"]: route for route in cfg.get_all_routes()}
-    assert routes["shenzhen"]["display_name"] == "深圳"
-    assert (routes["shenzhen"]["head_haul_rate"], routes["shenzhen"]["fixed_service_fee"], routes["shenzhen"]["volume_divisor"]) == (80.0, 10.0, 8000.0)
-    assert routes["yiwu"]["display_name"] == "义乌"
-    assert (routes["yiwu"]["head_haul_rate"], routes["yiwu"]["fixed_service_fee"], routes["yiwu"]["volume_divisor"]) == (100.0, 6.0, 8000.0)
+    routes = {route["display_name"]: route for route in cfg.get_all_routes()}
+    assert (routes["深圳"]["head_haul_rate"], routes["深圳"]["fixed_service_fee"], routes["深圳"]["volume_divisor"]) == (80.0, 10.0, 8000.0)
+    assert (routes["义乌"]["head_haul_rate"], routes["义乌"]["fixed_service_fee"], routes["义乌"]["volume_divisor"]) == (100.0, 6.0, 8000.0)
 
 
 def test_route_update_is_atomic_and_disabled_route_is_hidden(tmp_path):
@@ -24,10 +22,10 @@ def test_route_update_is_atomic_and_disabled_route_is_hidden(tmp_path):
     routes[0].update(display_name="广东A货代", volume_divisor=6000, is_enabled=True)
     routes[1].update(display_name="义乌", volume_divisor=8000, is_enabled=False)
     cfg.save_settings_and_routes(7.3, 45.0, routes)
-    assert [r["route_key"] for r in cfg.get_enabled_routes()] == ["shenzhen"]
-    assert cfg.get_route_rates("shenzhen")["display_name"] == "广东A货代"
-    assert volumetric_weight(40, 30, 20, cfg.get_route_rates("shenzhen")["volume_divisor"]) == 4.0
-    assert volumetric_weight(40, 30, 20, cfg.get_route_rates("yiwu")["volume_divisor"]) == 3.0
+    assert [r["route_id"] for r in cfg.get_enabled_routes()] == [routes[0]["route_id"]]
+    assert cfg.get_route_rates(routes[0]["route_id"])["display_name"] == "广东A货代"
+    assert volumetric_weight(40, 30, 20, cfg.get_route_rates(routes[0]["route_id"])["volume_divisor"]) == 4.0
+    assert volumetric_weight(40, 30, 20, cfg.get_route_rates(routes[1]["route_id"])["volume_divisor"]) == 3.0
 
 
 def test_grams_convert_to_kg_and_never_to_500kg():
@@ -40,7 +38,7 @@ def test_v3_product_migrates_to_legacy_unknown_weight(tmp_path):
     db = DatabaseManager(path)
     pid = db.create_product({"name": "old", "packaged_weight": 0.5})
     conn = sqlite3.connect(path)
-    conn.execute("DELETE FROM schema_version WHERE version=4")
+    conn.execute("DELETE FROM schema_version WHERE version>=4")
     conn.execute("INSERT OR REPLACE INTO schema_version VALUES (3, 'old')")
     conn.execute("UPDATE products SET weight_unit_version=NULL WHERE id=?", (pid,))
     conn.commit(); conn.close()

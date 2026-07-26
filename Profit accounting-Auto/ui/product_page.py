@@ -201,6 +201,7 @@ class ProductPage(ttk.Frame):
         fwd = self._get_forwarder_key()
         route = self._cfg.get_route_rates(fwd) if fwd else {}
         return {
+            "route_id": fwd,
             "forwarder": fwd,
             "route_key": fwd,
             "route_display_name": route.get("display_name") if route else None,
@@ -462,7 +463,7 @@ class ProductPage(ttk.Frame):
 
     def _refresh_route_choices(self):
         routes = self._cfg.get_enabled_routes()
-        self._route_display_to_key = {r["display_name"]: r["route_key"] for r in routes}
+        self._route_display_to_key = {r["display_name"]: r["route_id"] for r in routes}
         if hasattr(self, "_forwarder_combo"):
             self._forwarder_combo["values"] = [""] + list(self._route_display_to_key)
 
@@ -486,6 +487,7 @@ class ProductPage(ttk.Frame):
 
     def _build_rule_snapshot(self):
         return {
+            "route_id": self._computed.get("forwarder"),
             "route_key": self._computed.get("forwarder"),
             "route_display_name": self._cfg.get_forwarder_label(self._computed.get("forwarder")) if hasattr(self, "_cfg") and hasattr(self._cfg, "get_forwarder_label") else FORWARDER_LABELS.get(self._computed.get("forwarder")),
             "exchange_rate": self._computed.get("exchange_rate"),

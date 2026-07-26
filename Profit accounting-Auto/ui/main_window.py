@@ -5,7 +5,7 @@
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import math
 import sys
 import os
@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from .product_page import ProductPage
 from .history_page import HistoryPage
+from config.forwarder_manager import ForwarderManager
 
 
 class SettingsDialog(tk.Toplevel):
@@ -24,8 +25,9 @@ class SettingsDialog(tk.Toplevel):
         self._cfg = config_manager
         self._on_save = on_save
         self.title("设置")
-        self.geometry("560x520")
-        self.resizable(False, False)
+        self.geometry("680x720")
+        self.resizable(True, True)
+        self._forwarders = ForwarderManager(config_manager._db)
         self.transient(parent)
         self.grab_set()
         self._build_ui()
@@ -45,8 +47,8 @@ class SettingsDialog(tk.Toplevel):
         ttk.Entry(frame, textvariable=self._var_tail, width=12).grid(row=r, column=1, pady=5); r += 1
 
         self._route_vars = {}
-        for route in self._cfg.get_all_routes()[:2]:
-            box = ttk.LabelFrame(frame, text=f"货代：{route['route_key']}", padding=8)
+        for route in self._cfg.get_all_routes(include_archived=False):
+            box = ttk.LabelFrame(frame, text=f"货代：{route['display_name']}", padding=8)
             box.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=6); r += 1
             vars_ = {key: tk.StringVar() for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor")}
             vars_["is_enabled"] = tk.BooleanVar()
@@ -54,18 +56,19 @@ class SettingsDialog(tk.Toplevel):
                 ttk.Label(box, text=label + "：").grid(row=idx, column=0, sticky=tk.W)
                 ttk.Entry(box, textvariable=vars_[key], width=20).grid(row=idx, column=1, sticky=tk.W)
             ttk.Checkbutton(box, text="启用", variable=vars_["is_enabled"]).grid(row=4, column=0, columnspan=2, sticky=tk.W)
-            self._route_vars[route["route_key"]] = vars_
+            self._route_vars[route["route_id"]] = vars_
 
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=r, column=0, columnspan=2, pady=5)
         ttk.Button(btn_frame, text="保存", command=self._save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="新增货代", command=self._add_route).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=5)
 
     def _load_values(self):
         self._var_rate.set(str(self._cfg.exchange_rate))
         self._var_tail.set(str(self._cfg.default_tail_haul))
-        for route in self._cfg.get_all_routes()[:2]:
-            vars_ = self._route_vars[route["route_key"]]
+        for route in self._cfg.get_all_routes(include_archived=False):
+            vars_ = self._route_vars[route["route_id"]]
             for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor"):
                 vars_[key].set(str(route[key]))
             vars_["is_enabled"].set(bool(route["is_enabled"]))
@@ -94,8 +97,7 @@ class SettingsDialog(tk.Toplevel):
                 if not name or len(name) > 30: raise ValueError(f"货代 {key} 名称不能为空且最多30字符")
                 if not all(math.isfinite(v) for v in (head, fixed, divisor)) or head <= 0 or fixed < 0 or divisor <= 0: raise ValueError(f"货代 {name} 规则无效")
                 if enabled: enabled_names.append(name)
-                routes.append({"route_key": key, "display_name": name, "head_haul_rate": head, "fixed_service_fee": fixed, "volume_divisor": divisor, "is_enabled": enabled})
-            if not enabled_names: raise ValueError("至少启用一个货代")
+                routes.append({"route_id": key, "display_name": name, "head_haul_rate": head, "fixed_service_fee": fixed, "volume_divisor": divisor, "is_enabled": enabled})
             if len(enabled_names) != len(set(enabled_names)): raise ValueError("启用货代名称不能重复")
         except ValueError as e:
             messagebox.showerror("输入错误", f"请输入有效数字：{e}")
@@ -104,6 +106,20 @@ class SettingsDialog(tk.Toplevel):
         if self._on_save:
             self._on_save()
         messagebox.showinfo("提示", "设置已保存。")
+        self.destroy()
+
+    def _add_route(self):
+        name = simpledialog.askstring("新增货代", "货代名称：", parent=self)
+        if name is None:
+            return
+        try:
+            self._forwarders.create({"display_name": name, "head_haul_rate": 80,
+                                     "fixed_service_fee": 0, "volume_divisor": 8000,
+                                     "is_enabled": True})
+        except ValueError as exc:
+            messagebox.showerror("输入错误", str(exc), parent=self); return
+        if self._on_save:
+            self._on_save()
         self.destroy()
 
 

@@ -59,7 +59,7 @@ class TestMigration:
 
     def test_migration_to_v3(self):
         db = DatabaseManager(self.db_path)
-        assert db.get_schema_version() == 4
+        assert db.get_schema_version() == 5
 
     def test_route_config_created(self):
         db = DatabaseManager(self.db_path)
@@ -84,4 +84,4 @@ class TestMigration:
         db1 = DatabaseManager(self.db_path)
         v1 = db1.get_schema_version()
         db2 = DatabaseManager(self.db_path)
-        assert v1 == db2.get_schema_version() == 4
+        assert v1 == db2.get_schema_version() == 5

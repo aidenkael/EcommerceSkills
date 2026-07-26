@@ -89,7 +89,7 @@ def test_v0_without_products_table_migrates_to_v3(tmp_path):
 
     db = DatabaseManager(path)
 
-    assert db.get_schema_version() == 4
+    assert db.get_schema_version() == 5
     conn = sqlite3.connect(path)
     try:
         columns = {
@@ -133,7 +133,7 @@ def test_v0_snapshot_record_missing_all_rule_columns_migrates(tmp_path):
 
     snapshot = db.get_snapshot("p1")
     product = db.get_product("p1")
-    assert db.get_schema_version() == 4
+    assert db.get_schema_version() == 5
     assert snapshot["name"] == "旧商品"
     assert snapshot["_snapshot_exchange_rate"] is None
     assert snapshot["_snapshot_head_haul_rate"] is None
@@ -161,7 +161,7 @@ def test_existing_rule_version_one_is_upgraded(tmp_path):
 
     db = DatabaseManager(path)
 
-    assert db.get_schema_version() == 4
+    assert db.get_schema_version() == 5
     assert db.get_rule_version() == 3
 
 

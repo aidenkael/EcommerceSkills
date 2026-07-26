@@ -66,7 +66,7 @@ class ConfigManager:
         return self._db.get_all_routes()
 
     def get_enabled_routes(self) -> list[dict]:
-        return [route for route in self.get_all_routes() if route.get("is_enabled")]
+        return self._db.get_enabled_routes()
 
     def save_settings_and_routes(self, exchange_rate, default_tail_haul, routes):
         self._db.save_settings_and_routes(

@@ -24,8 +24,8 @@ class TestDatabase:
         import shutil
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
 
-    def test_schema_version_is_4(self):
-        assert self.db.get_schema_version() == 4
+    def test_schema_version_is_5(self):
+        assert self.db.get_schema_version() == 5
 
     def test_config_defaults(self):
         assert float(self.db.get_config("exchange_rate", "0")) == 7.20
@@ -34,17 +34,16 @@ class TestDatabase:
     def test_route_config_exists(self):
         routes = self.db.get_all_routes()
         assert len(routes) == 2
-        forwarders = [r["forwarder"] for r in routes]
-        assert "shenzhen" in forwarders
-        assert "yiwu" in forwarders
+        assert {r["display_name"] for r in routes} == {"深圳", "义乌"}
+        assert all(len(r["route_id"]) == 36 for r in routes)
 
-    def test_shenzhen_rates(self):
-        r = self.db.get_route_rates("shenzhen")
+    def test_first_default_rates(self):
+        r = self.db.get_all_routes()[0]
         assert r["head_haul_rate"] == 80.0
         assert r["fixed_service_fee"] == 10.0
 
-    def test_yiwu_rates(self):
-        r = self.db.get_route_rates("yiwu")
+    def test_second_default_rates(self):
+        r = self.db.get_all_routes()[1]
         assert r["head_haul_rate"] == 100.0
         assert r["fixed_service_fee"] == 6.0
 
@@ -55,12 +54,12 @@ class TestDatabase:
 
     def test_create_product_with_freight_forwarder(self):
         pid = self.db.create_product({
-            "name": "深圳商品", "cost": 50.0, "freight_forwarder": "shenzhen",
+            "name": "深圳商品", "cost": 50.0, "freight_forwarder": self.db.get_all_routes()[0]["route_id"],
             "selling_price_rmb": 120.0,
         })
         product = self.db.get_product(pid)
         assert product["name"] == "深圳商品"
-        assert product["freight_forwarder"] == "shenzhen"
+        assert product["freight_forwarder"] == self.db.get_all_routes()[0]["route_id"]
         self.db.delete_product(pid)
 
     def test_create_product_without_forwarder(self):
