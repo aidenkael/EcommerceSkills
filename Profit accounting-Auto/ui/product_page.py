@@ -23,6 +23,7 @@ from calculation import (
 )
 from config.config_manager import VOLUME_DIVISOR, FORWARDER_LABELS
 from database.db_manager import CALCULATION_SCHEMA_VERSION
+from image_intake.result_models import MeasurementScope
 
 
 def _safe_float(val):
@@ -63,6 +64,8 @@ class ProductPage(ttk.Frame):
         self._calc_direction = None
         self._last_modified = None
         self._programmatic = False
+        self._ocr_dialog_factory = None  # 可注入，测试用
+        self._ocr_controller = None  # 可注入，默认由 dialog 自建
         self._has_snapshot = False
         self._saved_rule_context = None
         self._show_rate_banner = False
@@ -99,6 +102,7 @@ class ProductPage(ttk.Frame):
         for txt, cmd in [("新建", self.new_product), ("保存", self.save_product), ("还原", self.restore_product),
                           ("清空", self.clear_form), ("用当前规则重算", self._force_recalc)]:
             ttk.Button(btn_frame, text=txt, command=cmd).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="OCR录入", command=self._open_ocr_intake).pack(side=tk.LEFT, padx=2)
         self._build_inputs()
 
     def _make_number_entry(self, parent, label, row, name, default=""):
@@ -308,6 +312,61 @@ class ProductPage(ttk.Frame):
             else:
                 self._do_recalculate()
         finally: self._programmatic = False
+
+    # ─── OCR 录入接入 ─────────────────────────────────────
+
+    def _open_ocr_intake(self):
+        """打开 OCR 录入对话框，确认后回填字段。取消则不改任何字段。"""
+        factory = self._ocr_dialog_factory or self._default_ocr_dialog
+        root = self.winfo_toplevel()
+        dlg = factory(root, self._ocr_controller)
+        # 真实 OcrIntakeDialog 是 Toplevel，需等待关闭；测试 FakeDialog 无需等待
+        if isinstance(dlg, tk.Toplevel):
+            root.wait_window(dlg)
+        result = getattr(dlg, "result", None)
+        if result is None:
+            return
+        self._apply_ocr_selections(result)
+
+    def _default_ocr_dialog(self, parent, controller):
+        from ui.ocr_intake_dialog import OcrIntakeDialog
+        return OcrIntakeDialog(parent, controller=controller)
+
+    def _apply_ocr_selections(self, selections):
+        """将 OCR FieldSelection 回填到 _entry_vars，触发重新计算。
+
+        - 价格/成本/运费：直接回填；
+        - 尺寸/重量：仅 measurement_scope=bare 回填 net_*；
+        - 未确认字段不清空；
+        - user_modified=True 时用 confirmed_value；
+        - 不自动保存、不写数据库、不创建历史快照。
+        """
+        price_map = {
+            "shein_price_usd": "shein",
+            "product_cost_rmb": "cost",
+            "domestic_shipping_rmb": "domestic",
+        }
+        dim_map = {
+            "weight_g": "net_w",
+            "length_cm": "net_l",
+            "width_cm": "net_wi",
+            "height_cm": "net_h",
+        }
+        self._programmatic = True
+        try:
+            for field_name, sel in selections.items():
+                if sel.confirmed_value is None:
+                    continue
+                value = sel.confirmed_value
+                if field_name in price_map:
+                    self._entry_vars[price_map[field_name]].set(self._fmt(value))
+                elif field_name in dim_map:
+                    if sel.measurement_scope == MeasurementScope.BARE:
+                        self._entry_vars[dim_map[field_name]].set(self._fmt(value))
+        finally:
+            self._programmatic = False
+        # 统一重新计算一次
+        self.recalculate()
 
     def _force_recalc(self):
         self._saved_rule_context = None; self._show_rate_banner = False; self._show_rate_notice(None)
