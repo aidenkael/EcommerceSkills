@@ -18,14 +18,15 @@ from config.forwarder_manager import ForwarderManager
 
 
 class SettingsDialog(tk.Toplevel):
-    """全局设置和两个固定货代槽位。"""
+    """全局设置和动态货代管理。"""
 
     def __init__(self, parent, config_manager, on_save=None):
         super().__init__(parent)
         self._cfg = config_manager
         self._on_save = on_save
         self.title("设置")
-        self.geometry("680x720")
+        self.geometry("820x720")
+        self.minsize(720, 560)
         self.resizable(True, True)
         self._forwarders = ForwarderManager(config_manager._db)
         self.transient(parent)
@@ -34,44 +35,151 @@ class SettingsDialog(tk.Toplevel):
         self._load_values()
 
     def _build_ui(self):
-        frame = ttk.Frame(self, padding=15)
-        frame.pack(fill=tk.BOTH, expand=True)
-        r = 0
-        ttk.Label(frame, text="全局设置", font=("", 10, "bold")).grid(row=r, column=0, columnspan=2, sticky=tk.W); r += 1
-        ttk.Label(frame, text="汇率 (1 USD = ? RMB)：").grid(row=r, column=0, sticky=tk.W, pady=5)
+        outer = ttk.Frame(self, padding=12)
+        outer.pack(fill=tk.BOTH, expand=True)
+
+        global_box = ttk.LabelFrame(outer, text="全局设置", padding=10)
+        global_box.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(global_box, text="汇率 (1 USD = ? RMB)：").grid(row=0, column=0, sticky=tk.W, pady=3)
         self._var_rate = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._var_rate, width=12).grid(row=r, column=1, pady=5); r += 1
+        ttk.Entry(global_box, textvariable=self._var_rate, width=12).grid(row=0, column=1, sticky=tk.W, pady=3)
 
-        ttk.Label(frame, text="默认尾程费用 (元)：").grid(row=r, column=0, sticky=tk.W, pady=5)
+        ttk.Label(global_box, text="默认尾程费用 (元)：").grid(row=0, column=2, sticky=tk.W, padx=(28, 0), pady=3)
         self._var_tail = tk.StringVar()
-        ttk.Entry(frame, textvariable=self._var_tail, width=12).grid(row=r, column=1, pady=5); r += 1
+        ttk.Entry(global_box, textvariable=self._var_tail, width=12).grid(row=0, column=3, sticky=tk.W, pady=3)
 
+        self._route_tabs = ttk.Notebook(outer)
+        self._route_tabs.pack(fill=tk.BOTH, expand=True)
+        self._active_tab = ttk.Frame(self._route_tabs)
+        self._archived_tab = ttk.Frame(self._route_tabs)
+        self._route_tabs.add(self._active_tab, text="使用中的货代")
+        self._route_tabs.add(self._archived_tab, text="已归档")
+
+        self._active_canvas, self._active_inner = self._build_scroll_area(self._active_tab)
+        self._archived_canvas, self._archived_inner = self._build_scroll_area(self._archived_tab)
         self._route_vars = {}
-        for route in self._cfg.get_all_routes(include_archived=False):
-            box = ttk.LabelFrame(frame, text=f"货代：{route['display_name']}", padding=8)
-            box.grid(row=r, column=0, columnspan=2, sticky=tk.EW, pady=6); r += 1
-            vars_ = {key: tk.StringVar() for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor")}
-            vars_["is_enabled"] = tk.BooleanVar()
-            for idx, (key, label) in enumerate((("display_name", "名称"), ("head_haul_rate", "头程单价 (元/kg)"), ("fixed_service_fee", "固定服务费 (元)"), ("volume_divisor", "体积重除数"))):
-                ttk.Label(box, text=label + "：").grid(row=idx, column=0, sticky=tk.W)
-                ttk.Entry(box, textvariable=vars_[key], width=20).grid(row=idx, column=1, sticky=tk.W)
-            ttk.Checkbutton(box, text="启用", variable=vars_["is_enabled"]).grid(row=4, column=0, columnspan=2, sticky=tk.W)
-            self._route_vars[route["route_id"]] = vars_
 
-        btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=r, column=0, columnspan=2, pady=5)
+        btn_frame = ttk.Frame(outer)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(btn_frame, text="保存", command=self._save).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="新增货代", command=self._add_route).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Label(
+            btn_frame,
+            text="归档/删除/恢复会立即生效；其他费率修改需点击“保存”。",
+            foreground="#666666",
+        ).pack(side=tk.RIGHT, padx=5)
+        self._render_routes()
+
+    def _build_scroll_area(self, parent):
+        canvas = tk.Canvas(parent, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
+        inner = ttk.Frame(canvas, padding=8)
+        window = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind(
+            "<Configure>",
+            lambda _event, target=canvas: target.configure(scrollregion=target.bbox("all")),
+        )
+        canvas.bind(
+            "<Configure>",
+            lambda event, target=canvas, item=window: target.itemconfigure(item, width=event.width),
+        )
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.bind(
+            "<Enter>",
+            lambda _event, target=canvas: self.bind_all(
+                "<MouseWheel>",
+                lambda event: target.yview_scroll(int(-1 * (event.delta / 120)), "units"),
+            ),
+        )
+        canvas.bind("<Leave>", lambda _event: self.unbind_all("<MouseWheel>"))
+        return canvas, inner
+
+    @staticmethod
+    def _clear_children(frame):
+        for child in frame.winfo_children():
+            child.destroy()
+
+    def _render_routes(self):
+        self._clear_children(self._active_inner)
+        self._clear_children(self._archived_inner)
+        self._route_vars = {}
+
+        headers = ("名称", "头程单价(元/kg)", "固定服务费(元)", "体积重除数", "启用", "操作")
+        widths = (18, 14, 14, 12)
+        for column, label in enumerate(headers):
+            ttk.Label(self._active_inner, text=label, font=("", 9, "bold")).grid(
+                row=0, column=column, sticky=tk.W, padx=4, pady=(0, 6)
+            )
+
+        active_routes = self._cfg.get_all_routes(include_archived=False)
+        if not active_routes:
+            ttk.Label(self._active_inner, text="暂无货代，请点击“新增货代”。").grid(
+                row=1, column=0, columnspan=6, sticky=tk.W, padx=4, pady=12
+            )
+        for row_index, route in enumerate(active_routes, start=1):
+            vars_ = {
+                key: tk.StringVar(value=str(route[key]))
+                for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor")
+            }
+            vars_["is_enabled"] = tk.BooleanVar(value=bool(route["is_enabled"]))
+            for column, key in enumerate(
+                ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor")
+            ):
+                ttk.Entry(
+                    self._active_inner,
+                    textvariable=vars_[key],
+                    width=widths[column],
+                ).grid(row=row_index, column=column, sticky=tk.EW, padx=4, pady=4)
+            ttk.Checkbutton(
+                self._active_inner, variable=vars_["is_enabled"]
+            ).grid(row=row_index, column=4, padx=8, pady=4)
+            ttk.Button(
+                self._active_inner,
+                text="归档/删除",
+                command=lambda route_id=route["route_id"]: self._archive_or_delete(route_id),
+            ).grid(row=row_index, column=5, padx=4, pady=4)
+            self._route_vars[route["route_id"]] = vars_
+
+        archived_routes = [
+            route for route in self._cfg.get_all_routes(include_archived=True)
+            if route["is_archived"]
+        ]
+        archive_headers = ("名称", "头程单价", "固定服务费", "体积重除数", "状态", "操作")
+        for column, label in enumerate(archive_headers):
+            ttk.Label(self._archived_inner, text=label, font=("", 9, "bold")).grid(
+                row=0, column=column, sticky=tk.W, padx=6, pady=(0, 6)
+            )
+        if not archived_routes:
+            ttk.Label(self._archived_inner, text="暂无已归档货代。").grid(
+                row=1, column=0, columnspan=6, sticky=tk.W, padx=6, pady=12
+            )
+        for row_index, route in enumerate(archived_routes, start=1):
+            values = (
+                route["display_name"],
+                f"{route['head_haul_rate']:.2f}",
+                f"{route['fixed_service_fee']:.2f}",
+                f"{route['volume_divisor']:.2f}",
+                "已归档",
+            )
+            for column, value in enumerate(values):
+                ttk.Label(self._archived_inner, text=value).grid(
+                    row=row_index, column=column, sticky=tk.W, padx=6, pady=5
+                )
+            ttk.Button(
+                self._archived_inner,
+                text="恢复",
+                command=lambda route_id=route["route_id"]: self._restore_route(route_id),
+            ).grid(row=row_index, column=5, padx=6, pady=5)
+
+        self._route_tabs.tab(0, text=f"使用中的货代 ({len(active_routes)})")
+        self._route_tabs.tab(1, text=f"已归档 ({len(archived_routes)})")
 
     def _load_values(self):
         self._var_rate.set(str(self._cfg.exchange_rate))
         self._var_tail.set(str(self._cfg.default_tail_haul))
-        for route in self._cfg.get_all_routes(include_archived=False):
-            vars_ = self._route_vars[route["route_id"]]
-            for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor"):
-                vars_[key].set(str(route[key]))
-            vars_["is_enabled"].set(bool(route["is_enabled"]))
 
     def _save(self):
         try:
@@ -88,24 +196,26 @@ class SettingsDialog(tk.Toplevel):
                 self.destroy(); return
             routes = []
             enabled_names = []
-            for key, vars_ in self._route_vars.items():
+            for route_id, vars_ in self._route_vars.items():
                 name = vars_["display_name"].get().strip()
                 head = float(vars_["head_haul_rate"].get())
                 fixed = float(vars_["fixed_service_fee"].get())
                 divisor = float(vars_["volume_divisor"].get())
                 enabled = bool(vars_["is_enabled"].get())
-                if not name or len(name) > 30: raise ValueError(f"货代 {key} 名称不能为空且最多30字符")
+                if not name or len(name) > 30:
+                    raise ValueError("货代名称不能为空且最多30字符")
                 if not all(math.isfinite(v) for v in (head, fixed, divisor)) or head <= 0 or fixed < 0 or divisor <= 0: raise ValueError(f"货代 {name} 规则无效")
-                if enabled: enabled_names.append(name)
-                routes.append({"route_id": key, "display_name": name, "head_haul_rate": head, "fixed_service_fee": fixed, "volume_divisor": divisor, "is_enabled": enabled})
+                if enabled:
+                    enabled_names.append(name.casefold())
+                routes.append({"route_id": route_id, "display_name": name, "head_haul_rate": head, "fixed_service_fee": fixed, "volume_divisor": divisor, "is_enabled": enabled})
             if len(enabled_names) != len(set(enabled_names)): raise ValueError("启用货代名称不能重复")
-        except ValueError as e:
-            messagebox.showerror("输入错误", f"请输入有效数字：{e}")
+            self._cfg.save_settings_and_routes(rate, tail, routes)
+        except (ValueError, RuntimeError) as exc:
+            messagebox.showerror("输入错误", str(exc), parent=self)
             return
-        self._cfg.save_settings_and_routes(rate, tail, routes)
         if self._on_save:
             self._on_save()
-        messagebox.showinfo("提示", "设置已保存。")
+        messagebox.showinfo("提示", "设置已保存。", parent=self)
         self.destroy()
 
     def _add_route(self):
@@ -120,7 +230,73 @@ class SettingsDialog(tk.Toplevel):
             messagebox.showerror("输入错误", str(exc), parent=self); return
         if self._on_save:
             self._on_save()
-        self.destroy()
+        self._render_routes()
+        self._route_tabs.select(self._active_tab)
+        self._active_canvas.yview_moveto(1.0)
+        messagebox.showinfo(
+            "新增完成",
+            "货代已新增，默认规则为 80 元/kg、固定服务费 0 元、体积重除数 8000。\n"
+            "可在列表中修改后点击“保存”。",
+            parent=self,
+        )
+
+    def _archive_or_delete(self, route_id):
+        route = self._cfg.get_route_rates(route_id)
+        if route is None:
+            messagebox.showerror("操作失败", "货代不存在。", parent=self)
+            self._render_routes()
+            return
+        referenced = self._forwarders.is_referenced(route_id)
+        action = "归档" if referenced else "永久删除"
+        detail = (
+            "该货代已被历史商品引用，将停用并归档，历史记录不受影响。"
+            if referenced
+            else "该货代未被任何商品引用，将被永久删除。"
+        )
+        if not messagebox.askyesno(
+            f"确认{action}",
+            f"确定要{action}货代「{route['display_name']}」吗？\n{detail}\n"
+            "列表会刷新，尚未保存的其他费率修改将丢失。",
+            parent=self,
+        ):
+            return
+        try:
+            result = self._forwarders.archive_or_delete(route_id)
+        except ValueError as exc:
+            messagebox.showerror("操作失败", str(exc), parent=self)
+            return
+        if self._on_save:
+            self._on_save()
+        self._render_routes()
+        messagebox.showinfo(
+            "操作完成",
+            "货代已归档。" if result == "archived" else "货代已永久删除。",
+            parent=self,
+        )
+
+    def _restore_route(self, route_id):
+        route = self._cfg.get_route_rates(route_id)
+        if route is None:
+            messagebox.showerror("操作失败", "货代不存在。", parent=self)
+            self._render_routes()
+            return
+        if not messagebox.askyesno(
+            "确认恢复",
+            f"确定恢复货代「{route['display_name']}」吗？\n"
+            "恢复后默认保持停用，请在“使用中的货代”页勾选启用并保存。",
+            parent=self,
+        ):
+            return
+        try:
+            self._forwarders.restore(route_id)
+        except ValueError as exc:
+            messagebox.showerror("操作失败", str(exc), parent=self)
+            return
+        if self._on_save:
+            self._on_save()
+        self._render_routes()
+        self._route_tabs.select(self._active_tab)
+        messagebox.showinfo("操作完成", "货代已恢复，当前为停用状态。", parent=self)
 
 
 class MainWindow:

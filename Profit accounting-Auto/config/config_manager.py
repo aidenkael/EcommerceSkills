@@ -1,7 +1,6 @@
-"""
-配置管理器 v2
+"""运行时配置管理器。
 
-支持双货代规则（深圳/义乌），通过 DatabaseManager 的 route_config 表持久化。
+全局设置和动态货代规则均通过 DatabaseManager 持久化。
 """
 
 import math
@@ -62,8 +61,8 @@ class ConfigManager:
         """获取货代费率 {head_haul_rate, fixed_service_fee}"""
         return self._db.get_route_rates(forwarder)
 
-    def get_all_routes(self) -> list[dict]:
-        return self._db.get_all_routes()
+    def get_all_routes(self, include_archived: bool = True) -> list[dict]:
+        return self._db.get_all_routes(include_archived=include_archived)
 
     def get_enabled_routes(self) -> list[dict]:
         return self._db.get_enabled_routes()

@@ -1,14 +1,14 @@
 """
-SQLite 数据库管理 — Schema v3
+SQLite 数据库管理 — Schema v5
 
 迁移规则：
-- 新数据库：直接创建完整 v3 schema，不备份不迁移
+- 新数据库：直接创建完整 v5 schema，不备份不迁移
 - 旧数据库：先只读检查→关闭→备份→事务迁移→提交/回滚
 - 当前商品状态与首次快照在同一事务中保存
 """
 
-import sqlite3, json, uuid, os, shutil
-from datetime import datetime
+import sqlite3, json, uuid, os, shutil, sys
+from datetime import datetime, timedelta
 
 CURRENT_SCHEMA_VERSION = 5
 CURRENT_RULE_VERSION = 3
@@ -66,7 +66,11 @@ DEFAULT_CONFIG = {"exchange_rate": "7.20", "default_tail_haul": "40.0"}
 class DatabaseManager:
     def __init__(self, db_path=None):
         if db_path is None:
-            db_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+            if getattr(sys, "frozen", False):
+                base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+                db_dir = os.path.join(base_dir, "ProfitAccountingAuto")
+            else:
+                db_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, "profit_accounting.db")
         self.db_path = db_path
@@ -209,14 +213,25 @@ class DatabaseManager:
         route_columns = {"route_id": "TEXT", "route_key": "TEXT", "display_name": "TEXT", "volume_divisor": "REAL DEFAULT 8000", "is_enabled": "INTEGER DEFAULT 1", "is_archived": "INTEGER DEFAULT 0", "description": "TEXT DEFAULT ''", "created_at": "TEXT", "updated_at": "TEXT"}
         for column, column_type in route_columns.items():
             self._add_column_if_missing(conn, "route_config", column, column_type)
-        cols = self._table_columns(conn, "route_config")
-        legacy_key = "route_key" if "route_key" in cols else "forwarder"
-        now = datetime.now().isoformat()
+        now = datetime.now()
         legacy_to_id = {}
-        for row in conn.execute("SELECT rowid,* FROM route_config").fetchall():
-            d = dict(row); old = d.get(legacy_key)
+        for index, row in enumerate(conn.execute("SELECT rowid,* FROM route_config ORDER BY rowid").fetchall()):
+            d = dict(row)
+            old = d.get("route_key") or d.get("forwarder")
             route_id = d.get("route_id") or str(uuid.uuid4())
-            conn.execute("UPDATE route_config SET route_id=?, display_name=COALESCE(display_name, ?), volume_divisor=COALESCE(volume_divisor,8000), is_enabled=COALESCE(is_enabled,1), is_archived=COALESCE(is_archived,0), created_at=COALESCE(created_at,?), updated_at=COALESCE(updated_at,?) WHERE rowid=?", (route_id, {"shenzhen":"深圳","yiwu":"义乌"}.get(old, old), now, now, d["rowid"]))
+            row_time = (now + timedelta(microseconds=index)).isoformat()
+            fallback_name = {"shenzhen": "深圳", "yiwu": "义乌"}.get(old, old or route_id)
+            conn.execute(
+                """UPDATE route_config
+                   SET route_id=?, display_name=COALESCE(display_name, ?),
+                       volume_divisor=COALESCE(volume_divisor,8000),
+                       is_enabled=COALESCE(is_enabled,1),
+                       is_archived=COALESCE(is_archived,0),
+                       created_at=COALESCE(created_at,?),
+                       updated_at=COALESCE(updated_at,?)
+                   WHERE rowid=?""",
+                (route_id, fallback_name, row_time, row_time, d["rowid"]),
+            )
             if old and old != route_id:
                 legacy_to_id[old] = route_id
                 conn.execute("UPDATE products SET freight_forwarder=? WHERE freight_forwarder=?", (route_id, old))
@@ -297,8 +312,14 @@ class DatabaseManager:
             "fixed_service_fee", "tail_haul_cost", "volume_divisor", "rule_version",
             "rule_snapshot",
         }
+        required_route_columns = {
+            "route_id", "display_name", "head_haul_rate", "fixed_service_fee",
+            "volume_divisor", "is_enabled", "is_archived", "description",
+            "created_at", "updated_at",
+        }
         self._require_columns(conn, "products", required_product_columns)
         self._require_columns(conn, "product_snapshots", required_snapshot_columns)
+        self._require_columns(conn, "route_config", required_route_columns)
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise RuntimeError(f"数据库完整性检查失败: {integrity}")
@@ -340,8 +361,9 @@ class DatabaseManager:
 
     def _seed_routes_in_conn(self, conn):
         """Only used for a new database: defaults are data, never runtime rules."""
-        now = datetime.now().isoformat()
-        for rates in DEFAULT_ROUTES.values():
+        now = datetime.now()
+        for index, rates in enumerate(DEFAULT_ROUTES.values()):
+            row_time = (now + timedelta(microseconds=index)).isoformat()
             conn.execute(
                 """INSERT INTO route_config
                 (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,
@@ -349,13 +371,36 @@ class DatabaseManager:
                 VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (str(uuid.uuid4()), rates["display_name"], rates["head_haul_rate"],
                  rates["fixed_service_fee"], rates["volume_divisor"], rates["is_enabled"],
-                 0, rates["description"], now, now),
+                 0, rates["description"], row_time, row_time),
             )
 
     def _migrate_route_references(self, conn, legacy_to_id):
         """Move v4 keys inside frozen JSON without changing its historical name."""
         if not legacy_to_id:
             return
+
+        def replace_ids(value):
+            if isinstance(value, list):
+                return [replace_ids(item) for item in value]
+            if not isinstance(value, dict):
+                return value
+
+            updated = {key: replace_ids(item) for key, item in value.items()}
+            rule_keys = ("route_id", "route_key", "forwarder")
+            old_rule_id = next(
+                (value.get(key) for key in rule_keys if value.get(key) in legacy_to_id),
+                None,
+            )
+            if old_rule_id:
+                route_id = legacy_to_id[old_rule_id]
+                updated["route_id"] = route_id
+                updated["route_key"] = route_id
+                updated["forwarder"] = route_id
+            old_product_id = value.get("freight_forwarder")
+            if old_product_id in legacy_to_id:
+                updated["freight_forwarder"] = legacy_to_id[old_product_id]
+            return updated
+
         for table, id_col, json_col in (("products", "id", "current_rule_snapshot"),
                                         ("product_snapshots", "id", "rule_snapshot"),
                                         ("product_snapshots", "id", "snapshot_data")):
@@ -364,14 +409,12 @@ class DatabaseManager:
                     data = json.loads(row[json_col])
                 except (TypeError, ValueError):
                     continue
-                route_key = data.get("route_id") or data.get("route_key") or data.get("forwarder")
-                route_id = legacy_to_id.get(route_key)
-                if not route_id:
-                    continue
-                data["route_id"] = route_id
-                data["route_key"] = route_id
-                data["forwarder"] = route_id
-                conn.execute(f"UPDATE {table} SET {json_col}=? WHERE {id_col}=?", (json.dumps(data, ensure_ascii=False), row[id_col]))
+                migrated = replace_ids(data)
+                if migrated != data:
+                    conn.execute(
+                        f"UPDATE {table} SET {json_col}=? WHERE {id_col}=?",
+                        (json.dumps(migrated, ensure_ascii=False), row[id_col]),
+                    )
 
     def _add_column_if_missing(self, conn, table, column, col_type):
         try:
@@ -432,8 +475,8 @@ class DatabaseManager:
                 "SELECT * FROM route_config WHERE is_enabled=1 AND is_archived=0 ORDER BY created_at,route_id").fetchall()]
         finally: conn.close()
 
-    def save_route(self, route: dict, route_id=None):
-        """Validate and atomically create/update a route. IDs are immutable UUIDs."""
+    @staticmethod
+    def _validated_route_values(route):
         import math
         name = str(route.get("display_name", "")).strip()
         try:
@@ -444,6 +487,11 @@ class DatabaseManager:
         if not all(math.isfinite(v) for v in (rate, fixed, divisor)) or rate <= 0 or fixed < 0 or divisor <= 0:
             raise ValueError("头程单价>0，固定服务费>=0，体积重除数>0，且均须为有限数字")
         enabled = int(bool(route.get("is_enabled", True))); archived = int(bool(route.get("is_archived", False)))
+        return name, rate, fixed, divisor, enabled, archived, str(route.get("description", ""))
+
+    def save_route(self, route: dict, route_id=None):
+        """Validate and atomically create/update a route. IDs are immutable UUIDs."""
+        name, rate, fixed, divisor, enabled, archived, description = self._validated_route_values(route)
         now = datetime.now().isoformat(); route_id = route_id or route.get("route_id") or str(uuid.uuid4())
         conn = self._get_conn()
         try:
@@ -452,9 +500,9 @@ class DatabaseManager:
             if enabled and not archived and duplicate: raise ValueError("启用货代名称不能重复")
             exists = conn.execute("SELECT 1 FROM route_config WHERE route_id=?", (route_id,)).fetchone()
             if exists:
-                conn.execute("UPDATE route_config SET display_name=?,head_haul_rate=?,fixed_service_fee=?,volume_divisor=?,is_enabled=?,is_archived=?,description=?,updated_at=? WHERE route_id=?", (name,rate,fixed,divisor,enabled,archived,str(route.get("description", "")),now,route_id))
+                conn.execute("UPDATE route_config SET display_name=?,head_haul_rate=?,fixed_service_fee=?,volume_divisor=?,is_enabled=?,is_archived=?,description=?,updated_at=? WHERE route_id=?", (name,rate,fixed,divisor,enabled,archived,description,now,route_id))
             else:
-                conn.execute("INSERT INTO route_config (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,is_archived,description,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (route_id,name,rate,fixed,divisor,enabled,archived,str(route.get("description", "")),now,now))
+                conn.execute("INSERT INTO route_config (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,is_archived,description,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (route_id,name,rate,fixed,divisor,enabled,archived,description,now,now))
             conn.execute("COMMIT"); return route_id
         except Exception:
             conn.execute("ROLLBACK"); raise
@@ -472,6 +520,8 @@ class DatabaseManager:
         conn = self._get_conn()
         try:
             conn.execute("BEGIN")
+            if not conn.execute("SELECT 1 FROM route_config WHERE route_id=?", (route_id,)).fetchone():
+                raise ValueError("货代不存在")
             referenced = bool(conn.execute("SELECT 1 FROM products WHERE freight_forwarder=? OR current_rule_snapshot LIKE ? LIMIT 1", (route_id, f'%{route_id}%')).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (f'%{route_id}%', f'%{route_id}%')).fetchone())
             if referenced:
                 conn.execute("UPDATE route_config SET is_archived=1,is_enabled=0,updated_at=? WHERE route_id=?", (datetime.now().isoformat(), route_id)); result = "archived"
@@ -483,17 +533,64 @@ class DatabaseManager:
         finally: conn.close()
 
     def save_settings_and_routes(self, global_values: dict, routes: list[dict]):
-        """原子保存全局设置和两个固定货代槽位。"""
+        """原子保存全局设置和当前未归档货代。"""
+        import math
+        prepared = []
+        for route in routes:
+            route_id = route.get("route_id") or route.get("route_key")
+            if not route_id:
+                raise RuntimeError("缺少货代标识")
+            values = self._validated_route_values(route)
+            prepared.append((route_id, values))
+        enabled_names = [
+            values[0].casefold()
+            for _route_id, values in prepared
+            if values[4] and not values[5]
+        ]
+        if len(enabled_names) != len(set(enabled_names)):
+            raise ValueError("启用货代名称不能重复")
+        for key, value in global_values.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} 必须为数字")
+            if not math.isfinite(number):
+                raise ValueError(f"{key} 必须为有限数字")
+            if key == "exchange_rate" and number <= 0:
+                raise ValueError("汇率必须大于 0")
+            if key == "default_tail_haul" and number < 0:
+                raise ValueError("默认尾程费用不能小于 0")
         conn = self._get_conn()
         try:
             conn.execute("BEGIN TRANSACTION")
+            updated_ids = {route_id for route_id, _values in prepared}
+            untouched_names = [
+                str(row["display_name"]).strip().casefold()
+                for row in conn.execute(
+                    "SELECT route_id,display_name FROM route_config "
+                    "WHERE is_enabled=1 AND is_archived=0"
+                ).fetchall()
+                if row["route_id"] not in updated_ids
+            ]
+            final_names = enabled_names + untouched_names
+            if len(final_names) != len(set(final_names)):
+                raise ValueError("启用货代名称不能重复")
             for key, value in global_values.items():
                 conn.execute("INSERT OR REPLACE INTO config (key,value) VALUES (?,?)", (key, str(value)))
-            for route in routes:
-                rid = route.get("route_id") or route.get("route_key")
-                if not rid: raise RuntimeError("缺少货代标识")
-                conn.execute("UPDATE route_config SET display_name=?,head_haul_rate=?,fixed_service_fee=?,volume_divisor=?,is_enabled=?,updated_at=? WHERE route_id=?", (route["display_name"], route["head_haul_rate"], route["fixed_service_fee"], route["volume_divisor"], int(route["is_enabled"]),datetime.now().isoformat(),rid))
-                if not conn.execute("SELECT 1 FROM route_config WHERE route_id=?", (rid,)).fetchone(): raise RuntimeError("未找到货代配置")
+            for route_id, values in prepared:
+                name, rate, fixed, divisor, enabled, _archived, _description = values
+                conn.execute(
+                    """UPDATE route_config
+                       SET display_name=?,head_haul_rate=?,fixed_service_fee=?,
+                           volume_divisor=?,is_enabled=?,updated_at=?
+                       WHERE route_id=? AND is_archived=0""",
+                    (name, rate, fixed, divisor, enabled, datetime.now().isoformat(), route_id),
+                )
+                if not conn.execute(
+                    "SELECT 1 FROM route_config WHERE route_id=? AND is_archived=0",
+                    (route_id,),
+                ).fetchone():
+                    raise RuntimeError("未找到未归档货代配置")
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK"); raise

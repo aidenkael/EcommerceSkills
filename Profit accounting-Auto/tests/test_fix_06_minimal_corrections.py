@@ -243,3 +243,69 @@ def test_settings_accept_finite_positive_rate_and_zero_tail():
     assert dialog._cfg.default_tail_haul == 0.0
     showerror.assert_not_called()
     showinfo.assert_called_once()
+
+
+def test_config_manager_can_filter_archived_routes(tmp_path):
+    cfg = ConfigManager(DatabaseManager(str(tmp_path / "routes.db")))
+    route = cfg.get_all_routes()[0]
+    route["is_archived"] = True
+    cfg._db.save_route(route, route_id=route["route_id"])
+
+    visible_ids = {
+        item["route_id"] for item in cfg.get_all_routes(include_archived=False)
+    }
+    assert route["route_id"] not in visible_ids
+
+
+def test_settings_archive_delete_action_refreshes_routes():
+    events = []
+    dialog = object.__new__(SettingsDialog)
+    dialog._cfg = SimpleNamespace(
+        get_route_rates=lambda _route_id: {"display_name": "未使用货代"}
+    )
+    dialog._forwarders = SimpleNamespace(
+        is_referenced=lambda _route_id: False,
+        archive_or_delete=lambda route_id: events.append(("delete", route_id)) or "deleted",
+    )
+    dialog._on_save = lambda: events.append(("saved", None))
+    dialog._render_routes = lambda: events.append(("rendered", None))
+
+    with patch("ui.main_window.messagebox.askyesno", return_value=True), patch(
+        "ui.main_window.messagebox.showinfo"
+    ):
+        SettingsDialog._archive_or_delete(dialog, "route-1")
+
+    assert events == [
+        ("delete", "route-1"),
+        ("saved", None),
+        ("rendered", None),
+    ]
+
+
+def test_settings_restore_action_keeps_route_disabled_and_refreshes():
+    events = []
+    dialog = object.__new__(SettingsDialog)
+    dialog._cfg = SimpleNamespace(
+        get_route_rates=lambda _route_id: {"display_name": "历史货代"}
+    )
+    dialog._forwarders = SimpleNamespace(
+        restore=lambda route_id: events.append(("restore", route_id))
+    )
+    dialog._on_save = lambda: events.append(("saved", None))
+    dialog._render_routes = lambda: events.append(("rendered", None))
+    dialog._active_tab = object()
+    dialog._route_tabs = SimpleNamespace(
+        select=lambda tab: events.append(("selected", tab))
+    )
+
+    with patch("ui.main_window.messagebox.askyesno", return_value=True), patch(
+        "ui.main_window.messagebox.showinfo"
+    ):
+        SettingsDialog._restore_route(dialog, "route-2")
+
+    assert events[:3] == [
+        ("restore", "route-2"),
+        ("saved", None),
+        ("rendered", None),
+    ]
+    assert events[3] == ("selected", dialog._active_tab)

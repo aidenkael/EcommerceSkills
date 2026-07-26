@@ -39,22 +39,94 @@ def test_name_validation_and_disable_archive_delete(tmp_path):
     unused = manager.create(route("可删除"))
     assert manager.archive_or_delete(unused) == "deleted"
     assert db.get_route_rates(unused) is None
+    with pytest.raises(ValueError, match="货代不存在"):
+        manager.archive_or_delete(unused)
+    manager.restore(rid)
+    restored = db.get_route_rates(rid)
+    assert restored["is_archived"] is False
+    assert restored["is_enabled"] is False
 
 
 def test_v4_keys_migrate_to_uuid_in_products_and_snapshots(tmp_path):
     path = str(tmp_path / "v4.db")
-    db = DatabaseManager(path)
-    route_id = db.get_all_routes()[0]["route_id"]
     conn = sqlite3.connect(path)
-    conn.execute("ALTER TABLE route_config ADD COLUMN route_key TEXT")
-    conn.execute("UPDATE route_config SET route_key='shenzhen' WHERE route_id=?", (route_id,))
-    conn.execute("UPDATE products SET freight_forwarder='shenzhen'")
-    conn.execute("DELETE FROM schema_version WHERE version>=5")
-    conn.execute("INSERT INTO schema_version VALUES (4, 'old')")
-    conn.commit(); conn.close()
+    conn.executescript(
+        """
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+        INSERT INTO schema_version VALUES (4, 'old');
+        CREATE TABLE business_rule_version (
+            version INTEGER PRIMARY KEY, description TEXT, applied_at TEXT NOT NULL
+        );
+        INSERT INTO business_rule_version VALUES (3, '双货代规则', 'old');
+        CREATE TABLE products (
+            id TEXT PRIMARY KEY, name TEXT, freight_forwarder TEXT,
+            current_rule_snapshot TEXT, current_calculation_results TEXT,
+            created_at TEXT, updated_at TEXT
+        );
+        CREATE TABLE product_snapshots (
+            id TEXT PRIMARY KEY, product_id TEXT NOT NULL UNIQUE,
+            snapshot_data TEXT NOT NULL, rule_snapshot TEXT, created_at TEXT
+        );
+        CREATE TABLE route_config (
+            route_key TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+            head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL,
+            volume_divisor REAL NOT NULL DEFAULT 8000,
+            is_enabled INTEGER NOT NULL DEFAULT 1, description TEXT DEFAULT ''
+        );
+        CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO route_config VALUES ('shenzhen', '深圳旧名', 80, 10, 8000, 1, '');
+        INSERT INTO route_config VALUES ('yiwu', '义乌', 100, 6, 8000, 1, '');
+        """
+    )
+    rules = {
+        "route_key": "shenzhen",
+        "forwarder": "shenzhen",
+        "route_display_name": "深圳旧名",
+    }
+    snapshot_data = {"name": "旧商品", "freight_forwarder": "shenzhen"}
+    conn.execute(
+        "INSERT INTO products VALUES (?,?,?,?,?,?,?)",
+        ("p1", "旧商品", "shenzhen", json.dumps(rules), "{}", "old", "old"),
+    )
+    conn.execute(
+        "INSERT INTO product_snapshots VALUES (?,?,?,?,?)",
+        ("s1", "p1", json.dumps(snapshot_data), json.dumps(rules), "old"),
+    )
+    conn.commit()
+    conn.close()
+
     migrated = DatabaseManager(path)
+    routes = {route["display_name"]: route for route in migrated.get_all_routes()}
+    route_id = routes["深圳旧名"]["route_id"]
     assert migrated.get_schema_version() == 5
     assert all(len(r["route_id"]) == 36 for r in migrated.get_all_routes())
+    product = migrated.get_product("p1")
+    snapshot = migrated.get_snapshot("p1")
+    assert product["freight_forwarder"] == route_id
+    assert product["_current_rule_snapshot"]["route_id"] == route_id
+    assert product["_current_rule_snapshot"]["route_display_name"] == "深圳旧名"
+    assert snapshot["freight_forwarder"] == route_id
+    assert snapshot["_snapshot_rule_full"]["forwarder"] == route_id
+    assert snapshot["_snapshot_rule_full"]["route_display_name"] == "深圳旧名"
+
+    extra = ForwarderManager(migrated).create(route("迁移后新增"))
+    assert migrated.get_route_rates(extra)["display_name"] == "迁移后新增"
+
+
+def test_atomic_settings_reject_case_insensitive_duplicate_names(tmp_path):
+    db = DatabaseManager(str(tmp_path / "duplicate.db"))
+    routes = db.get_all_routes()
+    before_rate = db.get_config("exchange_rate")
+    routes[0].update(display_name="Forwarder", is_enabled=True)
+    routes[1].update(display_name="forwarder", is_enabled=True)
+
+    with pytest.raises(ValueError, match="名称不能重复"):
+        db.save_settings_and_routes(
+            {"exchange_rate": 9.9, "default_tail_haul": 40},
+            routes,
+        )
+
+    assert db.get_config("exchange_rate") == before_rate
 
 
 def test_grams_are_not_treated_as_kg():

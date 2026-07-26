@@ -24,5 +24,16 @@ class ForwarderManager:
         route["is_enabled"] = bool(enabled)
         return self.update(route_id, route)
 
+    def is_referenced(self, route_id):
+        return self._db.route_is_referenced(route_id)
+
     def archive_or_delete(self, route_id):
         return self._db.archive_or_delete_route(route_id)
+
+    def restore(self, route_id):
+        route = self._db.get_route_rates(route_id)
+        if route is None:
+            raise ValueError("货代不存在")
+        route["is_archived"] = False
+        route["is_enabled"] = False
+        return self.update(route_id, route)
