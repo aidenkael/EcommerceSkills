@@ -71,6 +71,9 @@ class ProductPage(ttk.Frame):
         self._entry_widgets = {}
         self._weight_unit_version = "g_v1"
         self._weight_confirmed = True
+        self._saved_profit_rule = None
+        self._profit_rule_source = "none"  # frozen / current / none
+        self._profit_rule_explicitly_changed = False
         self._build_ui()
         self.new_product()
 
@@ -288,6 +291,9 @@ class ProductPage(ttk.Frame):
 
     def _on_profit_rule_changed(self):
         if not self._programmatic:
+            self._profit_rule_explicitly_changed = True
+            self._profit_rule_source = "none" if self._profit_rule_var.get() == "无" else "current"
+            self._saved_profit_rule = None
             self.recalculate()
 
     def recalculate(self):
@@ -303,6 +309,15 @@ class ProductPage(ttk.Frame):
 
     def _force_recalc(self):
         self._saved_rule_context = None; self._show_rate_banner = False; self._show_rate_notice(None)
+        if self._profit_rule_source == "frozen" and self._saved_profit_rule:
+            current = self._cfg.get_profit_adjustment_rule(self._saved_profit_rule.get("rule_id"))
+            if current and current.get("is_enabled") and not current.get("is_archived"):
+                self._profit_rule_source = "current"; self._saved_profit_rule = None
+                self._set_profit_rule_id(current["rule_id"])
+            else:
+                self._profit_rule_source = "none"; self._saved_profit_rule = None
+                self._set_profit_rule_id(None)
+                self._profit_adjustment_var.set("冻结规则已停用、归档或不存在；已切换为无规则")
         self._programmatic = True
         try: self._entry_vars["tail"].set(str(self._cfg.default_tail_haul))
         finally: self._programmatic = False
@@ -456,31 +471,30 @@ class ProductPage(ttk.Frame):
         else: var.set(f"{value:.2f}{suffix}")
 
     def _apply_profit_adjustment(self, base_profit, price_rmb, exchange_rate, logistics):
+        rule = self._saved_profit_rule if self._profit_rule_source == "frozen" else None
         rule_id = self._get_profit_rule_id()
-        # 优先使用冻结规则副本（历史商品），否则读取当前DB
-        rule = None
-        if rule_id and self._saved_rule_context:
-            frozen_pa = (self._saved_rule_context or {}).get("profit_adjustment") or {}
-            frozen_rule = frozen_pa.get("rule") if isinstance(frozen_pa, dict) else None
-            if frozen_rule and frozen_rule.get("rule_id") == rule_id:
-                rule = frozen_rule
-        if rule is None:
+        if rule is None and self._profit_rule_source == "current":
             rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
 
-        price_usd = _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get())
+        price_var = self._entry_vars.get("price_usd")
+        price_usd = _safe_float(price_var.get()) if price_var is not None else None
         if price_usd is None:
             price_usd = rmb_to_usd(price_rmb, exchange_rate)
+        cost_var = self._entry_vars.get("cost")
         result = evaluate_rule(rule, {"final_price_usd": price_usd, "final_price_rmb": price_rmb,
-                                      "product_cost_rmb": _safe_float(self._entry_vars.get("cost", tk.StringVar()).get()),
+                                      "product_cost_rmb": _safe_float(cost_var.get()) if cost_var is not None else None,
                                       "logistics_cost_rmb": logistics}, exchange_rate)
         snapshot = dict(rule) if rule else None
         self._computed["profit_adjustment"] = {"rule": snapshot, **result}
         self._computed["profit_before_adjustment"] = base_profit
         adjusted = base_profit + result.get("adjustment_rmb", 0.0) if base_profit is not None else None
         rate = adjusted / price_rmb * 100 if adjusted is not None and price_rmb and price_rmb > 0 else None
-        self._profit_adjustment_var.set(
-            "未选择规则" if not rule else f"{rule['display_name']}：{result['reason']}，调整 {result.get('adjustment_rmb', 0.0):.2f} RMB"
-        )
+        if not rule:
+            self._profit_adjustment_var.set("无规则")
+        else:
+            prefix = "历史冻结规则" if self._profit_rule_source == "frozen" else "当前规则"
+            sign = "+" if result.get("adjustment_rmb", 0) >= 0 else ""
+            self._profit_adjustment_var.set(f"{prefix}：{rule['display_name']}\n判断结果：{result['reason']}\n调整：{result.get('amount_original', 0):.2f} {result.get('currency') or rule.get('currency')}（{sign}{result.get('adjustment_rmb', 0):.2f} RMB）")
         return adjusted, rate
 
     def _show_rate_notice(self, diffs):
@@ -511,7 +525,8 @@ class ProductPage(ttk.Frame):
             self._forwarder_combo["values"] = [""] + list(self._route_display_to_key)
 
     def _get_profit_rule_id(self):
-        return self._profit_rule_display_to_id.get(getattr(self, "_profit_rule_var", tk.StringVar()).get())
+        var = getattr(self, "_profit_rule_var", None)
+        return self._profit_rule_display_to_id.get(var.get()) if var is not None else None
 
     def _set_profit_rule_id(self, rule_id):
         if not hasattr(self, "_profit_rule_var"):
@@ -520,18 +535,20 @@ class ProductPage(ttk.Frame):
         self._profit_rule_var.set((rule or {}).get("display_name") or "无")
 
     def _refresh_profit_rule_choices(self):
-        selected = getattr(self, "_profit_rule_var", tk.StringVar(value="无")).get()
+        profit_rule_var = getattr(self, "_profit_rule_var", None)
+        selected = profit_rule_var.get() if profit_rule_var is not None else "无"
         rules = self._cfg.get_enabled_profit_adjustment_rules()
         self._profit_rule_display_to_id = {rule["display_name"]: rule["rule_id"] for rule in rules}
         if hasattr(self, "_profit_rule_combo"):
             self._profit_rule_combo["values"] = ["无"] + list(self._profit_rule_display_to_id)
-        if selected not in self._profit_rule_display_to_id:
+        if self._profit_rule_source != "frozen" and selected not in self._profit_rule_display_to_id:
             self._profit_rule_var.set("无")
 
     def new_product(self):
         self._product_id = None; self._has_snapshot = False
         self._calc_direction = None; self._last_modified = None
         self._saved_rule_context = None; self._show_rate_banner = False
+        self._saved_profit_rule = None; self._profit_rule_source = "none"; self._profit_rule_explicitly_changed = False
         self._show_rate_notice(None); self._forwarder_var.set(""); self.clear_form()
         self._reset_profit_adjustment_display()
 
@@ -549,6 +566,7 @@ class ProductPage(ttk.Frame):
             for n, v in self._entry_vars.items(): v.set(str(self._cfg.default_tail_haul) if n == "tail" else "")
             self._var_name.set(""); self._var_notes.set(""); self._forwarder_var.set("")
             if hasattr(self, "_profit_rule_var"): self._profit_rule_var.set("无")
+            self._saved_profit_rule = None; self._profit_rule_source = "none"; self._profit_rule_explicitly_changed = False
             for k in self._result_labels: self._result_labels[k].set("—")
             self._computed = {}
         finally: self._programmatic = False
@@ -621,6 +639,13 @@ class ProductPage(ttk.Frame):
             self._set_forwarder_key(snapshot_rules.get("forwarder", ""))
         self._load_data(snap)
         self._saved_rule_context = snapshot_rules
+        adjustment = (snapshot_rules or {}).get("profit_adjustment") or {}
+        rule = adjustment.get("rule") if isinstance(adjustment, dict) else None
+        self._saved_profit_rule = dict(rule) if rule else None
+        self._profit_rule_source = "frozen" if rule else "none"
+        self._profit_rule_explicitly_changed = False
+        if hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set(f"历史冻结规则：{rule.get('display_name')}" if rule else "无")
         self._populate_results_from_saved(
             snap,
             snap.get("_calculation_results"),
@@ -646,7 +671,13 @@ class ProductPage(ttk.Frame):
         self._set_forwarder_key(fwd if fwd else "")
         adjustment = (self._saved_rule_context or {}).get("profit_adjustment") or {}
         adjustment_rule = adjustment.get("rule") if isinstance(adjustment, dict) else None
-        self._set_profit_rule_id((adjustment_rule or {}).get("rule_id"))
+        self._saved_profit_rule = dict(adjustment_rule) if adjustment_rule else None
+        self._profit_rule_source = "frozen" if adjustment_rule else "none"
+        self._profit_rule_explicitly_changed = False
+        if adjustment_rule and hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set(f"历史冻结规则：{adjustment_rule.get('display_name', '未命名规则')}")
+        elif hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set("无")
         self._show_rate_banner = True
         self._populate_results_from_saved(
             product,
@@ -742,6 +773,14 @@ class ProductPage(ttk.Frame):
             "profit_before_adjustment": profit_before_adj,
             "profit_adjustment": profit_adjustment,
         }
+        pa_rule = (profit_adjustment or {}).get("rule") if isinstance(profit_adjustment, dict) else None
+        if not hasattr(self, "_profit_adjustment_var"):
+            return
+        if not pa_rule:
+            self._profit_adjustment_var.set("无规则")
+        else:
+            source = "历史冻结规则" if self._profit_rule_source == "frozen" else "当前规则"
+            self._profit_adjustment_var.set(f"{source}：{pa_rule.get('display_name')}\n判断结果：{(profit_adjustment or {}).get('reason', '已保存')}\n调整：{(profit_adjustment or {}).get('amount_original', 0):.2f} {(profit_adjustment or {}).get('currency', pa_rule.get('currency'))}（{(profit_adjustment or {}).get('adjustment_rmb', 0):+.2f} RMB）")
 
     def _check_rate_changes(self):
         saved = self._saved_rule_context

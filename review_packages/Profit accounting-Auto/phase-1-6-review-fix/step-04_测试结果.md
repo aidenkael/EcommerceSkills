@@ -10,7 +10,7 @@ python -m pytest tests/ -v
 ## 结果
 
 ```
-208 passed in 3.59s
+213 passed in 2.34s
 ```
 
 ### 分布
@@ -33,9 +33,9 @@ python -m pytest tests/ -v
 | test_net_profit | 9 |
 | test_profit | 22 |
 | test_profit_adjustments | 6 |
-| **test_review_fixes** | **8** |
+| **test_review_fixes** | **13** |
 | test_unlimited_forwarders | 6 |
-| **合计** | **208** |
+| **合计** | **213** |
 
 ## 新增测试 (test_review_fixes.py)
 

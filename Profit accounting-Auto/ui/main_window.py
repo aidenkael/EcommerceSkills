@@ -45,15 +45,24 @@ class ProfitRulesDialog(tk.Toplevel):
         self._on_change = on_change
         self.title("利润调整规则"); self.geometry("900x500"); self.transient(parent); self.grab_set()
         self._selected_id = None
-        self._dirty = False  # 未保存修改标志
+        self._dirty = False; self._suspend_dirty = False
         self._vars = {key: tk.StringVar() for key in ("display_name", "condition_field", "condition_operator", "condition_value", "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base", "description")}
         self._enabled = tk.BooleanVar(value=True)
         # 跟踪修改
-        for var in self._vars.values():
-            var.trace_add("write", lambda *_, v=self: setattr(v, "_dirty", True))
-        self._enabled.trace_add("write", lambda *_, v=self: setattr(v, "_dirty", True))
+        for var in self._vars.values(): var.trace_add("write", lambda *_: self._mark_dirty())
+        self._enabled.trace_add("write", lambda *_: self._mark_dirty())
         self._build_ui()
         self._refresh()
+        self.protocol("WM_DELETE_WINDOW", self._try_close)
+
+    def _mark_dirty(self):
+        if not self._suspend_dirty: self._dirty = True
+
+    def _programmatic(self, action):
+        self._suspend_dirty = True
+        try: action()
+        finally: self._suspend_dirty = False
+        self._dirty = False
 
     def _build_ui(self):
         outer = ttk.Frame(self, padding=10); outer.pack(fill=tk.BOTH, expand=True)
@@ -62,7 +71,8 @@ class ProfitRulesDialog(tk.Toplevel):
         # 表单行 1
         r = 1
         ttk.Label(outer, text="名称：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
-        ttk.Entry(outer, textvariable=self._vars["display_name"], width=25).grid(row=r, column=1, columnspan=2, sticky=tk.EW, padx=3, pady=3)
+        self._name_entry = ttk.Entry(outer, textvariable=self._vars["display_name"], width=25)
+        self._name_entry.grid(row=r, column=1, columnspan=2, sticky=tk.EW, padx=3, pady=3)
         # 行 2：条件
         r += 1
         ttk.Label(outer, text="条件：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
@@ -75,7 +85,8 @@ class ProfitRulesDialog(tk.Toplevel):
         # 行 3：调整
         r += 1
         ttk.Label(outer, text="调整方向：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
-        ttk.Combobox(outer, textvariable=self._vars["adjustment_direction"], values=[v[1] for v in self.DIRECTIONS], state="readonly", width=15).grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3)
+        self._direction_cb = ttk.Combobox(outer, textvariable=self._vars["adjustment_direction"], values=[v[1] for v in self.DIRECTIONS], state="readonly", width=15)
+        self._direction_cb.grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3)
         ttk.Label(outer, text="类型：").grid(row=r, column=2, sticky=tk.W, padx=3, pady=3)
         self._type_cb = ttk.Combobox(outer, textvariable=self._vars["adjustment_type"], values=[v[1] for v in self.TYPES], state="readonly", width=12)
         self._type_cb.grid(row=r, column=3, sticky=tk.EW, padx=3, pady=3); self._type_cb.bind("<<ComboboxSelected>>", self._on_type_change)
@@ -83,7 +94,8 @@ class ProfitRulesDialog(tk.Toplevel):
         r += 1
         self._val_label = ttk.Label(outer, text="金额：")
         self._val_label.grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
-        ttk.Entry(outer, textvariable=self._vars["adjustment_value"], width=15).grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3)
+        self._adjustment_entry = ttk.Entry(outer, textvariable=self._vars["adjustment_value"], width=15)
+        self._adjustment_entry.grid(row=r, column=1, sticky=tk.EW, padx=3, pady=3)
         ttk.Label(outer, text="币种：").grid(row=r, column=2, sticky=tk.W, padx=3, pady=3)
         self._currency_cb = ttk.Combobox(outer, textvariable=self._vars["currency"], values=[v[1] for v in self.CURRENCIES], state="readonly", width=8)
         self._currency_cb.grid(row=r, column=3, sticky=tk.EW, padx=3, pady=3)
@@ -95,16 +107,21 @@ class ProfitRulesDialog(tk.Toplevel):
         # 行 6：说明
         r += 1
         ttk.Label(outer, text="说明：").grid(row=r, column=0, sticky=tk.W, padx=3, pady=3)
-        ttk.Entry(outer, textvariable=self._vars["description"], width=50).grid(row=r, column=1, columnspan=4, sticky=tk.EW, padx=3, pady=3)
+        self._description_entry = ttk.Entry(outer, textvariable=self._vars["description"], width=50)
+        self._description_entry.grid(row=r, column=1, columnspan=4, sticky=tk.EW, padx=3, pady=3)
         # 行 7
         r += 1
-        ttk.Checkbutton(outer, text="启用", variable=self._enabled).grid(row=r, column=0, sticky=tk.W)
+        self._enabled_check = ttk.Checkbutton(outer, text="启用", variable=self._enabled)
+        self._enabled_check.grid(row=r, column=0, sticky=tk.W)
         self._status_var = tk.StringVar(); ttk.Label(outer, textvariable=self._status_var, foreground="gray").grid(row=r, column=1, columnspan=4, sticky=tk.W)
         # 按钮
         r += 1
         bar = ttk.Frame(outer); bar.grid(row=r, column=0, columnspan=6, pady=8)
-        for text, cmd in [("新增", self._new), ("保存", self._save), ("归档/删除", self._archive), ("恢复", self._restore), ("关闭", self._try_close)]:
-            ttk.Button(bar, text=text, command=cmd).pack(side=tk.LEFT, padx=3)
+        self._new_button = ttk.Button(bar, text="新增", command=self._new); self._new_button.pack(side=tk.LEFT, padx=3)
+        self._save_button = ttk.Button(bar, text="保存", command=self._save); self._save_button.pack(side=tk.LEFT, padx=3)
+        self._archive_button = ttk.Button(bar, text="归档/删除", command=self._archive); self._archive_button.pack(side=tk.LEFT, padx=3)
+        self._restore_button = ttk.Button(bar, text="恢复", command=self._restore); self._restore_button.pack(side=tk.LEFT, padx=3)
+        self._close_button = ttk.Button(bar, text="关闭", command=self._try_close); self._close_button.pack(side=tk.LEFT, padx=3)
         outer.columnconfigure(1, weight=1); outer.columnconfigure(3, weight=1); outer.columnconfigure(5, weight=1)
 
     def _get_internal(self, display_str, mapping):
@@ -158,7 +175,7 @@ class ProfitRulesDialog(tk.Toplevel):
                 self._selected_id = self._manager.create(self._values())
             else:
                 self._manager.update(self._selected_id, self._values())
-            self._dirty = False; self._refresh()
+            self._dirty = False; self._refresh(); self._restore_list_selection(); self._load_current(); self._update_status()
             return True
         except ValueError as exc:
             messagebox.showerror("规则错误", str(exc), parent=self)
@@ -169,30 +186,35 @@ class ProfitRulesDialog(tk.Toplevel):
         self._list.delete(0, tk.END)
         for item in self._rows:
             prefix = "[归档] " if item["is_archived"] else ("[停用] " if not item["is_enabled"] else "")
-            cond = item.get("condition_field") or "无条件"
-            op = item.get("condition_operator") or ""
+            cond = self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件"
+            op = self._get_display(item.get("condition_operator"), self.OPERATORS) or ""
             cv = item.get("condition_value") or ""
             typ = "固定金额" if item.get("adjustment_type") == "fixed" else "百分比"
-            cur = item.get("currency") or ""
+            cur = self._get_display(item.get("currency"), self.CURRENCIES) or ""
             val = item.get("adjustment_value") or 0
             direction = "增加收入" if item.get("adjustment_direction") == "income" else "增加成本"
-            self._list.insert(tk.END, f"{prefix}{item['display_name']} | {cond} {op} {cv} | {direction}/{typ} {val} {cur}")
+            base = self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES)
+            amount = f"{base}的 {val}%" if item.get("adjustment_type") == "percent" else f"{val} {cur}"
+            self._list.insert(tk.END, f"{prefix}{item['display_name']} | {cond} {op} {cv} | {direction}/{typ} {amount}")
         if self._on_change: self._on_change()
 
     def _new(self):
         if not self._check_dirty("新建"): return
-        self._selected_id = None; self._dirty = False
+        self._selected_id = None; self._dirty = False; self._suspend_dirty = True
         defaults = {"display_name":"", "condition_field":"无条件", "condition_operator":"", "condition_value":"",
                     "adjustment_direction":"增加收入", "adjustment_type":"固定金额", "adjustment_value":"",
                     "currency":"美元", "percentage_base":"", "description":""}
         for key, value in defaults.items(): self._vars[key].set(value)
-        self._enabled.set(True); self._on_condition_change(); self._on_type_change()
+        self._enabled.set(True); self._on_condition_change(); self._on_type_change(); self._suspend_dirty = False; self._dirty = False
+        self._set_editor_read_only(False)
 
     def _select(self, _event):
         sel = self._list.curselection()
         if not sel: return
-        if not self._check_dirty("切换规则"): return
-        item = self._rows[sel[0]]; self._selected_id = item["rule_id"]
+        if not self._check_dirty("切换规则"):
+            self._restore_list_selection()
+            return
+        item = self._rows[sel[0]]; self._selected_id = item["rule_id"]; self._suspend_dirty = True
         self._vars["display_name"].set(item.get("display_name", ""))
         self._vars["condition_field"].set(self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件")
         self._vars["condition_operator"].set(self._get_display(item.get("condition_operator"), self.OPERATORS) or "")
@@ -204,11 +226,24 @@ class ProfitRulesDialog(tk.Toplevel):
         self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
         self._vars["description"].set(item.get("description", ""))
         self._enabled.set(item.get("is_enabled", True))
-        self._dirty = False; self._on_condition_change(); self._on_type_change()
+        self._dirty = False; self._on_condition_change(); self._on_type_change(); self._suspend_dirty = False; self._dirty = False
         self._update_status()
+
+    def _restore_list_selection(self):
+        """按稳定 rule_id 恢复列表选中项，避免取消切换后列表与表单不一致。"""
+        if not hasattr(self, "_list"):
+            return
+        self._list.selection_clear(0, tk.END)
+        for index, item in enumerate(getattr(self, "_rows", [])):
+            if item.get("rule_id") == self._selected_id:
+                self._list.selection_set(index)
+                self._list.activate(index)
+                self._list.see(index)
+                break
 
     def _load_current(self):
         """重新载入当前选中规则的数据库值"""
+        self._suspend_dirty = True
         if self._selected_id:
             item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
             if item:
@@ -223,6 +258,8 @@ class ProfitRulesDialog(tk.Toplevel):
                 self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
                 self._vars["description"].set(item.get("description", ""))
                 self._enabled.set(item.get("is_enabled", True))
+        self._suspend_dirty = False; self._dirty = False
+        self._update_status()
 
     def _update_status(self):
         item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None) if self._selected_id else None
@@ -232,6 +269,37 @@ class ProfitRulesDialog(tk.Toplevel):
             self._status_var.set("已停用")
         else:
             self._status_var.set("")
+        self._set_editor_read_only(bool(item and item.get("is_archived")))
+
+    def _set_editor_read_only(self, archived):
+        """归档规则只允许恢复或关闭；恢复后由调用方重新载入可编辑状态。"""
+        was_suspended = self._suspend_dirty
+        self._suspend_dirty = True
+        try:
+            normal = "disabled" if archived else "normal"
+            combo = "disabled" if archived else "readonly"
+            for widget in (getattr(self, "_name_entry", None), getattr(self, "_cond_val_entry", None),
+                           getattr(self, "_adjustment_entry", None), getattr(self, "_description_entry", None),
+                           getattr(self, "_enabled_check", None)):
+                if widget is not None:
+                    widget.config(state=normal)
+            for widget in (getattr(self, "_cond_cb", None), getattr(self, "_op_cb", None),
+                           getattr(self, "_direction_cb", None), getattr(self, "_type_cb", None),
+                           getattr(self, "_currency_cb", None), getattr(self, "_base_cb", None)):
+                if widget is not None:
+                    widget.config(state=combo)
+            # 条件/类型联动会对这些控件设置特殊状态；归档时必须覆盖为禁用。
+            if not archived:
+                self._on_condition_change()
+                self._on_type_change()
+            for widget, state in ((getattr(self, "_new_button", None), "disabled" if archived else "normal"),
+                                  (getattr(self, "_save_button", None), "disabled" if archived else "normal"),
+                                  (getattr(self, "_archive_button", None), "disabled" if archived else "normal"),
+                                  (getattr(self, "_restore_button", None), "normal" if archived else "disabled")):
+                if widget is not None:
+                    widget.config(state=state)
+        finally:
+            self._suspend_dirty = was_suspended
 
     def _values(self):
         is_archived = False
@@ -263,6 +331,7 @@ class ProfitRulesDialog(tk.Toplevel):
 
     def _archive(self):
         if not self._selected_id: return
+        if not self._check_dirty("归档/删除"): return
         item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
         name = item["display_name"] if item else self._selected_id
         if not messagebox.askyesno("确认", f"确定要归档或删除规则「{name}」吗？", parent=self): return
@@ -272,6 +341,7 @@ class ProfitRulesDialog(tk.Toplevel):
 
     def _restore(self):
         if not self._selected_id: return
+        if not self._check_dirty("恢复"): return
         item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
         name = item["display_name"] if item else self._selected_id
         if not messagebox.askyesno("确认", f"确定要恢复规则「{name}」吗？恢复后默认为停用状态。", parent=self): return

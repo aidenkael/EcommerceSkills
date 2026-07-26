@@ -4,12 +4,32 @@ Phase 1.6 review 修复测试
 覆盖：历史规则冻结、默认规则生命周期、归档保护、显示重置
 """
 
-import sys, os, shutil, tempfile
+import sys, os, shutil, tempfile, math
+from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database.db_manager import DatabaseManager
 from config.config_manager import ConfigManager
 from calculation import evaluate_rule
+from ui.main_window import ProfitRulesDialog
+from ui.product_page import ProductPage
+
+
+class _Var:
+    def __init__(self, value=""): self.value = value
+    def get(self): return self.value
+    def set(self, value): self.value = value
+
+
+class _Widget:
+    def __init__(self): self.state = None
+    def config(self, **kwargs): self.state = kwargs.get("state", self.state)
+
+
+class _Listbox:
+    def __init__(self): self.items = []
+    def delete(self, *_args): self.items.clear()
+    def insert(self, _index, value): self.items.append(value)
 
 
 class TestHistoricalRuleFrozen:
@@ -160,3 +180,107 @@ class TestFrozenRuleEvaluation:
                                        "product_cost_rmb": 50.0, "logistics_cost_rmb": 80.0}, 7.2)
         assert result["matched"] == True
         assert result["adjustment_rmb"] == 36.0
+
+    def test_product_page_uses_frozen_rule_after_rule_is_archived(self):
+        import tempfile
+        db = DatabaseManager(os.path.join(tempfile.mkdtemp(), "frozen.db")); cfg = ConfigManager(db)
+        current = db.get_enabled_profit_adjustment_rules()[0]
+        frozen = dict(current); frozen["adjustment_value"] = 2.99
+        current["adjustment_value"] = 3.99; db.save_profit_adjustment_rule(current, current["rule_id"])
+        db.archive_or_delete_profit_adjustment_rule(current["rule_id"])
+        page = object.__new__(ProductPage)
+        page._cfg = cfg; page._entry_vars = {"price_usd": _Var("28.99"), "cost": _Var("50")}
+        page._profit_adjustment_var = _Var(); page._computed = {}; page._saved_profit_rule = frozen
+        page._profit_rule_source = "frozen"; page._profit_rule_display_to_id = {}; page._profit_rule_var = _Var("历史冻结规则：SHEIN 29美元以下运费补贴")
+        adjusted, _rate = ProductPage._apply_profit_adjustment(page, 10.0, 208.728, 7.2, 20.0)
+        assert math.isclose(adjusted, 10.0 + 2.99 * 7.2)
+        assert "历史冻结规则" in page._profit_adjustment_var.get()
+        assert current["rule_id"] not in page._profit_rule_display_to_id.values()
+
+    def test_product_page_load_then_save_keeps_frozen_adjustment_snapshot(self):
+        """真实 ProductPage 加载/保存路径不应把冻结规则替换为下拉映射中的当前规则。"""
+        db = DatabaseManager(os.path.join(tempfile.mkdtemp(), "product-flow.db")); cfg = ConfigManager(db)
+        rule = dict(db.get_enabled_profit_adjustment_rules()[0]); rule["adjustment_value"] = 2.99
+        result = evaluate_rule(rule, {"final_price_usd": 28.99, "final_price_rmb": 208.728,
+                                      "product_cost_rmb": 50.0, "logistics_cost_rmb": 20.0}, 7.2)
+        adjustment = {"rule": rule, **result}
+        data = {"name": "冻结规则商品", "cost": 50.0, "domestic_shipping": 8.0,
+                "freight_forwarder": "yiwu", "head_haul_cost": 75.0, "fixed_service_fee": 6.0,
+                "tail_haul_cost": 40.0, "selling_price_rmb": 208.728, "selling_price_usd": 28.99,
+                "weight_unit_version": "g_v1"}
+        rules = {"forwarder": "yiwu", "head_haul_rate": 100.0, "fixed_service_fee": 6.0,
+                 "tail_haul_cost": 40.0, "exchange_rate": 7.2, "volume_divisor": 8000,
+                 "rule_version": 6, "weight_unit": "g_v1", "profit_adjustment": adjustment}
+        calc = {"profit_adjustment": adjustment, "profit_before_adjustment": 15.0,
+                "net_profit_amount": 15.0 + result["adjustment_rmb"]}
+        pid = db.save_product_state(data, rules, calc)
+
+        page = object.__new__(ProductPage)
+        page._db = db; page._cfg = cfg; page._product_id = None; page._has_snapshot = False
+        page._calc_direction = None; page._last_modified = None; page._programmatic = False
+        page._entry_vars = {"tail": _Var()}; page._var_name = _Var(); page._var_notes = _Var()
+        page._forwarder_var = _Var(); page._profit_rule_var = _Var(); page._profit_adjustment_var = _Var()
+        page._profit_rule_display_to_id = {}; page._result_labels = {key: _Var() for key in (
+            "vol_weight", "charge_weight", "head_haul", "total_logistics", "total_cost", "profit",
+            "profit_rate", "suggested_price", "converted_usd")}
+        page._show_rate_notice = lambda _diffs: None; page._check_rate_changes = lambda: None
+        page._get_invalid_list = lambda: []; page._gather_data = lambda: dict(data)
+
+        ProductPage.load_product(page, pid)
+        before = db.get_product(pid)["_current_rule_snapshot"]["profit_adjustment"]
+        with patch("ui.product_page.messagebox.showinfo"), patch("ui.product_page.messagebox.showerror"):
+            ProductPage.save_product(page)
+        after = db.get_product(pid)["_current_rule_snapshot"]["profit_adjustment"]
+        assert before == after
+        assert page._profit_rule_source == "frozen"
+        assert "历史冻结规则" in page._profit_adjustment_var.get()
+
+
+class TestProfitRulesDialogState:
+    def _dialog_with_widgets(self):
+        dialog = object.__new__(ProfitRulesDialog)
+        dialog._suspend_dirty = False; dialog._dirty = False
+        dialog._on_condition_change = lambda: None; dialog._on_type_change = lambda: None
+        for name in ("_name_entry", "_cond_val_entry", "_adjustment_entry", "_description_entry", "_enabled_check",
+                     "_cond_cb", "_op_cb", "_direction_cb", "_type_cb", "_currency_cb", "_base_cb",
+                     "_new_button", "_save_button", "_archive_button", "_restore_button"):
+            setattr(dialog, name, _Widget())
+        return dialog
+
+    def test_programmatic_dirty_guard_and_discard_reload(self):
+        dialog = self._dialog_with_widgets()
+        ProfitRulesDialog._mark_dirty(dialog)
+        assert dialog._dirty is True
+        dialog._dirty = False; dialog._suspend_dirty = True
+        ProfitRulesDialog._mark_dirty(dialog)
+        assert dialog._dirty is False
+        dialog._suspend_dirty = False; dialog._dirty = True
+        reloaded = []; dialog._load_current = lambda: reloaded.append(True)
+        with patch("ui.main_window.messagebox.askyesnocancel", return_value=False):
+            assert ProfitRulesDialog._check_dirty(dialog, "切换规则") is True
+        assert reloaded == [True]
+        assert dialog._dirty is False
+
+    def test_archived_rule_disables_every_edit_control_and_restore_reenables(self):
+        dialog = self._dialog_with_widgets()
+        ProfitRulesDialog._set_editor_read_only(dialog, True)
+        for name in ("_name_entry", "_cond_val_entry", "_adjustment_entry", "_description_entry", "_enabled_check",
+                     "_cond_cb", "_op_cb", "_direction_cb", "_type_cb", "_currency_cb", "_base_cb",
+                     "_new_button", "_save_button", "_archive_button"):
+            assert getattr(dialog, name).state == "disabled"
+        assert dialog._restore_button.state == "normal"
+        ProfitRulesDialog._set_editor_read_only(dialog, False)
+        assert dialog._name_entry.state == "normal"
+        assert dialog._cond_cb.state == "readonly"
+        assert dialog._restore_button.state == "disabled"
+
+    def test_rule_list_uses_chinese_labels_only(self):
+        dialog = object.__new__(ProfitRulesDialog)
+        dialog._manager = type("Manager", (), {"list": lambda _self, _all: [{
+            "rule_id": "r1", "display_name": "测试规则", "is_archived": False, "is_enabled": True,
+            "condition_field": "final_price_usd", "condition_operator": "<", "condition_value": 29,
+            "adjustment_direction": "income", "adjustment_type": "fixed", "adjustment_value": 2.99,
+            "currency": "USD", "percentage_base": None} ]})()
+        dialog._list = _Listbox(); dialog._on_change = None
+        ProfitRulesDialog._refresh(dialog)
+        assert dialog._list.items == ["测试规则 | 最终售价（美元） 小于 29 | 增加收入/固定金额 2.99 美元"]

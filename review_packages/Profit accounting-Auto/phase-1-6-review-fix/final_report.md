@@ -15,7 +15,7 @@
 | `ui/product_page.py` | 3处修改 | ① `_populate_results_from_saved` 恢复利润调整字段到 `_computed`；② `_apply_profit_adjustment` 优先使用冻结规则副本；③ `new_product`/`clear_form` 重置利润调整提示 |
 | `ui/main_window.py` | ProfitRulesDialog 重写 | 中文映射下拉框、字段联动、description字段、防丢失保护、归档保护 |
 | `database/db_manager.py` | 2处修改 | ① `_seed_current_data` 移除利润规则种子；② 新增 `_seed_profit_adjustment_rules_first_time` 仅新库种子 |
-| `tests/test_review_fixes.py` | 新增 | 8项复审修复测试 |
+| `tests/test_review_fixes.py` | 新增 | 13项复审修复测试 |
 
 ---
 
@@ -64,7 +64,7 @@
 
 ## 六、新增测试
 
-`tests/test_review_fixes.py` — 8项：
+`tests/test_review_fixes.py` — 13项：
 
 | 类 | 测试 | 验证 |
 |----|------|------|
@@ -81,7 +81,7 @@
 
 ## 七、测试总数
 
-**208 passed in 3.59s**
+**213 passed in 2.34s**
 
 ```
 python -m pytest tests/ -v
@@ -116,3 +116,26 @@ python -m pytest tests/ -v
 - 未保存修改弹窗（切换规则/新增/关闭时）
 - 归档规则保存按钮拦截提示
 - 归档规则恢复后默认为停用状态
+
+---
+
+## 十一、第二轮复审修复（2026-07-26）
+
+- 冻结利润规则现在保存为 ProductPage 独立副本；加载历史商品或还原首次快照后，不依赖启用规则下拉映射。即使当前规则改名、改金额、停用或归档，商品字段变化触发重算仍使用保存时副本。
+- 历史提示统一显示“历史冻结规则”、保存时名称、判断结果、原币调整金额与折合人民币；新商品/清空显示“未选择规则”，无规则历史商品显示“无规则”。
+- 用户明确选择“无”会冻结无规则；明确选择当前规则会保存其新副本。“用当前规则重算”遇到停用、归档或删除的对应规则会提示并切换为无规则。
+- 利润规则编辑器增加程序化赋值 dirty 保护、取消列表切换时按 `rule_id` 恢复选择、关闭窗口（含 `WM_DELETE_WINDOW` / Alt+F4）保护、归档/恢复保护，以及归档规则的完整只读控件状态。
+- 规则列表不再显示内部代码；条件、比较方式、调整方向、类型、币种和百分比基数均为中文。
+
+### 本轮新增测试和结果
+
+- ProductPage 方法路径：冻结副本在当前规则改价并归档后仍以 2.99 USD 计算；真实加载后不修改直接保存时快照不变。
+- ProfitRulesDialog 方法路径：程序赋值不产生假 dirty、放弃修改会载入数据库值、归档时编辑控件禁用、恢复后重新可编辑、列表只显示中文。
+- `python -m pytest ".\\Profit accounting-Auto\\tests" -q`：**213 passed**。
+- `python -m compileall ".\\Profit accounting-Auto"`：通过。
+- `git diff --check`：通过。
+
+### GUI 与打包状态
+
+- **未完成真实 GUI 验收**；未将命令行测试表述为 GUI 通过。
+- 未打包；未安装 PyInstaller；未进入 OCR、Phase 2 或 master。
