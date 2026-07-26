@@ -1,0 +1,5 @@
+{
+  "project_name": "Profit accounting-Auto",
+  "test_command": "\"Profit accounting-Auto/.venv-311/Scripts/python.exe\" -m pytest \"Profit accounting-Auto/tests\" -q",
+  "default_phase": "current"
+}

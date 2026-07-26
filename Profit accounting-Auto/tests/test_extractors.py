@@ -337,3 +337,38 @@ class TestInterface:
         assert extract_shein is not None
         assert extract_cost is not None
         assert extract_dim is not None
+
+
+# ─── 跨图片同文本不串组回归（步骤0合约核对）──────────────
+
+class TestCrossImageGrouping:
+    """跨图片相同尺寸文本不得误并为同组。
+
+    S3 的 make_group_id(content) 已包含 source_image，
+    因此不同图片的相同文本会生成不同 group_id，不会串组。
+    """
+
+    def test_same_triple_different_image_different_group(self):
+        """两张图都有 10×20×30cm，group_id 必须不同。"""
+        r1 = extract_dim([_line("10×20×30cm")], "imgA")
+        r2 = extract_dim([_line("10×20×30cm")], "imgB")
+        g1 = {c.measurement_group_id for c in r1}
+        g2 = {c.measurement_group_id for c in r2}
+        assert g1 and g2
+        assert g1.isdisjoint(g2)
+
+    def test_same_weight_different_image_different_group(self):
+        """两张图都有 500g，重量候选 source_image 不同且均保留。"""
+        r1 = extract_dim([_line("500g")], "imgA")
+        r2 = extract_dim([_line("500g")], "imgB")
+        assert len(r1) == 1 and len(r2) == 1
+        assert r1[0].source_image == "imgA"
+        assert r2[0].source_image == "imgB"
+
+    def test_same_text_same_image_dedup(self):
+        """同一张图完全相同的重复行 group_id 相同，可去重。"""
+        lines = [_line("10×20×30cm"), _line("10×20×30cm")]
+        r = extract_dim(lines, "imgA")
+        gids = {c.measurement_group_id for c in r}
+        assert len(r) == 3  # 一组三元去重后
+        assert len(gids) == 1
