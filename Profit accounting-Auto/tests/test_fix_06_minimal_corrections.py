@@ -309,3 +309,29 @@ def test_settings_restore_action_keeps_route_disabled_and_refreshes():
         ("rendered", None),
     ]
     assert events[3] == ("selected", dialog._active_tab)
+
+
+def test_settings_refresh_guard_defaults_to_cancel_and_never_discards_changes():
+    dialog = object.__new__(SettingsDialog)
+    dialog._has_unsaved_changes = lambda: True
+    dialog._save = lambda **_kwargs: pytest.fail("取消不能保存或放弃修改")
+
+    with patch("ui.main_window.messagebox.askyesnocancel", return_value=None) as prompt:
+        assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is False
+
+    assert prompt.call_args.kwargs["default"] == "cancel"
+
+
+def test_settings_refresh_guard_supports_save_or_explicit_discard():
+    dialog = object.__new__(SettingsDialog)
+    dialog._has_unsaved_changes = lambda: True
+    calls = []
+    dialog._save = lambda **kwargs: calls.append(kwargs) or True
+
+    with patch("ui.main_window.messagebox.askyesnocancel", return_value=True):
+        assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is True
+    assert calls == [{"close_after": False}]
+
+    with patch("ui.main_window.messagebox.askyesnocancel", return_value=False):
+        assert SettingsDialog._confirm_refresh_with_unsaved_changes(dialog) is True
+    assert calls == [{"close_after": False}]

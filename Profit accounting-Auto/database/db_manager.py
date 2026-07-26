@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS product_snapshots (
     rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS route_config (
-    route_id TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+    route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0), display_name TEXT NOT NULL,
     head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL,
     volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1,
     is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '',
@@ -154,7 +154,7 @@ class DatabaseManager:
                 fixed_service_fee REAL, tail_haul_cost REAL, volume_divisor INTEGER DEFAULT 8000,
                 rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
                 FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE)""",
-            "CREATE TABLE IF NOT EXISTS route_config (route_id TEXT PRIMARY KEY, display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS route_config (route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0), display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         ]:
             conn.execute(stmt)
@@ -210,31 +210,9 @@ class DatabaseManager:
         for column, column_type in snapshot_columns.items():
             self._add_column_if_missing(conn, "product_snapshots", column, column_type)
 
-        route_columns = {"route_id": "TEXT", "route_key": "TEXT", "display_name": "TEXT", "volume_divisor": "REAL DEFAULT 8000", "is_enabled": "INTEGER DEFAULT 1", "is_archived": "INTEGER DEFAULT 0", "description": "TEXT DEFAULT ''", "created_at": "TEXT", "updated_at": "TEXT"}
-        for column, column_type in route_columns.items():
-            self._add_column_if_missing(conn, "route_config", column, column_type)
-        now = datetime.now()
-        legacy_to_id = {}
-        for index, row in enumerate(conn.execute("SELECT rowid,* FROM route_config ORDER BY rowid").fetchall()):
-            d = dict(row)
-            old = d.get("route_key") or d.get("forwarder")
-            route_id = d.get("route_id") or str(uuid.uuid4())
-            row_time = (now + timedelta(microseconds=index)).isoformat()
-            fallback_name = {"shenzhen": "深圳", "yiwu": "义乌"}.get(old, old or route_id)
-            conn.execute(
-                """UPDATE route_config
-                   SET route_id=?, display_name=COALESCE(display_name, ?),
-                       volume_divisor=COALESCE(volume_divisor,8000),
-                       is_enabled=COALESCE(is_enabled,1),
-                       is_archived=COALESCE(is_archived,0),
-                       created_at=COALESCE(created_at,?),
-                       updated_at=COALESCE(updated_at,?)
-                   WHERE rowid=?""",
-                (route_id, fallback_name, row_time, row_time, d["rowid"]),
-            )
-            if old and old != route_id:
-                legacy_to_id[old] = route_id
-                conn.execute("UPDATE products SET freight_forwarder=? WHERE freight_forwarder=?", (route_id, old))
+        legacy_to_id = self._rebuild_route_config_v5(conn)
+        for legacy_id, route_id in legacy_to_id.items():
+            conn.execute("UPDATE products SET freight_forwarder=? WHERE freight_forwarder=?", (route_id, legacy_id))
 
         self._migrate_route_references(conn, legacy_to_id)
         if not conn.execute("SELECT 1 FROM route_config LIMIT 1").fetchone():
@@ -253,6 +231,49 @@ class DatabaseManager:
             "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?,?)",
             (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()),
         )
+
+    def _rebuild_route_config_v5(self, conn):
+        """Rebuild v4's route-key table so route_id is a real non-null PK.
+
+        SQLite cannot add a primary-key constraint with ALTER TABLE.  Building
+        a replacement table inside the caller's migration transaction keeps
+        this operation atomic and makes a successfully migrated v5 database a
+        no-op on subsequent opens.
+        """
+        info = conn.execute("PRAGMA table_info(route_config)").fetchall()
+        is_v5_pk = any(row["name"] == "route_id" and row["pk"] == 1 and row["notnull"] == 1 for row in info)
+        if is_v5_pk:
+            return {}
+        rows = [dict(row) for row in conn.execute("SELECT * FROM route_config").fetchall()]
+        now = datetime.now()
+        records, legacy_to_id = [], {}
+        for index, row in enumerate(rows):
+            legacy_id = row.get("route_key") or row.get("forwarder")
+            route_id = row.get("route_id") or str(uuid.uuid4())
+            if not str(route_id).strip():
+                route_id = str(uuid.uuid4())
+            if legacy_id and legacy_id != route_id:
+                legacy_to_id[legacy_id] = route_id
+            timestamp = (now + timedelta(microseconds=index)).isoformat()
+            name = row.get("display_name") or {"shenzhen": "深圳", "yiwu": "义乌"}.get(legacy_id, legacy_id or route_id)
+            records.append((route_id, name, row.get("head_haul_rate"), row.get("fixed_service_fee"),
+                            row.get("volume_divisor") or 8000, int(row.get("is_enabled", 1) if row.get("is_enabled") is not None else 1),
+                            int(row.get("is_archived", 0) if row.get("is_archived") is not None else 0),
+                            row.get("description") or "", row.get("created_at") or timestamp,
+                            row.get("updated_at") or timestamp))
+        conn.execute("DROP TABLE IF EXISTS route_config_v5_rebuild")
+        conn.execute("""CREATE TABLE route_config_v5_rebuild (
+            route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0),
+            display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL,
+            fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000,
+            is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0,
+            description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+        conn.executemany("""INSERT INTO route_config_v5_rebuild
+            (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,is_archived,description,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""", records)
+        conn.execute("DROP TABLE route_config")
+        conn.execute("ALTER TABLE route_config_v5_rebuild RENAME TO route_config")
+        return legacy_to_id
 
     def _backfill_current_state(self, conn):
         """从旧首次快照回填缺失的当前状态；无法可靠恢复的字段保持缺失。"""
@@ -320,6 +341,10 @@ class DatabaseManager:
         self._require_columns(conn, "products", required_product_columns)
         self._require_columns(conn, "product_snapshots", required_snapshot_columns)
         self._require_columns(conn, "route_config", required_route_columns)
+        route_info = {row["name"]: row for row in conn.execute("PRAGMA table_info(route_config)")}
+        route_id_info = route_info["route_id"]
+        if route_id_info["pk"] != 1 or route_id_info["notnull"] != 1:
+            raise RuntimeError("route_config.route_id 必须为非空主键")
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise RuntimeError(f"数据库完整性检查失败: {integrity}")

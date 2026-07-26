@@ -100,6 +100,14 @@ def test_v4_keys_migrate_to_uuid_in_products_and_snapshots(tmp_path):
     route_id = routes["深圳旧名"]["route_id"]
     assert migrated.get_schema_version() == 5
     assert all(len(r["route_id"]) == 36 for r in migrated.get_all_routes())
+    conn = sqlite3.connect(path)
+    route_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(route_config)")}
+    assert route_columns["route_id"][3] == 1  # NOT NULL
+    assert route_columns["route_id"][5] == 1  # PRIMARY KEY
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO route_config SELECT * FROM route_config LIMIT 1")
+    conn.rollback()
+    conn.close()
     product = migrated.get_product("p1")
     snapshot = migrated.get_snapshot("p1")
     assert product["freight_forwarder"] == route_id
@@ -111,6 +119,8 @@ def test_v4_keys_migrate_to_uuid_in_products_and_snapshots(tmp_path):
 
     extra = ForwarderManager(migrated).create(route("迁移后新增"))
     assert migrated.get_route_rates(extra)["display_name"] == "迁移后新增"
+    reopened = DatabaseManager(path)
+    assert reopened.get_product("p1")["freight_forwarder"] == route_id
 
 
 def test_atomic_settings_reject_case_insensitive_duplicate_names(tmp_path):

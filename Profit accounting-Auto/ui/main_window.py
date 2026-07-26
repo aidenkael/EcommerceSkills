@@ -182,7 +182,41 @@ class SettingsDialog(tk.Toplevel):
         self._var_rate.set(str(self._cfg.exchange_rate))
         self._var_tail.set(str(self._cfg.default_tail_haul))
 
-    def _save(self):
+    def _has_unsaved_changes(self):
+        """Compare editable widgets with persisted settings without mutating them."""
+        if not hasattr(self, "_var_rate") or not hasattr(self, "_route_vars"):
+            return False
+        if self._var_rate.get().strip() != str(self._cfg.exchange_rate):
+            return True
+        if self._var_tail.get().strip() != str(self._cfg.default_tail_haul):
+            return True
+        for route_id, vars_ in self._route_vars.items():
+            route = self._cfg.get_route_rates(route_id)
+            if route is None:
+                return True
+            for key in ("display_name", "head_haul_rate", "fixed_service_fee", "volume_divisor"):
+                if vars_[key].get().strip() != str(route[key]):
+                    return True
+            if bool(vars_["is_enabled"].get()) != bool(route["is_enabled"]):
+                return True
+        return False
+
+    def _confirm_refresh_with_unsaved_changes(self):
+        if not self._has_unsaved_changes():
+            return True
+        choice = messagebox.askyesnocancel(
+            "存在未保存修改",
+            "当前设置有未保存修改。\n是：保存并继续；否：放弃修改并继续；取消：留在当前页面。",
+            parent=self,
+            default="cancel",
+        )
+        if choice is None:
+            return False
+        if choice:
+            return self._save(close_after=False)
+        return True
+
+    def _save(self, close_after=True):
         try:
             rate = float(self._var_rate.get())
             if not math.isfinite(rate) or rate <= 0:
@@ -194,7 +228,9 @@ class SettingsDialog(tk.Toplevel):
                 self._cfg.exchange_rate = rate; self._cfg.default_tail_haul = tail
                 if self._on_save: self._on_save()
                 messagebox.showinfo("提示", "设置已保存。")
-                self.destroy(); return
+                if close_after:
+                    self.destroy()
+                return True
             routes = []
             enabled_names = []
             for route_id, vars_ in self._route_vars.items():
@@ -213,13 +249,17 @@ class SettingsDialog(tk.Toplevel):
             self._cfg.save_settings_and_routes(rate, tail, routes)
         except (ValueError, RuntimeError) as exc:
             messagebox.showerror("输入错误", str(exc), parent=self)
-            return
+            return False
         if self._on_save:
             self._on_save()
         messagebox.showinfo("提示", "设置已保存。", parent=self)
-        self.destroy()
+        if close_after:
+            self.destroy()
+        return True
 
     def _add_route(self):
+        if not self._confirm_refresh_with_unsaved_changes():
+            return
         name = simpledialog.askstring("新增货代", "货代名称：", parent=self)
         if name is None:
             return
@@ -242,6 +282,8 @@ class SettingsDialog(tk.Toplevel):
         )
 
     def _archive_or_delete(self, route_id):
+        if not self._confirm_refresh_with_unsaved_changes():
+            return
         route = self._cfg.get_route_rates(route_id)
         if route is None:
             messagebox.showerror("操作失败", "货代不存在。", parent=self)
@@ -276,6 +318,8 @@ class SettingsDialog(tk.Toplevel):
         )
 
     def _restore_route(self, route_id):
+        if not self._confirm_refresh_with_unsaved_changes():
+            return
         route = self._cfg.get_route_rates(route_id)
         if route is None:
             messagebox.showerror("操作失败", "货代不存在。", parent=self)
