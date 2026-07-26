@@ -99,7 +99,7 @@ def test_v4_keys_migrate_to_uuid_in_products_and_snapshots(tmp_path):
     migrated = DatabaseManager(path)
     routes = {route["display_name"]: route for route in migrated.get_all_routes()}
     route_id = routes["深圳旧名"]["route_id"]
-    assert migrated.get_schema_version() == 6
+    assert migrated.get_schema_version() == 7
     assert all(len(r["route_id"]) == 36 for r in migrated.get_all_routes())
     conn = sqlite3.connect(path)
     route_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(route_config)")}
@@ -158,7 +158,7 @@ def test_legacy_non_strict_v5_migrates_to_v6_without_changing_uuid_or_snapshots(
     conn = sqlite3.connect(path)
     info = {row[1]: row for row in conn.execute("PRAGMA table_info(route_config)")}
     conn.close()
-    assert db.get_schema_version() == 6
+    assert db.get_schema_version() == 7
     assert info["route_id"][3] == 1 and info["route_id"][5] == 1
     assert db.get_product("p-v5")["freight_forwarder"] == route_id
     assert db.get_product("p-v5")["_current_rule_snapshot"]["route_display_name"] == "V5旧货代"

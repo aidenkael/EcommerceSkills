@@ -67,6 +67,15 @@ class ConfigManager:
     def get_enabled_routes(self) -> list[dict]:
         return self._db.get_enabled_routes()
 
+    def get_profit_adjustment_rules(self, include_archived=True):
+        return self._db.get_profit_adjustment_rules(include_archived)
+
+    def get_enabled_profit_adjustment_rules(self):
+        return self._db.get_enabled_profit_adjustment_rules()
+
+    def get_profit_adjustment_rule(self, rule_id):
+        return self._db.get_profit_adjustment_rule(rule_id)
+
     def save_settings_and_routes(self, exchange_rate, default_tail_haul, routes):
         self._db.save_settings_and_routes(
             {"exchange_rate": exchange_rate, "default_tail_haul": default_tail_haul}, routes

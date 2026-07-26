@@ -18,7 +18,7 @@ from calculation import (
     total_logistics_cost, known_logistics_subtotal,
     total_cost, known_total_cost_subtotal,
     profit_amount, profit_rate, suggested_price_from_rate,
-    net_profit_amount, net_profit_rate, rmb_to_usd, usd_to_rmb,
+    net_profit_amount, net_profit_rate, rmb_to_usd, usd_to_rmb, evaluate_rule,
     compare_rule_contexts,
 )
 from config.config_manager import VOLUME_DIVISOR, FORWARDER_LABELS
@@ -148,6 +148,14 @@ class ProductPage(ttk.Frame):
         self._var_target_rate = self._make_number_entry(pf, "目标净利率 (%)：", r, "target_rate"); r += 1
         self._var_promo_rate = self._make_number_entry(pf, "推广预留比例 (%)：", r, "promo_rate"); r += 1
 
+        pr = ttk.Frame(pf); pr.grid(row=r, column=0, columnspan=2, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(pr, text="利润调整规则：").pack(side=tk.LEFT)
+        self._profit_rule_var = tk.StringVar(value="无")
+        self._profit_rule_combo = ttk.Combobox(pr, textvariable=self._profit_rule_var, state="readonly", width=24)
+        self._profit_rule_combo.pack(side=tk.LEFT, padx=5)
+        self._profit_rule_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_profit_rule_changed())
+        self._refresh_profit_rule_choices(); r += 1
+
         self._make_section(pf, "备注", r); r += 1
         self._var_notes = tk.StringVar()
         ttk.Entry(pf, textvariable=self._var_notes, width=46).grid(row=r, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=2); r += 1
@@ -169,6 +177,9 @@ class ProductPage(ttk.Frame):
             ttk.Label(frm, text=label, width=18).pack(side=tk.LEFT)
             var = tk.StringVar(value="—"); ttk.Label(frm, textvariable=var, font=("", 10, "bold")).pack(side=tk.LEFT)
             self._result_labels[key] = var
+
+        self._profit_adjustment_var = tk.StringVar(value="未选择规则")
+        ttk.Label(parent, textvariable=self._profit_adjustment_var, foreground="#336699", wraplength=280).pack(anchor=tk.W, padx=5, pady=5)
 
     # ─── 规则上下文 ────────────────────────────────────────
 
@@ -274,6 +285,10 @@ class ProductPage(ttk.Frame):
         if self._programmatic: return
         self._saved_rule_context = None; self._show_rate_banner = False
         self._show_rate_notice(None); self.recalculate()
+
+    def _on_profit_rule_changed(self):
+        if not self._programmatic:
+            self.recalculate()
 
     def recalculate(self):
         if self._programmatic: return
@@ -405,7 +420,7 @@ class ProductPage(ttk.Frame):
                 self._set_result("converted_usd", converted, " $")
                 self._computed["converted_usd"] = converted
                 if price_rmb is not None and price_rmb > 0:
-                    np = net_profit_amount(price_rmb, tc, p_rate); npr = net_profit_rate(price_rmb, tc, p_rate)
+                    np = net_profit_amount(price_rmb, tc, p_rate); np, npr = self._apply_profit_adjustment(np, price_rmb, exchange_rate, logistics)
                     self._set_result("profit", np, " 元"); self._set_result("profit_rate", npr, " %")
                     self._computed["profit"] = np; self._computed["profit_rate"] = npr
                     u = rmb_to_usd(price_rmb, exchange_rate)
@@ -415,7 +430,7 @@ class ProductPage(ttk.Frame):
                     self._computed["profit"] = None; self._computed["profit_rate"] = None
         else:
             if price_rmb is not None and price_rmb > 0:
-                np = net_profit_amount(price_rmb, tc, p_rate); npr = net_profit_rate(price_rmb, tc, p_rate)
+                np = net_profit_amount(price_rmb, tc, p_rate); np, npr = self._apply_profit_adjustment(np, price_rmb, exchange_rate, logistics)
                 self._set_result("profit", np, " 元"); self._set_result("profit_rate", npr, " %")
                 self._computed["profit"] = np; self._computed["profit_rate"] = npr
                 u = rmb_to_usd(price_rmb, exchange_rate)
@@ -439,6 +454,25 @@ class ProductPage(ttk.Frame):
             else: var.set("数据不足")
         elif partial: var.set(f"≥{value:.2f}{suffix}(估算)")
         else: var.set(f"{value:.2f}{suffix}")
+
+    def _apply_profit_adjustment(self, base_profit, price_rmb, exchange_rate, logistics):
+        rule_id = self._get_profit_rule_id()
+        rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
+        price_usd = _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get())
+        if price_usd is None:
+            price_usd = rmb_to_usd(price_rmb, exchange_rate)
+        result = evaluate_rule(rule, {"final_price_usd": price_usd, "final_price_rmb": price_rmb,
+                                      "product_cost_rmb": _safe_float(self._entry_vars.get("cost", tk.StringVar()).get()),
+                                      "logistics_cost_rmb": logistics}, exchange_rate)
+        snapshot = dict(rule) if rule else None
+        self._computed["profit_adjustment"] = {"rule": snapshot, **result}
+        self._computed["profit_before_adjustment"] = base_profit
+        adjusted = base_profit + result.get("adjustment_rmb", 0.0) if base_profit is not None else None
+        rate = adjusted / price_rmb * 100 if adjusted is not None and price_rmb and price_rmb > 0 else None
+        self._profit_adjustment_var.set(
+            "未选择规则" if not rule else f"{rule['display_name']}：{result['reason']}，调整 {result.get('adjustment_rmb', 0.0):.2f} RMB"
+        )
+        return adjusted, rate
 
     def _show_rate_notice(self, diffs):
         if diffs:
@@ -467,6 +501,24 @@ class ProductPage(ttk.Frame):
         if hasattr(self, "_forwarder_combo"):
             self._forwarder_combo["values"] = [""] + list(self._route_display_to_key)
 
+    def _get_profit_rule_id(self):
+        return self._profit_rule_display_to_id.get(getattr(self, "_profit_rule_var", tk.StringVar()).get())
+
+    def _set_profit_rule_id(self, rule_id):
+        if not hasattr(self, "_profit_rule_var"):
+            return
+        rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
+        self._profit_rule_var.set((rule or {}).get("display_name") or "无")
+
+    def _refresh_profit_rule_choices(self):
+        selected = getattr(self, "_profit_rule_var", tk.StringVar(value="无")).get()
+        rules = self._cfg.get_enabled_profit_adjustment_rules()
+        self._profit_rule_display_to_id = {rule["display_name"]: rule["rule_id"] for rule in rules}
+        if hasattr(self, "_profit_rule_combo"):
+            self._profit_rule_combo["values"] = ["无"] + list(self._profit_rule_display_to_id)
+        if selected not in self._profit_rule_display_to_id:
+            self._profit_rule_var.set("无")
+
     def new_product(self):
         self._product_id = None; self._has_snapshot = False
         self._calc_direction = None; self._last_modified = None
@@ -481,6 +533,7 @@ class ProductPage(ttk.Frame):
         try:
             for n, v in self._entry_vars.items(): v.set(str(self._cfg.default_tail_haul) if n == "tail" else "")
             self._var_name.set(""); self._var_notes.set(""); self._forwarder_var.set("")
+            if hasattr(self, "_profit_rule_var"): self._profit_rule_var.set("无")
             for k in self._result_labels: self._result_labels[k].set("—")
             self._computed = {}
         finally: self._programmatic = False
@@ -498,6 +551,7 @@ class ProductPage(ttk.Frame):
             "forwarder": self._computed.get("forwarder"),
             "rule_version": self._computed.get("rule_version"),
             "weight_unit": getattr(self, "_weight_unit_version", "g_v1"),
+            "profit_adjustment": self._computed.get("profit_adjustment"),
         }
 
     def _build_calculation_snapshot(self):
@@ -514,6 +568,8 @@ class ProductPage(ttk.Frame):
             "net_profit_rate": self._computed.get("profit_rate"),
             "suggested_price_rmb": self._computed.get("suggested_price"),
             "converted_usd": self._computed.get("converted_usd"),
+            "profit_before_adjustment": self._computed.get("profit_before_adjustment"),
+            "profit_adjustment": self._computed.get("profit_adjustment"),
         }
 
     def save_product(self):
@@ -573,6 +629,9 @@ class ProductPage(ttk.Frame):
             if self._saved_rule_context else product.get("freight_forwarder")
         )
         self._set_forwarder_key(fwd if fwd else "")
+        adjustment = (self._saved_rule_context or {}).get("profit_adjustment") or {}
+        adjustment_rule = adjustment.get("rule") if isinstance(adjustment, dict) else None
+        self._set_profit_rule_id((adjustment_rule or {}).get("rule_id"))
         self._show_rate_banner = True
         self._populate_results_from_saved(
             product,

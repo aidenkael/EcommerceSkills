@@ -24,8 +24,8 @@ class TestDatabase:
         import shutil
         shutil.rmtree(cls.tmpdir, ignore_errors=True)
 
-    def test_schema_version_is_6(self):
-        assert self.db.get_schema_version() == 6
+    def test_schema_version_is_7(self):
+        assert self.db.get_schema_version() == 7
 
     def test_config_defaults(self):
         assert float(self.db.get_config("exchange_rate", "0")) == 7.20

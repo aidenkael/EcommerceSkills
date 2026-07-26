@@ -16,6 +16,59 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from .product_page import ProductPage
 from .history_page import HistoryPage
 from config.forwarder_manager import ForwarderManager
+from config.profit_adjustment_manager import ProfitAdjustmentManager
+
+
+class ProfitRulesDialog(tk.Toplevel):
+    """Compact CRUD editor for the intentionally limited Phase 1.6 rule model."""
+    def __init__(self, parent, config_manager, on_change=None):
+        super().__init__(parent); self._cfg = config_manager; self._manager = ProfitAdjustmentManager(config_manager._db); self._on_change = on_change
+        self.title("利润调整规则"); self.geometry("820x430"); self.transient(parent); self.grab_set()
+        self._selected_id = None; self._vars = {key: tk.StringVar() for key in ("display_name", "condition_field", "condition_operator", "condition_value", "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base")}; self._enabled = tk.BooleanVar(value=True)
+        outer = ttk.Frame(self, padding=10); outer.pack(fill=tk.BOTH, expand=True)
+        self._list = tk.Listbox(outer, height=9); self._list.grid(row=0, column=0, columnspan=5, sticky="nsew"); self._list.bind("<<ListboxSelect>>", self._select)
+        labels = [("display_name", "名称"), ("condition_field", "条件字段"), ("condition_operator", "比较"), ("condition_value", "阈值"), ("adjustment_direction", "方向"), ("adjustment_type", "类型"), ("adjustment_value", "金额/比例"), ("currency", "币种"), ("percentage_base", "百分比基数")]
+        for index, (key, label) in enumerate(labels):
+            row, col = 1 + index // 3, (index % 3) * 2
+            ttk.Label(outer, text=label).grid(row=row, column=col, sticky=tk.W, padx=3, pady=3)
+            ttk.Entry(outer, textvariable=self._vars[key], width=18).grid(row=row, column=col + 1, sticky=tk.EW, padx=3, pady=3)
+        ttk.Checkbutton(outer, text="启用", variable=self._enabled).grid(row=4, column=0, sticky=tk.W)
+        bar = ttk.Frame(outer); bar.grid(row=5, column=0, columnspan=6, pady=8)
+        for text, command in [("新增", self._new), ("保存", self._save), ("归档/删除", self._archive), ("恢复", self._restore), ("关闭", self.destroy)]: ttk.Button(bar, text=text, command=command).pack(side=tk.LEFT, padx=3)
+        outer.columnconfigure(1, weight=1); outer.columnconfigure(3, weight=1); outer.columnconfigure(5, weight=1); self._refresh()
+
+    def _refresh(self):
+        self._rows = self._manager.list(True); self._list.delete(0, tk.END)
+        for item in self._rows: self._list.insert(tk.END, f"{'[归档] ' if item['is_archived'] else ''}{item['display_name']} | {item['condition_field'] or '无条件'} | {item['adjustment_direction']}/{item['adjustment_type']} {item['adjustment_value']} {item['currency']}")
+        if self._on_change: self._on_change()
+
+    def _new(self):
+        self._selected_id = None
+        defaults = {"display_name":"", "condition_field":"final_price_usd", "condition_operator":"<", "condition_value":"", "adjustment_direction":"income", "adjustment_type":"fixed", "adjustment_value":"", "currency":"USD", "percentage_base":""}
+        for key, value in defaults.items(): self._vars[key].set(value)
+        self._enabled.set(True)
+
+    def _select(self, _event):
+        selected = self._list.curselection()
+        if not selected: return
+        item = self._rows[selected[0]]; self._selected_id = item["rule_id"]
+        for key, var in self._vars.items(): var.set("" if item.get(key) is None else str(item.get(key)))
+        self._enabled.set(item["is_enabled"])
+
+    def _values(self):
+        data = {key: var.get().strip() or None for key, var in self._vars.items()}; data["is_enabled"] = self._enabled.get(); data["is_archived"] = False
+        return data
+
+    def _save(self):
+        try: self._manager.create(self._values()) if self._selected_id is None else self._manager.update(self._selected_id, self._values())
+        except ValueError as exc: messagebox.showerror("规则错误", str(exc), parent=self); return
+        self._refresh()
+
+    def _archive(self):
+        if self._selected_id and messagebox.askyesno("确认", "归档或删除所选规则？", parent=self): self._manager.archive_or_delete(self._selected_id); self._new(); self._refresh()
+
+    def _restore(self):
+        if self._selected_id: self._manager.restore(self._selected_id); self._refresh()
 
 
 class SettingsDialog(tk.Toplevel):
@@ -63,6 +116,7 @@ class SettingsDialog(tk.Toplevel):
         btn_frame = ttk.Frame(outer)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(btn_frame, text="保存", command=self._save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="利润调整规则...", command=self._open_profit_rules).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="新增货代", command=self._add_route).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=5)
         ttk.Label(
@@ -186,6 +240,10 @@ class SettingsDialog(tk.Toplevel):
         """Discard edits by rebuilding every editable value from the database."""
         self._load_values()
         self._render_routes()
+
+    def _open_profit_rules(self):
+        if self._confirm_refresh_with_unsaved_changes():
+            ProfitRulesDialog(self, self._cfg, on_change=self._on_save)
 
     def _has_unsaved_changes(self):
         """Compare editable widgets with persisted settings without mutating them."""
@@ -399,6 +457,7 @@ class MainWindow:
     def _on_settings_saved(self):
         """设置保存后刷新计算"""
         self._product_page._refresh_route_choices()
+        self._product_page._refresh_profit_rule_choices()
         self._product_page.recalculate()
 
     def _backup_data(self):

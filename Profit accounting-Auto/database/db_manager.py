@@ -10,7 +10,7 @@ SQLite 数据库管理 — Schema v6
 import sqlite3, json, uuid, os, shutil, sys
 from datetime import datetime, timedelta
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 CURRENT_RULE_VERSION = 3
 CALCULATION_SCHEMA_VERSION = 1
 VOLUME_DIVISOR = 8000
@@ -49,6 +49,13 @@ CREATE TABLE IF NOT EXISTS route_config (
     volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1,
     is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '',
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS profit_adjustment_rules (
+    rule_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(rule_id)) > 0),
+    display_name TEXT NOT NULL, condition_field TEXT, condition_operator TEXT,
+    condition_value REAL, adjustment_direction TEXT NOT NULL, adjustment_type TEXT NOT NULL,
+    adjustment_value REAL NOT NULL, currency TEXT NOT NULL, percentage_base TEXT,
+    is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0,
+    description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
@@ -155,6 +162,7 @@ class DatabaseManager:
                 rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
                 FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE)""",
             "CREATE TABLE IF NOT EXISTS route_config (route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0), display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS profit_adjustment_rules (rule_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(rule_id)) > 0), display_name TEXT NOT NULL, condition_field TEXT, condition_operator TEXT, condition_value REAL, adjustment_direction TEXT NOT NULL, adjustment_type TEXT NOT NULL, adjustment_value REAL NOT NULL, currency TEXT NOT NULL, percentage_base TEXT, is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         ]:
             conn.execute(stmt)
@@ -224,6 +232,7 @@ class DatabaseManager:
         )
         for key, value in DEFAULT_CONFIG.items():
             conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (key, value))
+        self._seed_profit_adjustment_rules(conn)
 
         self._backfill_current_state(conn)
         self._validate_migrated_schema(conn)
@@ -274,6 +283,19 @@ class DatabaseManager:
         conn.execute("DROP TABLE route_config")
         conn.execute("ALTER TABLE route_config_v6_rebuild RENAME TO route_config")
         return legacy_to_id
+
+    @staticmethod
+    def _seed_profit_adjustment_rules(conn):
+        now = datetime.now().isoformat()
+        exists = conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE display_name=?", ("SHEIN 29美元以下运费补贴",)).fetchone()
+        if not exists:
+            conn.execute("""INSERT INTO profit_adjustment_rules
+                (rule_id,display_name,condition_field,condition_operator,condition_value,
+                 adjustment_direction,adjustment_type,adjustment_value,currency,percentage_base,
+                 is_enabled,is_archived,description,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), "SHEIN 29美元以下运费补贴", "final_price_usd", "<", 29.0,
+                 "income", "fixed", 2.99, "USD", None, 1, 0, "", now, now))
 
     def _backfill_current_state(self, conn):
         """从旧首次快照回填缺失的当前状态；无法可靠恢复的字段保持缺失。"""
@@ -341,6 +363,7 @@ class DatabaseManager:
         self._require_columns(conn, "products", required_product_columns)
         self._require_columns(conn, "product_snapshots", required_snapshot_columns)
         self._require_columns(conn, "route_config", required_route_columns)
+        self._require_columns(conn, "profit_adjustment_rules", {"rule_id", "display_name", "condition_field", "condition_operator", "condition_value", "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base", "is_enabled", "is_archived", "description", "created_at", "updated_at"})
         route_info = {row["name"]: row for row in conn.execute("PRAGMA table_info(route_config)")}
         route_id_info = route_info["route_id"]
         if route_id_info["pk"] != 1 or route_id_info["notnull"] != 1:
@@ -380,6 +403,7 @@ class DatabaseManager:
                 conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (k, v))
             if not conn.execute("SELECT 1 FROM route_config LIMIT 1").fetchone():
                 self._seed_routes_in_conn(conn)
+            self._seed_profit_adjustment_rules(conn)
             conn.commit()
         finally:
             conn.close()
@@ -630,6 +654,95 @@ class DatabaseManager:
         except Exception:
             conn.execute("ROLLBACK"); raise
         finally: conn.close()
+
+    # ─── 利润调整规则 ───────────────────────────────────────────────
+
+    @staticmethod
+    def _rule_dict(row):
+        data = dict(row)
+        data["is_enabled"] = bool(data["is_enabled"])
+        data["is_archived"] = bool(data["is_archived"])
+        return data
+
+    def get_profit_adjustment_rules(self, include_archived=True):
+        conn = self._get_conn()
+        try:
+            where = "" if include_archived else " WHERE is_archived=0"
+            return [self._rule_dict(row) for row in conn.execute(
+                "SELECT * FROM profit_adjustment_rules" + where + " ORDER BY created_at,rule_id").fetchall()]
+        finally: conn.close()
+
+    def get_enabled_profit_adjustment_rules(self):
+        conn = self._get_conn()
+        try:
+            return [self._rule_dict(row) for row in conn.execute(
+                "SELECT * FROM profit_adjustment_rules WHERE is_enabled=1 AND is_archived=0 ORDER BY created_at,rule_id").fetchall()]
+        finally: conn.close()
+
+    def get_profit_adjustment_rule(self, rule_id):
+        conn = self._get_conn()
+        try:
+            row = conn.execute("SELECT * FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)).fetchone()
+            return self._rule_dict(row) if row else None
+        finally: conn.close()
+
+    def save_profit_adjustment_rule(self, values, rule_id=None):
+        from calculation.profit_adjustments import validate_rule_values
+        prepared = validate_rule_values(values)
+        rule_id = rule_id or values.get("rule_id") or str(uuid.uuid4())
+        now = datetime.now().isoformat()
+        enabled, archived = int(bool(values.get("is_enabled", True))), int(bool(values.get("is_archived", False)))
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN")
+            duplicate = conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE lower(trim(display_name))=lower(?) AND is_archived=0 AND rule_id<>?", (prepared["display_name"], rule_id)).fetchone()
+            if duplicate:
+                raise ValueError("未归档规则名称不能重复")
+            existing = conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)).fetchone()
+            row = (prepared["display_name"], prepared["condition_field"], prepared["condition_operator"], prepared["condition_value"], prepared["adjustment_direction"], prepared["adjustment_type"], prepared["adjustment_value"], prepared["currency"], prepared["percentage_base"], enabled, archived, str(values.get("description", "")))
+            if existing:
+                conn.execute("""UPDATE profit_adjustment_rules SET display_name=?,condition_field=?,condition_operator=?,condition_value=?,adjustment_direction=?,adjustment_type=?,adjustment_value=?,currency=?,percentage_base=?,is_enabled=?,is_archived=?,description=?,updated_at=? WHERE rule_id=?""", row + (now, rule_id))
+            else:
+                conn.execute("""INSERT INTO profit_adjustment_rules (rule_id,display_name,condition_field,condition_operator,condition_value,adjustment_direction,adjustment_type,adjustment_value,currency,percentage_base,is_enabled,is_archived,description,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (rule_id,) + row + (now, now))
+            conn.execute("COMMIT")
+            return rule_id
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally: conn.close()
+
+    def profit_adjustment_rule_is_referenced(self, rule_id):
+        like = f'%{rule_id}%'
+        conn = self._get_conn()
+        try:
+            return bool(conn.execute("SELECT 1 FROM products WHERE current_rule_snapshot LIKE ? LIMIT 1", (like,)).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (like, like)).fetchone())
+        finally: conn.close()
+
+    def archive_or_delete_profit_adjustment_rule(self, rule_id):
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN")
+            if not conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)).fetchone():
+                raise ValueError("利润调整规则不存在")
+            like = f'%{rule_id}%'
+            referenced = bool(conn.execute("SELECT 1 FROM products WHERE current_rule_snapshot LIKE ? LIMIT 1", (like,)).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (like, like)).fetchone())
+            if referenced:
+                conn.execute("UPDATE profit_adjustment_rules SET is_archived=1,is_enabled=0,updated_at=? WHERE rule_id=?", (datetime.now().isoformat(), rule_id)); result = "archived"
+            else:
+                conn.execute("DELETE FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)); result = "deleted"
+            conn.execute("COMMIT")
+            return result
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally: conn.close()
+
+    def restore_profit_adjustment_rule(self, rule_id):
+        rule = self.get_profit_adjustment_rule(rule_id)
+        if not rule:
+            raise ValueError("利润调整规则不存在")
+        rule["is_archived"] = False; rule["is_enabled"] = False
+        return self.save_profit_adjustment_rule(rule, rule_id=rule_id)
 
     def save_settings_and_routes(self, global_values: dict, routes: list[dict]):
         """原子保存全局设置和当前未归档货代。"""
