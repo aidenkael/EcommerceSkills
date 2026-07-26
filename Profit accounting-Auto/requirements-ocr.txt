@@ -1,0 +1,17 @@
+# Phase 2.1 OCR 依赖清单（占位）
+#
+# 本步骤只写说明性注释，不安装、不锁定 PaddleOCR 依赖。
+# 具体版本在 S6 验证 Python 3.11 + PaddleOCR 兼容性后确定并写入此处。
+#
+# 预计包含：
+#   paddlepaddle      # PaddlePaddle CPU 版（官方支持 Python 3.9-3.13）
+#   paddleocr         # PaddleOCR（官方只支持 3.8-3.12，故本项目用 3.11 环境）
+#   opencv-python     # OpenCV 图片预处理
+#
+# 兼容性依据：
+#   - PaddleOCR 3.x 官方只支持 Python 3.8-3.12（GitHub Issue #15307）
+#   - PaddleOCR 3.0 锁定 numpy 1.26.4，Windows + py3.13 无预编译包
+#   - 本项目统一使用 .venv-311（Python 3.11.9）运行整个软件和测试
+#
+# 安装方式（S6 验证后执行，本步骤不执行）：
+#   .venv-311\Scripts\python.exe -m pip install -r requirements-ocr.txt
