@@ -2,18 +2,30 @@
 setlocal
 cd /d "%~dp0"
 
-where py >nul 2>&1
-if errorlevel 1 (
-    echo Python launcher "py" was not found.
-    echo Install Python 3.10 or newer, then run this file again.
-    pause
-    exit /b 1
+set VENV="%~dp0..\Profit accounting-Auto.venv\Scripts\python.exe"
+set VENV_DIR="%~dp0..\Profit accounting-Auto.venv"
+
+if not exist %VENV% (
+    echo Virtual environment not found at %VENV_DIR%.
+    echo Creating .venv...
+    where py >nul 2>&1
+    if errorlevel 1 (
+        echo Python launcher "py" was not found. Install Python 3.10+.
+        pause
+        exit /b 1
+    )
+    py -3 -m venv %VENV_DIR%
+    if errorlevel 1 (
+        echo Failed to create virtual environment.
+        pause
+        exit /b 1
+    )
 )
 
-py -3 -m PyInstaller --version >nul 2>&1
+%VENV% -m PyInstaller --version >nul 2>&1
 if errorlevel 1 (
-    echo Installing PyInstaller...
-    py -3 -m pip install "pyinstaller>=6.0,<7.0"
+    echo Installing PyInstaller in .venv...
+    %VENV% -m pip install "pyinstaller>=6.0,<7.0"
     if errorlevel 1 (
         echo PyInstaller installation failed.
         pause
@@ -22,7 +34,7 @@ if errorlevel 1 (
 )
 
 echo Building ProfitAccountingAuto.exe...
-py -3 -m PyInstaller ^
+%VENV% -m PyInstaller ^
     --noconfirm ^
     --clean ^
     --onefile ^
