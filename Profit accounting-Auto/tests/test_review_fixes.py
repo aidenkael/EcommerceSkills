@@ -235,6 +235,44 @@ class TestFrozenRuleEvaluation:
         assert page._profit_rule_source == "frozen"
         assert "历史冻结规则" in page._profit_adjustment_var.get()
 
+    def test_save_immediately_freezes_current_rule_for_later_recalculation(self):
+        db = DatabaseManager(os.path.join(tempfile.mkdtemp(), "save-freeze.db")); cfg = ConfigManager(db)
+        rule = dict(db.get_enabled_profit_adjustment_rules()[0]); rule["adjustment_value"] = 2.99
+        result = evaluate_rule(rule, {"final_price_usd": 28.0, "final_price_rmb": 201.6,
+                                      "product_cost_rmb": 50.0, "logistics_cost_rmb": 20.0}, 7.2)
+        adjustment = {"rule": rule, **result}
+        page = object.__new__(ProductPage)
+        page._db = db; page._cfg = cfg; page._product_id = None; page._has_snapshot = False
+        page._computed = {"profit_adjustment": adjustment}; page._saved_rule_context = None
+        page._get_invalid_list = lambda: []; page._gather_data = lambda: {"name": "即时冻结", "weight_unit_version": "g_v1"}
+        page._build_rule_snapshot = lambda: {"profit_adjustment": adjustment}
+        page._build_calculation_snapshot = lambda: {"profit_adjustment": adjustment}
+        page._profit_rule_var = _Var(); page._profit_adjustment_var = _Var(); page._profit_rule_unavailable_notice = False
+        with patch("ui.product_page.messagebox.showinfo"), patch("ui.product_page.messagebox.showerror"):
+            ProductPage.save_product(page)
+        assert page._profit_rule_source == "frozen"
+        assert page._saved_profit_rule["adjustment_value"] == 2.99
+        current = db.get_profit_adjustment_rule(rule["rule_id"]); current["adjustment_value"] = 3.99
+        db.save_profit_adjustment_rule(current, current["rule_id"])
+        page._entry_vars = {"price_usd": _Var("28"), "cost": _Var("50")}; page._profit_rule_display_to_id = {}
+        adjusted, _ = ProductPage._apply_profit_adjustment(page, 10.0, 201.6, 7.2, 20.0)
+        assert math.isclose(adjusted, 10.0 + 2.99 * 7.2)
+
+    def test_force_recalc_keeps_unavailable_frozen_rule_reason(self):
+        db = DatabaseManager(os.path.join(tempfile.mkdtemp(), "unavailable.db")); cfg = ConfigManager(db)
+        rule = dict(db.get_enabled_profit_adjustment_rules()[0]); db.archive_or_delete_profit_adjustment_rule(rule["rule_id"])
+        page = object.__new__(ProductPage)
+        page._cfg = cfg; page._saved_rule_context = None; page._show_rate_banner = False
+        page._show_rate_notice = lambda _diffs: None; page._saved_profit_rule = rule; page._profit_rule_source = "frozen"
+        page._profit_rule_unavailable_notice = False; page._profit_rule_var = _Var(); page._profit_adjustment_var = _Var()
+        page._entry_vars = {"tail": _Var()}; page._set_profit_rule_id = lambda _rid: page._profit_rule_var.set("无")
+        page.recalculate = lambda: ProductPage._apply_profit_adjustment(page, 10.0, 201.6, 7.2, 20.0)
+        page._computed = {}; page._profit_rule_display_to_id = {}; page._entry_vars.update({"price_usd": _Var("28"), "cost": _Var("50")})
+        with patch("ui.product_page.messagebox.showwarning") as warning:
+            ProductPage._force_recalc(page)
+        assert warning.called and page._profit_rule_source == "none"
+        assert "原冻结规则当前已停用、归档或不存在" in page._profit_adjustment_var.get()
+
 
 class TestProfitRulesDialogState:
     def _dialog_with_widgets(self):
@@ -284,3 +322,18 @@ class TestProfitRulesDialogState:
         dialog._list = _Listbox(); dialog._on_change = None
         ProfitRulesDialog._refresh(dialog)
         assert dialog._list.items == ["测试规则 | 最终售价（美元） 小于 29 | 增加收入/固定金额 2.99 美元"]
+
+    def test_load_current_preserves_zero_threshold_and_adjustment(self):
+        dialog = object.__new__(ProfitRulesDialog)
+        dialog._selected_id = "zero"; dialog._suspend_dirty = False; dialog._dirty = False
+        dialog._rows = [{"rule_id": "zero", "display_name": "零值", "condition_field": "final_price_usd",
+                         "condition_operator": "<", "condition_value": 0, "adjustment_direction": "income",
+                         "adjustment_type": "fixed", "adjustment_value": 0, "currency": "USD",
+                         "percentage_base": None, "description": "", "is_enabled": True}]
+        dialog._vars = {key: _Var() for key in ("display_name", "condition_field", "condition_operator", "condition_value",
+                       "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base", "description")}
+        dialog._enabled = _Var(); dialog._on_condition_change = lambda: None; dialog._on_type_change = lambda: None
+        dialog._update_status = lambda: None
+        ProfitRulesDialog._load_current(dialog)
+        assert dialog._vars["condition_value"].get() == "0"
+        assert dialog._vars["adjustment_value"].get() == "0"

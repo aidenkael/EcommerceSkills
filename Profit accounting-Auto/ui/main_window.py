@@ -180,6 +180,9 @@ class ProfitRulesDialog(tk.Toplevel):
         except ValueError as exc:
             messagebox.showerror("规则错误", str(exc), parent=self)
             return False
+        except Exception as exc:
+            messagebox.showerror("保存失败", str(exc), parent=self)
+            return False
 
     def _refresh(self):
         self._rows = self._manager.list(True)
@@ -188,10 +191,10 @@ class ProfitRulesDialog(tk.Toplevel):
             prefix = "[归档] " if item["is_archived"] else ("[停用] " if not item["is_enabled"] else "")
             cond = self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件"
             op = self._get_display(item.get("condition_operator"), self.OPERATORS) or ""
-            cv = item.get("condition_value") or ""
+            cv = "" if item.get("condition_value") is None else item.get("condition_value")
             typ = "固定金额" if item.get("adjustment_type") == "fixed" else "百分比"
             cur = self._get_display(item.get("currency"), self.CURRENCIES) or ""
-            val = item.get("adjustment_value") or 0
+            val = 0 if item.get("adjustment_value") is None else item.get("adjustment_value")
             direction = "增加收入" if item.get("adjustment_direction") == "income" else "增加成本"
             base = self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES)
             amount = f"{base}的 {val}%" if item.get("adjustment_type") == "percent" else f"{val} {cur}"
@@ -201,6 +204,7 @@ class ProfitRulesDialog(tk.Toplevel):
     def _new(self):
         if not self._check_dirty("新建"): return
         self._selected_id = None; self._dirty = False; self._suspend_dirty = True
+        self._list.selection_clear(0, tk.END)
         defaults = {"display_name":"", "condition_field":"无条件", "condition_operator":"", "condition_value":"",
                     "adjustment_direction":"增加收入", "adjustment_type":"固定金额", "adjustment_value":"",
                     "currency":"美元", "percentage_base":"", "description":""}
@@ -211,22 +215,31 @@ class ProfitRulesDialog(tk.Toplevel):
     def _select(self, _event):
         sel = self._list.curselection()
         if not sel: return
+        target_id = self._rows[sel[0]]["rule_id"]
         if not self._check_dirty("切换规则"):
             self._restore_list_selection()
             return
-        item = self._rows[sel[0]]; self._selected_id = item["rule_id"]; self._suspend_dirty = True
-        self._vars["display_name"].set(item.get("display_name", ""))
-        self._vars["condition_field"].set(self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件")
-        self._vars["condition_operator"].set(self._get_display(item.get("condition_operator"), self.OPERATORS) or "")
-        self._vars["condition_value"].set(str(item.get("condition_value") or ""))
-        self._vars["adjustment_direction"].set(self._get_display(item.get("adjustment_direction"), self.DIRECTIONS) or "增加收入")
-        self._vars["adjustment_type"].set(self._get_display(item.get("adjustment_type"), self.TYPES) or "固定金额")
-        self._vars["adjustment_value"].set(str(item.get("adjustment_value") or ""))
-        self._vars["currency"].set(self._get_display(item.get("currency"), self.CURRENCIES) or "美元")
-        self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
-        self._vars["description"].set(item.get("description", ""))
-        self._enabled.set(item.get("is_enabled", True))
-        self._dirty = False; self._on_condition_change(); self._on_type_change(); self._suspend_dirty = False; self._dirty = False
+        self._selected_id = target_id
+        self._restore_list_selection()
+        self._load_current()
+
+    def _load_current(self):
+        """重新载入当前选中规则的数据库值。"""
+        self._suspend_dirty = True
+        item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None) if self._selected_id else None
+        if item:
+            self._vars["display_name"].set(item.get("display_name", ""))
+            self._vars["condition_field"].set(self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件")
+            self._vars["condition_operator"].set(self._get_display(item.get("condition_operator"), self.OPERATORS) or "")
+            self._vars["condition_value"].set("" if item.get("condition_value") is None else str(item.get("condition_value")))
+            self._vars["adjustment_direction"].set(self._get_display(item.get("adjustment_direction"), self.DIRECTIONS) or "增加收入")
+            self._vars["adjustment_type"].set(self._get_display(item.get("adjustment_type"), self.TYPES) or "固定金额")
+            self._vars["adjustment_value"].set("" if item.get("adjustment_value") is None else str(item.get("adjustment_value")))
+            self._vars["currency"].set(self._get_display(item.get("currency"), self.CURRENCIES) or "美元")
+            self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
+            self._vars["description"].set(item.get("description", ""))
+            self._enabled.set(item.get("is_enabled", True))
+        self._on_condition_change(); self._on_type_change(); self._suspend_dirty = False; self._dirty = False
         self._update_status()
 
     def _restore_list_selection(self):
@@ -241,25 +254,6 @@ class ProfitRulesDialog(tk.Toplevel):
                 self._list.see(index)
                 break
 
-    def _load_current(self):
-        """重新载入当前选中规则的数据库值"""
-        self._suspend_dirty = True
-        if self._selected_id:
-            item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None)
-            if item:
-                self._vars["display_name"].set(item.get("display_name", ""))
-                self._vars["condition_field"].set(self._get_display(item.get("condition_field"), self.CONDITION_FIELDS) or "无条件")
-                self._vars["condition_operator"].set(self._get_display(item.get("condition_operator"), self.OPERATORS) or "")
-                self._vars["condition_value"].set(str(item.get("condition_value") or ""))
-                self._vars["adjustment_direction"].set(self._get_display(item.get("adjustment_direction"), self.DIRECTIONS) or "增加收入")
-                self._vars["adjustment_type"].set(self._get_display(item.get("adjustment_type"), self.TYPES) or "固定金额")
-                self._vars["adjustment_value"].set(str(item.get("adjustment_value") or ""))
-                self._vars["currency"].set(self._get_display(item.get("currency"), self.CURRENCIES) or "美元")
-                self._vars["percentage_base"].set(self._get_display(item.get("percentage_base"), self.PERCENTAGE_BASES) or "")
-                self._vars["description"].set(item.get("description", ""))
-                self._enabled.set(item.get("is_enabled", True))
-        self._suspend_dirty = False; self._dirty = False
-        self._update_status()
 
     def _update_status(self):
         item = next((r for r in self._rows if r["rule_id"] == self._selected_id), None) if self._selected_id else None
