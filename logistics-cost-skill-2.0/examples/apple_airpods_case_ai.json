@@ -1,0 +1,22 @@
+{
+  "product_type": "apple_airpods_case",
+  "quantity": 1,
+  "quantity_source": "user_confirmed",
+  "category": "general",
+  "rigidity": "soft",
+  "foldability": "good",
+  "compressibility": "good",
+  "has_rigid_parts": false,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.03,
+  "ai_package_size_cm": [10, 8, 3],
+  "ai_package_weight_kg": 0.04,
+  "conservative_package_size_cm": [11, 9, 4],
+  "conservative_package_weight_kg": 0.05,
+  "packaging_method": "OPP袋",
+  "folding_action": "常规折叠",
+  "compression_action": "轻度压缩",
+  "confidence": "medium",
+  "reasoning": "绿色苹果造型AirPods Pro硅胶保护套, 软质可压缩, 单只约30g+包装10g=40g, 包装按10×8×3cm OPP袋",
+  "notes": "1688商品, 苹果造型AirPods Pro保护套(硅胶款), 跨境爆款"
+}

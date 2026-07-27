@@ -105,6 +105,8 @@ def estimate(
         if not scenario or not calculate_ok:
             scenarios_result[mode] = {
                 "head_cost_cny": 0.0,
+                "service_fee_cny": 0.0,
+                "total_head_cost_cny": 0.0,
                 "chargeable_weight_kg": 0.0,
                 "volume_weight_kg": 0.0,
                 "provider_costs": {},
@@ -143,16 +145,21 @@ def estimate(
 
         chargeable = weight_result["chargeable_kg"]
         freight = calc_freight_costs(chargeable)
-        head = freight["recommended_cost_rmb"]
+        rec_provider = freight["recommended_provider"]
+        rec_costs = freight["provider_costs"].get(rec_provider, {})
+        head_freight = rec_costs.get("head_freight_rmb", 0.0)
+        service_fee = rec_costs.get("service_fee_rmb", 0.0)
 
         scenarios_result[mode] = {
             "packaged_size_cm": dims,
             "packaged_weight_kg": pkg_weight,
             "volume_weight_kg": vol_weight,
             "chargeable_weight_kg": round(chargeable, 4),
-            "head_cost_cny": head,
+            "head_cost_cny": head_freight,
+            "service_fee_cny": service_fee,
+            "total_head_cost_cny": round(head_freight + service_fee, 2),
             "provider_costs": freight["provider_costs"],
-            "recommended_provider": freight["recommended_provider"],
+            "recommended_provider": rec_provider,
             "recommended_cost_rmb": freight["recommended_cost_rmb"],
             "method": scenario.get("method", ""),
             "folding_action": scenario.get("folding_action", ""),
