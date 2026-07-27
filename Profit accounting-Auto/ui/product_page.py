@@ -20,6 +20,18 @@ from pathlib import Path
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    _DND_AVAILABLE = True
+except ImportError:
+    _DND_AVAILABLE = False
+
+try:
+    import PIL.Image, PIL.ImageTk, PIL.ImageGrab
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
+
 from calculation import (
     volumetric_weight, chargeable_weight, head_haul_cost,
     total_logistics_cost, known_logistics_subtotal,
@@ -172,6 +184,7 @@ class ProductPage(ttk.Frame):
         body = self._section_frame("图片输入", "上传、拖入或粘贴商品图片")
         self._img_container = ttk.Frame(body)
         self._img_container.pack(fill=tk.X, pady=5)
+        self._selected_img_idx = None
         self._rebuild_image_boxes()
         # 图片框数量调节（+/-）
         ctrl = ttk.Frame(body)
@@ -181,24 +194,34 @@ class ProductPage(ttk.Frame):
         ttk.Label(ctrl, textvariable=self._img_count_var, font=("", 9, "bold")).pack(side=tk.LEFT, padx=3)
         ttk.Button(ctrl, text="－", width=2, command=self._img_decrease).pack(side=tk.LEFT, padx=1)
         ttk.Button(ctrl, text="＋", width=2, command=self._img_increase).pack(side=tk.LEFT, padx=1)
-        ttk.Label(ctrl, text="(最少3框，最多6框)", foreground="#888", font=("", 8)).pack(side=tk.LEFT, padx=5)
+        ttk.Label(ctrl, text="(最少3框，最多6框；点击框选中后按Del删除)", foreground="#888", font=("", 8)).pack(side=tk.LEFT, padx=5)
+        # 全局键盘绑定
+        self.bind_all("<Control-v>", self._on_ctrl_v)
+        self.bind_all("<Delete>", self._on_del_key)
 
     def _rebuild_image_boxes(self):
-        """根据当前 _img_count_var 重建图片框。"""
+        """根据当前 _img_count_var 重建图片框，保留已有图片/类型。"""
+        # 保存当前状态
+        old_states = getattr(self, "image_states", [])
+        saved = []
+        for s in old_states:
+            saved.append({"path": s.get("path"), "img_type": s.get("type_var", tk.StringVar()).get() if hasattr(s.get("type_var", None), "get") else "主图"})
         for child in self._img_container.winfo_children():
             child.destroy()
         self.image_states = []
         count = int(self._img_count_var.get()) if hasattr(self, "_img_count_var") else 5
         for i in range(count):
-            self._create_image_box(i)
+            old = saved[i] if i < len(saved) else None
+            self._create_image_box(i, old)
 
-    def _create_image_box(self, idx):
+    def _create_image_box(self, idx, saved_state=None):
         frm = ttk.LabelFrame(self._img_container, text=f"框 {idx+1}", width=140, height=170)
         frm.grid(row=0, column=idx, padx=3, pady=3, sticky="n")
         frm.grid_propagate(False)
 
         # 类型选择
-        type_var = tk.StringVar(value="主图")
+        type_val = saved_state["img_type"] if saved_state else "主图"
+        type_var = tk.StringVar(value=type_val)
         cb = ttk.Combobox(frm, textvariable=type_var, values=self.IMG_TYPES, state="readonly", width=8)
         cb.pack(anchor=tk.N, pady=2)
 
@@ -206,52 +229,166 @@ class ProductPage(ttk.Frame):
         lbl = ttk.Label(frm, text="点击上传\n或拖入图片\n或 Ctrl+V", foreground="#999", font=("", 8))
         lbl.pack(anchor=tk.CENTER, expand=True, fill=tk.BOTH, padx=4, pady=4)
 
-        state = {"frame": frm, "label": lbl, "type_var": type_var, "path": None, "photo": None}
+        state = {"frame": frm, "label": lbl, "type_var": type_var, "path": None, "photo": None, "idx": idx}
         self.image_states.append(state)
 
-        # 绑定事件
-        frm.bind("<Button-1>", lambda e, s=state: self._img_upload(s))
-        frm.bind("<Delete>", lambda e, s=state: self._img_delete(s))
-        lbl.bind("<Button-1>", lambda e, s=state: self._img_upload(s))
+        # 恢复已有图片
+        if saved_state and saved_state.get("path"):
+            state["path"] = saved_state["path"]
+            self._show_thumb(state)
+
+        # 选中事件
+        def _select(e, s=state):
+            self._select_img_box(s)
+        frm.bind("<Button-1>", _select)
+        lbl.bind("<Button-1>", _select)
+
+        # 上传（双击或直接点击空框）
+        frm.bind("<Double-Button-1>", lambda e, s=state: self._img_upload(s))
+        lbl.bind("<Double-Button-1>", lambda e, s=state: self._img_upload(s))
+
         # 右键菜单
         menu = tk.Menu(frm, tearoff=0)
         menu.add_command(label="上传图片", command=lambda s=state: self._img_upload(s))
         menu.add_command(label="清除图片", command=lambda s=state: self._img_delete(s))
         menu.add_command(label="预览大图", command=lambda s=state: self._img_preview(s))
         frm.bind("<Button-3>", lambda e, m=menu: m.tk_popup(e.x_root, e.y_root))
+
+        # 拖拽支持 (tkinterdnd2)
+        if _DND_AVAILABLE:
+            frm.drop_target_register(DND_FILES)
+            frm.dnd_bind("<<Drop>>", lambda e, s=state: self._img_drop(e, s))
+
         # 修改类型触发 AI 过期
         type_var.trace_add("write", lambda *_, s=state: self._on_img_type_changed(s))
+
+    def _select_img_box(self, state):
+        """选中图片框，高亮边框。"""
+        self._selected_img_idx = state["idx"]
+        for s in self.image_states:
+            try:
+                s["frame"].configure(style="TLabelFrame")
+            except Exception:
+                pass
+        try:
+            state["frame"].configure(style="Selected.TLabelFrame")
+        except Exception:
+            pass
+
+    def _on_del_key(self, event):
+        """Del 键删除当前选中图片框中的图片。"""
+        if self._selected_img_idx is None:
+            return
+        if self._selected_img_idx < len(self.image_states):
+            state = self.image_states[self._selected_img_idx]
+            if state["path"] is not None:
+                self._img_delete(state)
+
+    def _on_ctrl_v(self, event):
+        """Ctrl+V 粘贴剪贴板图片到当前选中框（或第一个空框）。"""
+        target = None
+        if self._selected_img_idx is not None and self._selected_img_idx < len(self.image_states):
+            target = self.image_states[self._selected_img_idx]
+        else:
+            for s in self.image_states:
+                if s["path"] is None:
+                    target = s
+                    break
+        if target is None:
+            messagebox.showinfo("提示", "所有图片框已满，请先删除一个。")
+            return
+        if not _PIL_AVAILABLE:
+            messagebox.showerror("错误", "PIL 不可用，无法粘贴。")
+            return
+        try:
+            img = PIL.ImageGrab.grabclipboard()
+        except Exception as exc:
+            messagebox.showerror("粘贴失败", str(exc))
+            return
+        if img is None:
+            # 可能是文件路径
+            try:
+                import win32clipboard
+                win32clipboard.OpenClipboard()
+                file_list = win32clipboard.GetClipboardData(win32clipboard.CF_HDROP)
+                win32clipboard.CloseClipboard()
+                if file_list:
+                    for f in file_list:
+                        ext = Path(f).suffix.lower()
+                        if ext in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
+                            self._load_image_from_path(f, target)
+                            return
+            except ImportError:
+                pass
+            messagebox.showinfo("提示", "剪贴板中没有图片。")
+            return
+        # PIL Image → 保存到临时会话
+        import io
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        dst = self._session_root / (uuid.uuid4().hex + ".png")
+        dst.write_bytes(buf.getvalue())
+        self._set_image_to_state(str(dst), target)
+
+    def _img_drop(self, event, state):
+        """tkinterdnd2 拖拽文件放入图片框。"""
+        files = self._tk.splitlist(event.data)
+        if not files:
+            return
+        f = files[0].strip("{}")
+        self._load_image_from_path(f, state)
+
+    def _load_image_from_path(self, path, state):
+        """从文件路径加载图片到指定图片框。"""
+        ext = Path(path).suffix.lower()
+        if ext not in (".png", ".jpg", ".jpeg", ".webp", ".bmp"):
+            messagebox.showwarning("不支持", f"不支持的文件类型: {ext}")
+            return
+        if state["path"] is not None:
+            if not messagebox.askyesno("覆盖确认", "该图片框已有图片，确定覆盖吗？"):
+                return
+        try:
+            new_path = self._copy_image_to_session(path)
+        except Exception as exc:
+            messagebox.showerror("上传失败", str(exc))
+            return
+        self._set_image_to_state(new_path, state)
+
+    def _set_image_to_state(self, path, state):
+        """设置图片路径到 state 并显示缩略图。"""
+        state["path"] = path
+        self._show_thumb(state)
 
     def _img_upload(self, state):
         f = filedialog.askopenfilename(parent=self, title="选择图片",
                                          filetypes=[("图片文件", "*.png *.jpg *.jpeg *.webp *.bmp")])
         if not f:
             return
-        # 已有图片 → 询问覆盖
         if state["path"] is not None:
-            if not messagebox.askyesno("覆盖确认", f"该图片框已有图片，确定覆盖吗？"):
+            if not messagebox.askyesno("覆盖确认", "该图片框已有图片，确定覆盖吗？"):
                 return
         try:
             new_path = self._copy_image_to_session(f)
         except Exception as exc:
             messagebox.showerror("上传失败", str(exc)); return
-        state["path"] = new_path
-        self._show_thumb(state)
+        self._set_image_to_state(new_path, state)
 
     def _show_thumb(self, state):
         """在图片框中显示缩略图。"""
+        if not _PIL_AVAILABLE:
+            state["label"].configure(text=f"已加载:\n{Path(state['path']).name}", foreground="#2a6496")
+            return
         try:
-            import PIL.Image, PIL.ImageTk
             img = PIL.Image.open(state["path"])
             frm = state["frame"]
             w = frm.winfo_width() or 120
             h = frm.winfo_height() or 140
-            img.thumbnail((w - 10, h - 30), PIL.Image.LANCZOS if hasattr(PIL.Image, "LANCZOS") else PIL.Image.Resampling.LANCZOS)
+            img.thumbnail((w - 10, h - 30), PIL.Image.LANCZOS if hasattr(PIL.Image, "LANCZOS") else 1)
             photo = PIL.ImageTk.PhotoImage(img)
             state["photo"] = photo
             state["label"].configure(image=photo, text="", compound=tk.CENTER)
-            state["label"].image = photo  # keep ref
-        except ImportError:
+            state["label"].image = photo
+        except Exception:
             state["label"].configure(text=f"已加载:\n{Path(state['path']).name}", foreground="#2a6496")
 
     def _img_delete(self, state):
@@ -262,11 +399,20 @@ class ProductPage(ttk.Frame):
     def _img_preview(self, state):
         if state["path"] is None:
             messagebox.showinfo("提示", "此框暂无图片"); return
-        try:
-            import PIL.Image
-            img = PIL.Image.open(state["path"])
-            img.show()
-        except ImportError:
+        if _PIL_AVAILABLE:
+            try:
+                img = PIL.Image.open(state["path"])
+                # 弹出独立窗口预览
+                top = tk.Toplevel(self)
+                top.title("图片预览")
+                photo = PIL.ImageTk.PhotoImage(img)
+                lbl = ttk.Label(top, image=photo)
+                lbl.image = photo
+                lbl.pack(padx=5, pady=5)
+                top.focus_force()
+            except Exception as exc:
+                messagebox.showinfo("图片路径", f"{state['path']}\n\n错误: {exc}")
+        else:
             messagebox.showinfo("图片路径", state["path"])
 
     def _on_img_type_changed(self, state):
@@ -274,13 +420,22 @@ class ProductPage(ttk.Frame):
 
     def _img_decrease(self):
         cur = int(self._img_count_var.get())
-        if cur <= 3: return
+        if cur <= 3:
+            return
+        # 检查末尾框是否有图片
+        last_idx = cur - 1
+        if last_idx < len(self.image_states):
+            last_state = self.image_states[last_idx]
+            if last_state["path"] is not None:
+                if not messagebox.askyesno("确认减少", f"框 {last_idx+1} 含有图片，确定减少并清除该图片吗？\n（用户原始文件不会被删除）"):
+                    return
         self._img_count_var.set(str(cur - 1))
         self._rebuild_image_boxes()
 
     def _img_increase(self):
         cur = int(self._img_count_var.get())
-        if cur >= 6: return
+        if cur >= 6:
+            return
         self._img_count_var.set(str(cur + 1))
         self._rebuild_image_boxes()
 
@@ -404,26 +559,52 @@ class ProductPage(ttk.Frame):
         self._clear_packaging_expired()
 
     def _update_packaging_display(self):
-        """将 _ai_data 中的包装方案更新到 UI 双栏。"""
+        """将 _ai_data 中的包装方案更新到 UI 双栏。
+
+        统一数据结构：_pkg_normal / _pkg_conservative 始终包含
+        length_cm, width_cm, height_cm, weight_g, method, note。
+        """
         if not self._ai_data:
             return
         n = self._ai_data.get("normal", {})
         c = self._ai_data.get("conservative", {})
         if not hasattr(self, "_pkg_normal_widgets"): return
-        # 正常档
-        self._pkg_normal_widgets["method"].set(n.get("method", "—"))
-        if n.get("length_cm") is not None:
-            self._pkg_normal_widgets["dims"].set(f"{n['length_cm']} × {n['width_cm']} × {n['height_cm']}")
-        self._pkg_normal_widgets["weight"].set(str(n.get("weight_g", "—")) if n.get("weight_g") else "—")
-        self._pkg_normal_widgets["note"].set(n.get("note", "—"))
-        self._pkg_normal = n
+        # 正常档 — 统一字段
+        self._pkg_normal = {
+            "method": n.get("method", "—"),
+            "length_cm": n.get("length_cm"),
+            "width_cm": n.get("width_cm"),
+            "height_cm": n.get("height_cm"),
+            "weight_g": n.get("weight_g"),
+            "note": n.get("note", "—"),
+        }
+        self._pkg_normal_widgets["method"].set(self._pkg_normal["method"])
+        if self._pkg_normal["length_cm"] is not None:
+            self._pkg_normal_widgets["dims"].set(
+                f"{self._pkg_normal['length_cm']} × {self._pkg_normal['width_cm']} × {self._pkg_normal['height_cm']}")
+        else:
+            self._pkg_normal_widgets["dims"].set("—")
+        wg = self._pkg_normal["weight_g"]
+        self._pkg_normal_widgets["weight"].set(str(wg) if wg is not None else "—")
+        self._pkg_normal_widgets["note"].set(self._pkg_normal["note"])
         # 保守档
-        self._pkg_conservative_widgets["method"].set(c.get("method", "—"))
-        if c.get("length_cm") is not None:
-            self._pkg_conservative_widgets["dims"].set(f"{c['length_cm']} × {c['width_cm']} × {c['height_cm']}")
-        self._pkg_conservative_widgets["weight"].set(str(c.get("weight_g", "—")) if c.get("weight_g") else "—")
-        self._pkg_conservative_widgets["note"].set(c.get("note", "—"))
-        self._pkg_conservative = c
+        self._pkg_conservative = {
+            "method": c.get("method", "—"),
+            "length_cm": c.get("length_cm"),
+            "width_cm": c.get("width_cm"),
+            "height_cm": c.get("height_cm"),
+            "weight_g": c.get("weight_g"),
+            "note": c.get("note", "—"),
+        }
+        self._pkg_conservative_widgets["method"].set(self._pkg_conservative["method"])
+        if self._pkg_conservative["length_cm"] is not None:
+            self._pkg_conservative_widgets["dims"].set(
+                f"{self._pkg_conservative['length_cm']} × {self._pkg_conservative['width_cm']} × {self._pkg_conservative['height_cm']}")
+        else:
+            self._pkg_conservative_widgets["dims"].set("—")
+        wg = self._pkg_conservative["weight_g"]
+        self._pkg_conservative_widgets["weight"].set(str(wg) if wg is not None else "—")
+        self._pkg_conservative_widgets["note"].set(self._pkg_conservative["note"])
 
     def _packaging_display_on_switch(self):
         self._update_packaging_display()
@@ -645,9 +826,7 @@ class ProductPage(ttk.Frame):
         btn_frame.pack(fill=tk.X, padx=10, pady=10)
         ttk.Button(btn_frame, text="保存本次记录", command=self.save_product, width=16).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(btn_frame, text="清空并新建", command=self._clear_and_new, width=16).pack(side=tk.LEFT)
-        # 保留还原功能但不占主按钮位置
-        ttk.Button(btn_frame, text="还原（首次保存状态）", command=self.restore_product, width=20).pack(side=tk.RIGHT)
-        ttk.Button(btn_frame, text="用当前规则重算", command=self._force_recalc, width=16).pack(side=tk.RIGHT, padx=5)
+        # restore_product 和 _force_recalc 保留为内部方法，不在底部显示按钮
 
     # ─── 包装档过期 ────────────────────────────────────────────────────────
 
@@ -664,7 +843,6 @@ class ProductPage(ttk.Frame):
         self._pkg_expired_var.set("")
         if hasattr(self, "_pkg_expired_lbl"):
             self._pkg_expired_lbl.configure(foreground="#cc6600")
-        self._pkg_expired_lbl.configure(foreground="#cc6600")
 
     # ─── 校验 ──────────────────────────────────────────────────────────────
 
@@ -805,21 +983,14 @@ class ProductPage(ttk.Frame):
         cost = _safe_float(self._entry_vars.get("cost", tk.StringVar()).get())
         domestic = _safe_float(self._entry_vars.get("domestic", tk.StringVar()).get())
 
-        # 包装数据 — 根据当前采用档选正常/保守
+        # 包装数据 — 根据当前采用档选正常/保守（统一字段 length_cm/width_cm/height_cm/weight_g）
         pkg_w = pkg_l = pkg_wi = pkg_h = None
-        if self._packaging_mode == "conservative" and self._pkg_conservative:
-            pkg_w = _safe_float(self._pkg_conservative.get("weight"))
-            dims = self._pkg_conservative.get("dims", "")
-            # parse dims
-            parts = dims.replace("×", "x").split("x")
-            if len(parts) == 3:
-                pkg_l, pkg_wi, pkg_h = _safe_float(parts[0]), _safe_float(parts[1]), _safe_float(parts[2])
-        elif self._packaging_mode == "normal" and self._pkg_normal:
-            pkg_w = _safe_float(self._pkg_normal.get("weight"))
-            dims = self._pkg_normal.get("dims", "")
-            parts = dims.replace("×", "x").split("x")
-            if len(parts) == 3:
-                pkg_l, pkg_wi, pkg_h = _safe_float(parts[0]), _safe_float(parts[1]), _safe_float(parts[2])
+        active_pkg = self._pkg_conservative if self._packaging_mode == "conservative" else self._pkg_normal
+        if active_pkg and active_pkg.get("length_cm") is not None:
+            pkg_l = _safe_float(active_pkg.get("length_cm"))
+            pkg_wi = _safe_float(active_pkg.get("width_cm"))
+            pkg_h = _safe_float(active_pkg.get("height_cm"))
+            pkg_w = _safe_float(active_pkg.get("weight_g"))
         else:
             # fallback — manual input (legacy fields)
             pkg_w = _safe_float(self._entry_vars.get("pkg_w", tk.StringVar()).get() if "pkg_w" in self._entry_vars else None)
@@ -1198,6 +1369,18 @@ class ProductPage(ttk.Frame):
         self._profit_rule_unavailable_notice = False
         if hasattr(self, "_profit_rule_var"):
             self._profit_rule_var.set(f"历史冻结规则：{saved_rule.get('display_name')}" if saved_rule else "无")
+        if hasattr(self, "_profit_adjustment_var"):
+            if not saved_rule:
+                self._profit_adjustment_var.set("无规则")
+            else:
+                amt = saved_adjustment.get("amount_original") or 0
+                cur = saved_adjustment.get("currency") or saved_rule.get("currency") or ""
+                adj_rmb = saved_adjustment.get("adjustment_rmb") or 0
+                self._profit_adjustment_var.set(
+                    f"历史冻结规则：{saved_rule.get('display_name')}\n"
+                    f"判断结果：{saved_adjustment.get('reason', '已保存')}\n"
+                    f"调整：{amt:.2f} {cur}（{adj_rmb:+.2f} RMB）"
+                )
         self._has_snapshot = True
         # 保存不清空页面（按 UI-602）
         if was_new:
@@ -1335,6 +1518,13 @@ class ProductPage(ttk.Frame):
         if found: self._set_result("converted_usd", converted, " $")
         found, sp = self._saved_result(calc, "suggested_price_rmb", "suggested_price")
         if found: self._set_result("suggested_price", sp, " 元"); self._computed["suggested_price"] = sp
+        # 恢复 profit_adjustment 到 _computed（保持冻结规则快照一致性）
+        if isinstance(rule_context, dict) and rule_context.get("profit_adjustment"):
+            self._computed["profit_adjustment"] = rule_context["profit_adjustment"]
+        elif isinstance(calc, dict) and calc.get("profit_adjustment"):
+            self._computed["profit_adjustment"] = calc["profit_adjustment"]
+        if isinstance(calc, dict) and calc.get("profit_before_adjustment") is not None:
+            self._computed["profit_before_adjustment"] = calc["profit_before_adjustment"]
 
     def load_product(self, product_id: str):
         product = self._db.get_product(product_id)
