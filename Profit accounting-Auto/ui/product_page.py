@@ -14,8 +14,10 @@
 保留原有：计算引擎、配置读写、数据库快照、规则上下文。
 """
 
-import math, tkinter as tk, sys, os
-from tkinter import ttk, messagebox
+import math, tkinter as tk, sys, os, shutil, uuid
+from tkinter import ttk, messagebox, filedialog
+from pathlib import Path
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from calculation import (
@@ -29,6 +31,7 @@ from calculation import (
 from config.config_manager import VOLUME_DIVISOR, FORWARDER_LABELS
 from database.db_manager import CALCULATION_SCHEMA_VERSION
 from image_intake.result_models import MeasurementScope
+from adapters.fake_vision import FakeVisionAdapter
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -100,8 +103,9 @@ class ProductPage(ttk.Frame):
         self._profit_rule_source = "none"
         self._profit_rule_explicitly_changed = False
         self._profit_rule_unavailable_notice = False
-        # Step 2 图片框占位
+        # Step 2 图片框系统
         self.image_states = []
+        self._init_session()
         # Step 3 AI / 包装档占位
         self._ai_data = {}
         self._packaging_mode = "normal"  # "normal" | "conservative"
@@ -147,39 +151,138 @@ class ProductPage(ttk.Frame):
         body.pack(fill=tk.X, padx=10, pady=(0, 8))
         return body
 
-    # ─── section 1：图片输入 ───────────────────────────────────────────────
+    # ─── Session 管理 ─────────────────────────────────────────────────
+
+    def _init_session(self):
+        local = os.environ.get("LOCALAPPDATA", os.path.expanduser("~/AppData/Local"))
+        base = Path(local) / "ProfitAccountingAuto" / "image_sessions"
+        self._session_root = base / (datetime.now().strftime("session_%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8])
+        self._session_root.mkdir(parents=True, exist_ok=True)
+
+    def _copy_image_to_session(self, src_path):
+        dst = self._session_root / (uuid.uuid4().hex + (Path(src_path).suffix.lower() or ".png"))
+        shutil.copy2(src_path, dst)
+        return str(dst)
+
+    # ─── section 1：图片输入（完整实现）───────────────────────────────────
+
+    IMG_TYPES = ["主图", "商品信息", "尺寸/重量"]
 
     def _build_section_images(self):
         body = self._section_frame("图片输入", "上传、拖入或粘贴商品图片")
         self._img_container = ttk.Frame(body)
         self._img_container.pack(fill=tk.X, pady=5)
-        # placeholder — 5 image slots
-        for i in range(5):
-            frm = ttk.LabelFrame(self._img_container, text=f"框 {i+1}", width=130, height=150)
-            frm.grid(row=0, column=i, padx=4, pady=4, sticky="n")
-            frm.grid_propagate(False)
-            lbl = ttk.Label(frm, text="点击上传\n或拖入图片\n或 Ctrl+V 粘贴", foreground="#999", font=("", 8))
-            lbl.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-            self.image_states.append({"frame": frm, "label": lbl, "img_type": None, "path": None})
+        self._rebuild_image_boxes()
         # 图片框数量调节（+/-）
         ctrl = ttk.Frame(body)
         ctrl.pack(anchor=tk.W, pady=(2, 0))
         ttk.Label(ctrl, text="图片框数量：", font=("", 8)).pack(side=tk.LEFT)
         self._img_count_var = tk.StringVar(value="5")
         ttk.Label(ctrl, textvariable=self._img_count_var, font=("", 9, "bold")).pack(side=tk.LEFT, padx=3)
-        ttk.Button(ctrl, text="−", width=2, command=self._img_decrease).pack(side=tk.LEFT, padx=1)
+        ttk.Button(ctrl, text="－", width=2, command=self._img_decrease).pack(side=tk.LEFT, padx=1)
         ttk.Button(ctrl, text="＋", width=2, command=self._img_increase).pack(side=tk.LEFT, padx=1)
         ttk.Label(ctrl, text="(最少3框，最多6框)", foreground="#888", font=("", 8)).pack(side=tk.LEFT, padx=5)
+
+    def _rebuild_image_boxes(self):
+        """根据当前 _img_count_var 重建图片框。"""
+        for child in self._img_container.winfo_children():
+            child.destroy()
+        self.image_states = []
+        count = int(self._img_count_var.get()) if hasattr(self, "_img_count_var") else 5
+        for i in range(count):
+            self._create_image_box(i)
+
+    def _create_image_box(self, idx):
+        frm = ttk.LabelFrame(self._img_container, text=f"框 {idx+1}", width=140, height=170)
+        frm.grid(row=0, column=idx, padx=3, pady=3, sticky="n")
+        frm.grid_propagate(False)
+
+        # 类型选择
+        type_var = tk.StringVar(value="主图")
+        cb = ttk.Combobox(frm, textvariable=type_var, values=self.IMG_TYPES, state="readonly", width=8)
+        cb.pack(anchor=tk.N, pady=2)
+
+        # 图片标签
+        lbl = ttk.Label(frm, text="点击上传\n或拖入图片\n或 Ctrl+V", foreground="#999", font=("", 8))
+        lbl.pack(anchor=tk.CENTER, expand=True, fill=tk.BOTH, padx=4, pady=4)
+
+        state = {"frame": frm, "label": lbl, "type_var": type_var, "path": None, "photo": None}
+        self.image_states.append(state)
+
+        # 绑定事件
+        frm.bind("<Button-1>", lambda e, s=state: self._img_upload(s))
+        frm.bind("<Delete>", lambda e, s=state: self._img_delete(s))
+        lbl.bind("<Button-1>", lambda e, s=state: self._img_upload(s))
+        # 右键菜单
+        menu = tk.Menu(frm, tearoff=0)
+        menu.add_command(label="上传图片", command=lambda s=state: self._img_upload(s))
+        menu.add_command(label="清除图片", command=lambda s=state: self._img_delete(s))
+        menu.add_command(label="预览大图", command=lambda s=state: self._img_preview(s))
+        frm.bind("<Button-3>", lambda e, m=menu: m.tk_popup(e.x_root, e.y_root))
+        # 修改类型触发 AI 过期
+        type_var.trace_add("write", lambda *_, s=state: self._on_img_type_changed(s))
+
+    def _img_upload(self, state):
+        f = filedialog.askopenfilename(parent=self, title="选择图片",
+                                         filetypes=[("图片文件", "*.png *.jpg *.jpeg *.webp *.bmp")])
+        if not f:
+            return
+        # 已有图片 → 询问覆盖
+        if state["path"] is not None:
+            if not messagebox.askyesno("覆盖确认", f"该图片框已有图片，确定覆盖吗？"):
+                return
+        try:
+            new_path = self._copy_image_to_session(f)
+        except Exception as exc:
+            messagebox.showerror("上传失败", str(exc)); return
+        state["path"] = new_path
+        self._show_thumb(state)
+
+    def _show_thumb(self, state):
+        """在图片框中显示缩略图。"""
+        try:
+            import PIL.Image, PIL.ImageTk
+            img = PIL.Image.open(state["path"])
+            frm = state["frame"]
+            w = frm.winfo_width() or 120
+            h = frm.winfo_height() or 140
+            img.thumbnail((w - 10, h - 30), PIL.Image.LANCZOS if hasattr(PIL.Image, "LANCZOS") else PIL.Image.Resampling.LANCZOS)
+            photo = PIL.ImageTk.PhotoImage(img)
+            state["photo"] = photo
+            state["label"].configure(image=photo, text="", compound=tk.CENTER)
+            state["label"].image = photo  # keep ref
+        except ImportError:
+            state["label"].configure(text=f"已加载:\n{Path(state['path']).name}", foreground="#2a6496")
+
+    def _img_delete(self, state):
+        if state["path"] is None: return
+        state["path"] = None; state["photo"] = None
+        state["label"].configure(image="", text="点击上传\n或拖入图片\n或 Ctrl+V", foreground="#999", compound=tk.CENTER)
+
+    def _img_preview(self, state):
+        if state["path"] is None:
+            messagebox.showinfo("提示", "此框暂无图片"); return
+        try:
+            import PIL.Image
+            img = PIL.Image.open(state["path"])
+            img.show()
+        except ImportError:
+            messagebox.showinfo("图片路径", state["path"])
+
+    def _on_img_type_changed(self, state):
+        self._mark_packaging_expired()
 
     def _img_decrease(self):
         cur = int(self._img_count_var.get())
         if cur <= 3: return
         self._img_count_var.set(str(cur - 1))
+        self._rebuild_image_boxes()
 
     def _img_increase(self):
         cur = int(self._img_count_var.get())
         if cur >= 6: return
         self._img_count_var.set(str(cur + 1))
+        self._rebuild_image_boxes()
 
     # ─── section 2：AI 识别摘要 ────────────────────────────────────────────
 
@@ -228,14 +331,102 @@ class ProductPage(ttk.Frame):
         ttk.Button(btn_row, text="AI识图", command=self._ai_recognize).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(btn_row, text="重新估算规格", command=self._reestimate_packaging).pack(side=tk.LEFT)
         ai_frm.columnconfigure(1, weight=1)
+        # AI 属性变化 → 标记包装过期
+        for ai_var in [self._var_rigidity, self._var_foldable, self._var_compressible, self._var_shapekeep]:
+            ai_var.trace_add("write", lambda *_, v=ai_var: self._on_ai_attr_changed(v))
+
+    def _on_ai_attr_changed(self, var_obj):
+        if self._programmatic: return
+        self._mark_packaging_expired()
 
     def _ai_recognize(self):
-        """Step 3 实现 Fake AI"""
-        pass
+        """调用 Fake AI 识别图片，回填 AI 摘要和包装方案。"""
+        paths = [s["path"] for s in self.image_states if s["path"] is not None]
+        if not paths:
+            messagebox.showinfo("提示", "请先上传至少一张图片。"); return
+        try:
+            self._ai_data = FakeVisionAdapter.recognize(paths)
+        except Exception as exc:
+            messagebox.showerror("AI识别失败", str(exc)); return
+        # 回填 UI
+        self._programmatic = True
+        try:
+            self._var_ai_type.set(self._ai_data.get("product_type", ""))
+            self._var_ai_material.set(self._ai_data.get("material", ""))
+            self._var_ai_structure.set(self._ai_data.get("structure", ""))
+            self._var_rigidity.set(self._ai_data.get("rigidity", ""))
+            self._var_foldable.set(self._ai_data.get("foldable", ""))
+            self._var_compressible.set(self._ai_data.get("compressible", ""))
+            self._var_shapekeep.set(self._ai_data.get("shape_keep", ""))
+            self._var_ai_note.set(self._ai_data.get("note", ""))
+        finally:
+            self._programmatic = False
+        # 更新包装规格显示
+        self._update_packaging_display()
+        self._clear_packaging_expired()
+        # 不自动触发重新计算（等待用户选择货代后计算）
 
     def _reestimate_packaging(self):
-        """Step 3 实现包装重估"""
-        pass
+        """重新估算包装规格（不重新调视觉API）。"""
+        attrs = {
+            "rigidity": self._var_rigidity.get().strip(),
+            "foldable": self._var_foldable.get().strip(),
+            "compressible": self._var_compressible.get().strip(),
+            "shape_keep": self._var_shapekeep.get().strip(),
+        }
+        if not attrs["rigidity"]:
+            messagebox.showinfo("提示", "请先执行「AI识图」或手动填写商品属性。"); return
+        try:
+            result = FakeVisionAdapter.reestimate_packaging(attrs)
+        except Exception as exc:
+            messagebox.showerror("重估失败", str(exc)); return
+        # 合并到 _ai_data
+        if not self._ai_data: self._ai_data = {}
+        self._ai_data["normal"] = result.get("normal", {})
+        self._ai_data["conservative"] = result.get("conservative", {})
+        # 如果需要，更新 AI 摘要 note
+        if result.get("note") and not self._var_ai_note.get().strip():
+            self._var_ai_note.set(result.get("note", ""))
+        self._update_packaging_display()
+        # 更新裸件预填（如果为空）
+        self._programmatic = True
+        try:
+            n = result.get("normal", {})
+            if n and not self._var_net_w.get().strip():
+                w = n.get("weight_g")
+                if w: self._var_net_w.set(str(w))
+            if n and not self._var_net_l.get().strip():
+                self._var_net_l.set(str(n.get("length_cm", "")))
+                self._var_net_wi.set(str(n.get("width_cm", "")))
+                self._var_net_h.set(str(n.get("height_cm", "")))
+        finally:
+            self._programmatic = False
+        self._clear_packaging_expired()
+
+    def _update_packaging_display(self):
+        """将 _ai_data 中的包装方案更新到 UI 双栏。"""
+        if not self._ai_data:
+            return
+        n = self._ai_data.get("normal", {})
+        c = self._ai_data.get("conservative", {})
+        if not hasattr(self, "_pkg_normal_widgets"): return
+        # 正常档
+        self._pkg_normal_widgets["method"].set(n.get("method", "—"))
+        if n.get("length_cm") is not None:
+            self._pkg_normal_widgets["dims"].set(f"{n['length_cm']} × {n['width_cm']} × {n['height_cm']}")
+        self._pkg_normal_widgets["weight"].set(str(n.get("weight_g", "—")) if n.get("weight_g") else "—")
+        self._pkg_normal_widgets["note"].set(n.get("note", "—"))
+        self._pkg_normal = n
+        # 保守档
+        self._pkg_conservative_widgets["method"].set(c.get("method", "—"))
+        if c.get("length_cm") is not None:
+            self._pkg_conservative_widgets["dims"].set(f"{c['length_cm']} × {c['width_cm']} × {c['height_cm']}")
+        self._pkg_conservative_widgets["weight"].set(str(c.get("weight_g", "—")) if c.get("weight_g") else "—")
+        self._pkg_conservative_widgets["note"].set(c.get("note", "—"))
+        self._pkg_conservative = c
+
+    def _packaging_display_on_switch(self):
+        self._update_packaging_display()
 
     # ─── section 3：成本与裸件信息 ──────────────────────────────────────────
 
@@ -330,6 +521,7 @@ class ProductPage(ttk.Frame):
 
     def _switch_packaging_mode(self):
         self._packaging_mode = self._mode_var.get()
+        self._update_packaging_display()
         self.recalculate()
 
     # ─── section 5：货代方案 ────────────────────────────────────────────────
@@ -866,6 +1058,12 @@ class ProductPage(ttk.Frame):
         self._profit_rule_explicitly_changed = False; self._profit_rule_unavailable_notice = False
         self._ai_data = {}; self._packaging_mode = "normal"; self._packaging_expired = False
         self._pkg_normal = {}; self._pkg_conservative = {}
+        # 清空图片
+        for s in self.image_states:
+            s["path"] = None; s["photo"] = None
+            try:
+                s["label"].configure(image="", text="点击上传\n或拖入图片\n或 Ctrl+V", foreground="#999", compound=tk.CENTER)
+            except Exception: pass
         self._show_rate_notice(None); self._forwarder_var.set(""); self.clear_form()
         self._reset_profit_adjustment_display()
 
