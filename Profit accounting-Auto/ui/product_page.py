@@ -1059,11 +1059,12 @@ class ProductPage(ttk.Frame):
         self._ai_data = {}; self._packaging_mode = "normal"; self._packaging_expired = False
         self._pkg_normal = {}; self._pkg_conservative = {}
         # 清空图片
-        for s in self.image_states:
-            s["path"] = None; s["photo"] = None
-            try:
-                s["label"].configure(image="", text="点击上传\n或拖入图片\n或 Ctrl+V", foreground="#999", compound=tk.CENTER)
-            except Exception: pass
+        if hasattr(self, "image_states"):
+            for s in self.image_states:
+                s["path"] = None; s["photo"] = None
+                try:
+                    s["label"].configure(image="", text="点击上传\n或拖入图片\n或 Ctrl+V", foreground="#999", compound=tk.CENTER)
+                except Exception: pass
         self._show_rate_notice(None); self._forwarder_var.set(""); self.clear_form()
         self._reset_profit_adjustment_display()
 
