@@ -254,10 +254,13 @@ class ProductPage(ttk.Frame):
         menu.add_command(label="预览大图", command=lambda s=state: self._img_preview(s))
         frm.bind("<Button-3>", lambda e, m=menu: m.tk_popup(e.x_root, e.y_root))
 
-        # 拖拽支持 (tkinterdnd2)
+        # 拖拽支持 (tkinterdnd2) — 需要 TkinterDnD.Tk() 根窗口
         if _DND_AVAILABLE:
-            frm.drop_target_register(DND_FILES)
-            frm.dnd_bind("<<Drop>>", lambda e, s=state: self._img_drop(e, s))
+            try:
+                frm.drop_target_register(DND_FILES)
+                frm.dnd_bind("<<Drop>>", lambda e, s=state: self._img_drop(e, s))
+            except (tk.TclError, Exception):
+                pass  # DnD 不可用时静默降级
 
         # 修改类型触发 AI 过期
         type_var.trace_add("write", lambda *_, s=state: self._on_img_type_changed(s))
@@ -332,10 +335,25 @@ class ProductPage(ttk.Frame):
 
     def _img_drop(self, event, state):
         """tkinterdnd2 拖拽文件放入图片框。"""
-        files = self._tk.splitlist(event.data)
+        raw = event.data
+        # 解析拖拽数据：tkinterdnd2 可能返回 {C:/path} 或 C:/path 或多文件 {C:/path1} {C:/path2}
+        if isinstance(raw, (list, tuple)):
+            files = list(raw)
+        elif isinstance(raw, str):
+            if raw.startswith("{") and "}" in raw:
+                # Tcl 列表格式 {path1} {path2}
+                try:
+                    files = list(self.tk.splitlist(raw))
+                except Exception:
+                    files = [raw.strip("{}")]
+            else:
+                # 简单路径字符串
+                files = [raw]
+        else:
+            files = [str(raw)]
         if not files:
             return
-        f = files[0].strip("{}")
+        f = files[0].strip("{}").strip()
         self._load_image_from_path(f, state)
 
     def _load_image_from_path(self, path, state):
