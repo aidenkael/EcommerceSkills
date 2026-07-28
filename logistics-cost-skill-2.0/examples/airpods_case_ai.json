@@ -1,0 +1,22 @@
+{
+  "product_type": "anime_airpods_earphone_case",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [10, 8, 4],
+  "ai_package_weight_kg": 0.10,
+  "conservative_package_size_cm": [12, 10, 5],
+  "conservative_package_weight_kg": 0.12,
+  "packaging_method": "硬壳+挂卡",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "high",
+  "reasoning": "动漫Airpods硬壳保护套(东京食尸鬼金木研)。商家规格: 重量100g/件(含挂耳), 适用airpods 1/2/3/Pro/pro2/pro3/4代。树脂硬壳+挂卡包装。",
+  "notes": "1688商家规格表精确标注100g/件, 之前估60g偏低; 多型号同重量"
+}

@@ -1,0 +1,22 @@
+{
+  "product_type": "disposable_cotton_swab_round_box",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.165,
+  "ai_package_size_cm": [12, 12, 8],
+  "ai_package_weight_kg": 0.165,
+  "conservative_package_size_cm": [13, 13, 9],
+  "conservative_package_weight_kg": 0.18,
+  "packaging_method": "热缩膜",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "high",
+  "reasoning": "盒装棉签(双头木棒), 商家规格: 直径12cm, 高8cm, 重量约165g(手工测量±5g), 材质竹棒+脱脂棉, 包装热缩膜(无硬盒)。4款规格不同(双圆165g/尖圆162g/等)。",
+  "notes": "1688商家规格表精确到克; 上一轮估8×8×7cm/80g偏小, 实际包装12×12×8cm/165g"
+}

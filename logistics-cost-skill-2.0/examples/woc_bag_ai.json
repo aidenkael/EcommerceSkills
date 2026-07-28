@@ -1,0 +1,22 @@
+{
+  "product_type": "woc_quilted_handbag",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "bag",
+  "rigidity": "semi_rigid",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": true,
+  "ai_net_weight_kg": 0.60,
+  "ai_package_size_cm": [25, 16, 6],
+  "ai_package_weight_kg": 0.65,
+  "conservative_package_size_cm": [28, 18, 8],
+  "conservative_package_weight_kg": 0.75,
+  "packaging_method": "防尘袋+外盒",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "high",
+  "reasoning": "女款woc鱼子酱纹信封包(单肩/斜挎/链条), 商家规格22.5×14×4cm/600g(全7色一致, 数据可信)。真皮/PVC硬质, 链条+鱼子酱纹, 需保形。",
+  "notes": "1688 严选指数 4.1, 库存99, 跨境爆款; ¥134拿货, 1件包邮¥142"
+}

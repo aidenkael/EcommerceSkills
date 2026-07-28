@@ -1,0 +1,22 @@
+{
+  "product_type": "maltose_squishy_ball",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "soft",
+  "foldability": "none",
+  "compressibility": "limited",
+  "has_rigid_parts": false,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [7, 7, 7],
+  "ai_package_weight_kg": 0.11,
+  "conservative_package_size_cm": [8, 8, 8],
+  "conservative_package_weight_kg": 0.13,
+  "packaging_method": "OPP袋",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "high",
+  "reasoning": "小红书减压麦芽糖球(回弹玩具, 透明/肤/蓝/粉/草莓), 商家规格: 6×6×6cm/100g, 体积216cm³。5色同款, 2万+件已售。",
+  "notes": "果冻/麦芽糖球, 半硬质; 直径6cm球体装OPP袋7×7×7"
+}

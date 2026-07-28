@@ -1,0 +1,22 @@
+{
+  "product_type": "pet_car_seatbelt",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "semi_rigid",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [25, 10, 4],
+  "ai_package_weight_kg": 0.11,
+  "conservative_package_size_cm": [30, 12, 5],
+  "conservative_package_weight_kg": 0.14,
+  "packaging_method": "OPP袋/挂卡",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "medium",
+  "reasoning": "宠物车载安全带, 弹力绳+金属钩+反光条, 中大型犬用。拉伸约100-150cm, 卷绕后约25×10×4cm, 估100g。9色同款, 阶梯价¥4.8-5.0。",
+  "notes": "3.5万+销量跨境爆款; 弹力绳有反光条+金属钩"
+}

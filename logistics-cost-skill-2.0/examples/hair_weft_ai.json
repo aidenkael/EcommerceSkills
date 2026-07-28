@@ -1,0 +1,22 @@
+{
+  "product_type": "hair_weft_single_bundle",
+  "quantity": 1,
+  "quantity_source": "user_confirmed",
+  "category": "general",
+  "rigidity": "soft",
+  "foldability": "good",
+  "compressibility": "good",
+  "has_rigid_parts": false,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.08,
+  "ai_package_size_cm": [18, 10, 6],
+  "ai_package_weight_kg": 0.09,
+  "conservative_package_size_cm": [22, 12, 8],
+  "conservative_package_weight_kg": 0.11,
+  "packaging_method": "OPP袋/挂卡",
+  "folding_action": "卷绕",
+  "compression_action": "轻度压缩",
+  "confidence": "high",
+  "reasoning": "外贸化纤发帘1B一条装18inch(45cm/80g)。商家规格表精确标注一条装5档(50/55/80/90/100g对应14-26inch)。卷绕后约18×10×6cm, 含包装约90g。",
+  "notes": "用户已忘实际长度, 按中段18inch试算; 1束=1条装; 三条装是3束"
+}

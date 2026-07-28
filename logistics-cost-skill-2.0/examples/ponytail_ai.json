@@ -1,0 +1,22 @@
+{
+  "product_type": "pony_tail_hair_extension",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "soft",
+  "foldability": "good",
+  "compressibility": "good",
+  "has_rigid_parts": false,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [15, 10, 6],
+  "ai_package_weight_kg": 0.11,
+  "conservative_package_size_cm": [18, 12, 8],
+  "conservative_package_weight_kg": 0.14,
+  "packaging_method": "OPP袋/小纸盒",
+  "folding_action": "卷绕",
+  "compression_action": "轻度压缩",
+  "confidence": "high",
+  "reasoning": "外贸30inch发束(76cm), 软质发束(非硬质魔术棒)。商家规格: 长30inch/100g, 颜色8/25(灰棕渐变)。卷绕后约15×10×6cm, 估110g含包装。",
+  "notes": "已修正: 商家规格图显示LENGTH 30Inch/WEIGHT 100g, 无硬质卡扣; 卷绕装袋"
+}

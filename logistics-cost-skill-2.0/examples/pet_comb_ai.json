@@ -1,0 +1,22 @@
+{
+  "product_type": "pet_dematting_comb",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.117,
+  "ai_package_size_cm": [18, 10, 4],
+  "ai_package_weight_kg": 0.12,
+  "conservative_package_size_cm": [20, 11, 5],
+  "conservative_package_weight_kg": 0.14,
+  "packaging_method": "纸盒/挂卡",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "high",
+  "reasoning": "宠物开结梳(双面清洁梳), 商家规格: 头宽9cm, 长17cm, 重117g(手工测量)。塑料手柄+金属梳针, 大/小号。4色同款(粉/蓝/灰)。",
+  "notes": "1688商家提供尺寸+重量, 数据相对可信; 跨境爆款"
+}

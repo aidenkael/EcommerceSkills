@@ -1,0 +1,22 @@
+{
+  "product_type": "acetate_hair_claw_clip",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.03,
+  "ai_package_size_cm": [10, 6, 4],
+  "ai_package_weight_kg": 0.04,
+  "conservative_package_size_cm": [12, 7, 5],
+  "conservative_package_weight_kg": 0.05,
+  "packaging_method": "挂卡",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "medium",
+  "reasoning": "新款花式醋酸发夹(小众蔬菜抓夹), 商家规格: 水蜜桃9×5cm/草莓8.5×6cm/牡蛎7.5×4.5cm等多款。醋酸材质硬质, 含金属弹簧/塑料扣。",
+  "notes": "未指定具体款式, 按中段9×5cm估; 颜色款式多种¥13.7-15"
+}

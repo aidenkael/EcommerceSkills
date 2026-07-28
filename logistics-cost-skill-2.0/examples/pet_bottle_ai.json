@@ -1,0 +1,22 @@
+{
+  "product_type": "pet_water_bottle_portable",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.21,
+  "ai_package_size_cm": [21, 11.5, 7.5],
+  "ai_package_weight_kg": 0.25,
+  "conservative_package_size_cm": [23, 13, 9],
+  "conservative_package_weight_kg": 0.28,
+  "packaging_method": "纸盒",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "high",
+  "reasoning": "宠物水壶(550ml, 户外便携), 商家规格: 单个重量208g, 单个包装21×11.5×7.5cm, 60个/箱, 毛重12.29kg/箱, 外箱43.2×45×45cm。多色多容量(400-800ml)。",
+  "notes": "塑料+硅胶+金属, 半硬质; 实际发货550ml款"
+}

@@ -1,0 +1,22 @@
+{
+  "product_type": "folding_sunglasses_with_case",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [12, 10, 5],
+  "ai_package_weight_kg": 0.11,
+  "conservative_package_size_cm": [14, 12, 6],
+  "conservative_package_weight_kg": 0.13,
+  "packaging_method": "硬圆形收纳盒+外盒",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "medium",
+  "reasoning": "网红街拍折叠墨镜(女士), 含圆形收纳盒+外盒。商家4色同款, 1件¥3.60起批。镜框+镜片不可折, 收纳盒为硬质塑料, 整体按硬品处理。",
+  "notes": "墨镜+硬圆盒包装, 估100g含盒含外盒; 颜色: 磨土黑/槟榔棕/深空绿/渐透蓝"
+}
