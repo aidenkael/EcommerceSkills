@@ -15,17 +15,12 @@
 
 ## 二、已知问题处理
 
-### 已修正 (1 条)
+### 已修正 (2 条)
 
 | 样本 | 问题 | 修正 |
 |------|------|------|
 | CAL-017 | `error_direction` 错误标记为 `overestimate` | 更正为 `underestimate` (估6.05元 < 实际12.35元) |
-
-### 自动检测到的新问题 (1 条)
-
-| 样本 | 问题 | 处理 |
-|------|------|------|
-| CAL-045 | `error_direction=underestimate` 但 estimated(39.6) > actual(39.0), 应为 overestimate | 已记录, 未自动修正 |
+| CAL-045 | `error_direction=underestimate` 但 estimated(39.6) > actual(39.0), 应为 overestimate | 已修正为 overestimate (偏高0.6元) |
 
 ### 已排除 (3 条)
 
@@ -68,7 +63,7 @@
 ### error_direction 一致性
 
 - CAL-017: 已手动修正 (overestimate → underestimate)
-- CAL-045: 新增问题 (underestimate 但 est > act, 应为 overestimate) — 未自动修正, 仅记录
+- CAL-045: 已修正 (underestimate → overestimate, est 39.6 > act 39.0, 偏高0.6元)
 
 ### 费用与计费重一致性
 

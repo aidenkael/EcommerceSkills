@@ -2516,7 +2516,7 @@
     "actual_head_freight_rmb": 39.0,
     "actual_chargeable_weight_kg": 0.4875,
     "head_freight_error_pct": 1.5,
-    "error_direction": "underestimate",
+    "error_direction": "overestimate",
     "freight_forwarder": "深圳货代",
     "root_cause": "NORMAL_OPERATIONAL_VARIANCE",
     "root_cause_detail": "估0.495kg→39.6元, 实际0.4875kg→39.0元, 差0.6元(1.5%)。24×11×15=3960cm³体积重估算极准，纸盒+气泡保护未超标。中等包类+硬质纸盒出货, 体积主导。",
@@ -2545,7 +2545,8 @@
     "ai_json_path": "examples/pu_small_chain_shoulder_bag_ai.json",
     "notes": "CAL-045: PU小方包偏差1.5%(39.6→39)。今天最准的包类正算。24×11×15=3960cm³=0.495kg体积重估算极准，深圳货代确认。",
     "data_quality_issues": [
-      "CAL-045: error_direction=underestimate but estimated(39.6)>actual(39.0), should be overestimate"
+      "CAL-045: error_direction=underestimate but estimated(39.6)>actual(39.0), should be overestimate",
+      "error_direction更正: underestimate->overestimate (estimated 39.6 > actual 39.0, 偏高0.6元)"
     ],
     "data_quality_status": "ok",
     "exclude_from_numeric_calibration": false,
