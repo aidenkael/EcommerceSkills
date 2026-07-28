@@ -1,6 +1,9 @@
 {
   "formula_version": "2026-07-head-tail-freight-forwarder-v1",
   "packaging_policy_version": "2026-07-realistic-range-packaging-v2",
+  "min_head_charge_rmb": 3.0,
+  "trusted_weight_no_increment_max_g": 50,
+  "trusted_weight_default_increment_g": 50,
   "_deprecated": {
     "categories": {
       "_note": "2026-07-26 作废。包类80/非包类100 改为按货代区分费率。保留此字段仅供旧调用链兼容, 新调用应使用 freight_forwarders。",
