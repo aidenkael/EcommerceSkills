@@ -44,8 +44,8 @@ def test_freight_03kg():
 def test_freight_service_fee_included():
     """固定服务费不遗漏。"""
     freight = calc_freight_costs(0.0)
-    assert freight["provider_costs"]["深圳货代"]["total_cost_rmb"] == 10.0  # 0 + 10
-    assert freight["provider_costs"]["义乌货代"]["total_cost_rmb"] == 6.0   # 0 + 6
+    assert freight["provider_costs"]["深圳货代"]["total_cost_rmb"] == 13.0  # min_head(3) + 10
+    assert freight["provider_costs"]["义乌货代"]["total_cost_rmb"] == 9.0   # min_head(3) + 6
 
 
 # === Both normal and conservative return dual provider costs ===

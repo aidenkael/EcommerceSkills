@@ -67,10 +67,18 @@ def calc_freight_costs(chargeable_weight_kg: float) -> dict[str, Any]:
     lowest = None
     lowest_key = ""
     for key, fw in FREIGHT_FORWARDERS.items():
-        total = round(w * fw["rate_per_kg_rmb"] + fw["fixed_service_fee_rmb"], 2)
+        head_freight = round(w * fw["rate_per_kg_rmb"], 2)
+        sfee = fw["fixed_service_fee_rmb"]
+        cfg = load_config()
+        min_charge = float(cfg.get("min_head_charge_rmb", 0.0) or 0.0)
+        if min_charge > 0 and head_freight < min_charge:
+            head_freight = min_charge
+        total = round(head_freight + sfee, 2)
         costs[fw["label"]] = {
             "rate_per_kg_rmb": fw["rate_per_kg_rmb"],
-            "fixed_service_fee_rmb": fw["fixed_service_fee_rmb"],
+            "fixed_service_fee_rmb": sfee,
+            "head_freight_rmb": head_freight,
+            "service_fee_rmb": sfee,
             "total_cost_rmb": total,
         }
         if lowest is None or total < lowest:
