@@ -1,77 +1,64 @@
 """
-SQLite 数据库管理模块
+SQLite 数据库管理 — Schema v6
 
-表结构:
-  schema_version    — 数据库版本（迁移用）
-  products         — 商品主表（当前有效数据）
-  product_snapshots — 第一次保存时的快照（含当时费率）
-  config           — 配置键值对
-
-规则版本: 1 (初始版)
+迁移规则：
+- 新数据库：直接创建完整 v6 schema，不备份不迁移
+- 旧数据库：先只读检查→关闭→备份→事务迁移→提交/回滚
+- 当前商品状态与首次快照在同一事务中保存
 """
 
-import sqlite3
-import json
-import uuid
-import os
-from datetime import datetime
+import sqlite3, json, uuid, os, shutil, sys
+from datetime import datetime, timedelta
 
+CURRENT_SCHEMA_VERSION = 7
+CURRENT_RULE_VERSION = 3
+CALCULATION_SCHEMA_VERSION = 1
+VOLUME_DIVISOR = 8000
 
-CURRENT_SCHEMA_VERSION = 1
+DEFAULT_ROUTES = {
+    "shenzhen": {"display_name": "深圳", "head_haul_rate": 80.0, "fixed_service_fee": 10.0, "volume_divisor": 8000, "is_enabled": 1, "description": ""},
+    "yiwu": {"display_name": "义乌", "head_haul_rate": 100.0, "fixed_service_fee": 6.0, "volume_divisor": 8000, "is_enabled": 1, "description": ""},
+}
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS schema_version (
-    version   INTEGER PRIMARY KEY,
-    applied_at TEXT NOT NULL
-);
-
+CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS business_rule_version (version INTEGER PRIMARY KEY, description TEXT DEFAULT '', applied_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS products (
-    id                  TEXT PRIMARY KEY,
-    name                TEXT DEFAULT '',
-    cost                REAL,
-    domestic_shipping   REAL,
-    net_weight          REAL,
-    net_length          REAL,
-    net_width           REAL,
-    net_height          REAL,
-    packaged_weight     REAL,
-    packaged_length     REAL,
-    packaged_width      REAL,
-    packaged_height     REAL,
-    head_haul_cost      REAL,
-    fixed_service_fee   REAL,
-    tail_haul_cost      REAL,
-    shein_price         REAL,
-    selling_price_rmb   REAL,
-    selling_price_usd   REAL,
-    target_profit_rate  REAL,
-    promotion_reserve_rate REAL,
-    notes               TEXT DEFAULT '',
-    status              TEXT DEFAULT 'active',
-    image_path          TEXT DEFAULT '',
-    created_at          TEXT NOT NULL,
-    updated_at          TEXT NOT NULL
-);
-
+    id TEXT PRIMARY KEY, name TEXT DEFAULT '', cost REAL, domestic_shipping REAL,
+    net_weight REAL, net_length REAL, net_width REAL, net_height REAL,
+    packaged_weight REAL, packaged_length REAL, packaged_width REAL, packaged_height REAL,
+    freight_forwarder TEXT DEFAULT NULL,
+    head_haul_cost REAL, fixed_service_fee REAL, tail_haul_cost REAL,
+    shein_price REAL, selling_price_rmb REAL, selling_price_usd REAL,
+    target_profit_rate REAL, promotion_reserve_rate REAL,
+    weight_unit_version TEXT DEFAULT 'g_v1',
+    current_rule_snapshot TEXT, current_calculation_results TEXT,
+    calculation_schema_version INTEGER DEFAULT 1, calculated_at TEXT,
+    notes TEXT DEFAULT '', status TEXT DEFAULT 'active', image_path TEXT DEFAULT '',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS product_snapshots (
-    id                  TEXT PRIMARY KEY,
-    product_id          TEXT NOT NULL UNIQUE,
-    snapshot_data       TEXT NOT NULL,
-    exchange_rate       REAL,
-    head_haul_rate      REAL,
-    fixed_service_fee   REAL,
-    rule_version        INTEGER DEFAULT 1,
-    created_at          TEXT NOT NULL,
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS config (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
+    id TEXT PRIMARY KEY, product_id TEXT NOT NULL UNIQUE,
+    snapshot_data TEXT NOT NULL,
+    exchange_rate REAL, head_haul_rate REAL, fixed_service_fee REAL,
+    tail_haul_cost REAL, volume_divisor INTEGER DEFAULT 8000,
+    rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS route_config (
+    route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0), display_name TEXT NOT NULL,
+    head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL,
+    volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1,
+    is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS profit_adjustment_rules (
+    rule_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(rule_id)) > 0),
+    display_name TEXT NOT NULL, condition_field TEXT, condition_operator TEXT,
+    condition_value REAL, adjustment_direction TEXT NOT NULL, adjustment_type TEXT NOT NULL,
+    adjustment_value REAL NOT NULL, currency TEXT NOT NULL, percentage_base TEXT,
+    is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0,
+    description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 
-# 所有数值字段列表
 NUMERIC_FIELDS = [
     "cost", "domestic_shipping",
     "net_weight", "net_length", "net_width", "net_height",
@@ -80,321 +67,981 @@ NUMERIC_FIELDS = [
     "shein_price", "selling_price_rmb", "selling_price_usd",
     "target_profit_rate", "promotion_reserve_rate",
 ]
-
-# 配置默认值（v1 基线：6元固定费 + 40元尾程）
-DEFAULT_CONFIG = {
-    "exchange_rate": "7.20",
-    "head_haul_rate": "100.0",
-    "fixed_service_fee": "6.0",
-    "default_tail_haul": "40.0",
-}
+DEFAULT_CONFIG = {"exchange_rate": "7.20", "default_tail_haul": "40.0"}
 
 
 class DatabaseManager:
-    """SQLite 数据库管理"""
-
     def __init__(self, db_path=None):
         if db_path is None:
-            db_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+            if getattr(sys, "frozen", False):
+                base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+                db_dir = os.path.join(base_dir, "ProfitAccountingAuto")
+            else:
+                db_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, "profit_accounting.db")
         self.db_path = db_path
-        self._init_db()
-        self._migrate_config()
+        db_exists = os.path.exists(self.db_path)
 
-    def _get_conn(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
-
-    def _add_column_if_missing(self, conn, table, column, col_type):
-        """安全添加列（如果不存在）"""
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-        except sqlite3.OperationalError:
-            pass  # 列已存在
-
-    def _init_db(self):
-        """建表 + 版本初始化 + 列迁移"""
-        conn = self._get_conn()
-        try:
-            conn.executescript(SCHEMA_SQL)
-
-            # 为旧版快照表补充新列（如果不存在）
-            self._add_column_if_missing(conn, "product_snapshots", "exchange_rate", "REAL")
-            self._add_column_if_missing(conn, "product_snapshots", "head_haul_rate", "REAL")
-            self._add_column_if_missing(conn, "product_snapshots", "fixed_service_fee", "REAL")
-            self._add_column_if_missing(conn, "product_snapshots", "rule_version", "INTEGER DEFAULT 1")
-
-            # 检查 schema_version 是否已有记录
-            existing = conn.execute(
-                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-            ).fetchone()
-
-            if existing is None:
-                conn.execute(
-                    "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-                    (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()),
+        if db_exists:
+            old_version = self._peek_schema_version()
+            if old_version > CURRENT_SCHEMA_VERSION:
+                raise RuntimeError(
+                    f"数据库版本 {old_version} 高于程序支持的版本 {CURRENT_SCHEMA_VERSION}，"
+                    "请使用更新版本的程序。"
                 )
-
-            # 填入默认配置（仅当 key 不存在时）
-            for key, val in DEFAULT_CONFIG.items():
-                conn.execute(
-                    "INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)",
-                    (key, val),
-                )
-            conn.commit()
-        finally:
-            conn.close()
-
-    def _migrate_config(self):
-        """安全迁移：仅在新数据库首次初始化时生效。不会覆盖用户已有设置。"""
-        conn = self._get_conn()
-        try:
-            # 检查是否已执行过迁移
-            migrated = conn.execute(
-                "SELECT value FROM config WHERE key = '_config_migrated_v1'"
-            ).fetchone()
-            if migrated and migrated["value"] == "1":
-                return
-
-            # 首次运行：如果旧版数据库中有出厂默认值(36/0)且用户尚未修改，则更新
-            old_factory = {"fixed_service_fee": "36.0", "default_tail_haul": "0.0"}
-            for key, old_val in old_factory.items():
-                current = conn.execute(
-                    "SELECT value FROM config WHERE key = ?", (key,)
-                ).fetchone()
-                if current and current["value"] == old_val:
-                    # 仍是旧出厂默认值 → 升级到新默认值
-                    conn.execute(
-                        "UPDATE config SET value = ? WHERE key = ?",
-                        (DEFAULT_CONFIG[key], key),
-                    )
-
-            # 标记已迁移（防止重复执行）
-            conn.execute(
-                "INSERT OR REPLACE INTO config (key, value) VALUES ('_config_migrated_v1', '1')"
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-    def get_schema_version(self) -> int:
-        conn = self._get_conn()
-        try:
-            row = conn.execute(
-                "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
-            ).fetchone()
-            return row["version"] if row else 0
-        finally:
-            conn.close()
-
-    # ─── 商品 CRUD ──────────────────────────────────────────
-
-    def create_product(self, data: dict) -> str:
-        """创建新商品，返回商品ID"""
-        product_id = str(uuid.uuid4())[:8]
-        now = datetime.now().isoformat()
-
-        conn = self._get_conn()
-        try:
-            conn.execute(
-                """INSERT INTO products (
-                    id, name, cost, domestic_shipping,
-                    net_weight, net_length, net_width, net_height,
-                    packaged_weight, packaged_length, packaged_width, packaged_height,
-                    head_haul_cost, fixed_service_fee, tail_haul_cost,
-                    shein_price, selling_price_rmb, selling_price_usd,
-                    target_profit_rate, promotion_reserve_rate,
-                    notes, status, image_path,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    product_id,
-                    data.get("name", ""),
-                    data.get("cost"),
-                    data.get("domestic_shipping"),
-                    data.get("net_weight"),
-                    data.get("net_length"),
-                    data.get("net_width"),
-                    data.get("net_height"),
-                    data.get("packaged_weight"),
-                    data.get("packaged_length"),
-                    data.get("packaged_width"),
-                    data.get("packaged_height"),
-                    data.get("head_haul_cost"),
-                    data.get("fixed_service_fee"),
-                    data.get("tail_haul_cost"),
-                    data.get("shein_price"),
-                    data.get("selling_price_rmb"),
-                    data.get("selling_price_usd"),
-                    data.get("target_profit_rate"),
-                    data.get("promotion_reserve_rate"),
-                    data.get("notes", ""),
-                    data.get("status", "active"),
-                    data.get("image_path", ""),
-                    now, now,
-                ),
-            )
-            conn.commit()
-            return product_id
-        finally:
-            conn.close()
-
-    def update_product(self, product_id: str, data: dict):
-        """更新商品数据"""
-        now = datetime.now().isoformat()
-        data["updated_at"] = now
-
-        set_clauses = []
-        values = []
-        for field in NUMERIC_FIELDS + ["name", "notes", "status", "image_path", "updated_at"]:
-            if field in data:
-                set_clauses.append(f"{field} = ?")
-                values.append(data[field])
-
-        if not set_clauses:
-            return
-
-        values.append(product_id)
-        sql = f"UPDATE products SET {', '.join(set_clauses)} WHERE id = ?"
-
-        conn = self._get_conn()
-        try:
-            conn.execute(sql, values)
-            conn.commit()
-        finally:
-            conn.close()
-
-    def get_product(self, product_id: str) -> dict | None:
-        """获取单个商品"""
-        conn = self._get_conn()
-        try:
-            row = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
-            return dict(row) if row else None
-        finally:
-            conn.close()
-
-    def delete_product(self, product_id: str):
-        """删除商品及其快照"""
-        conn = self._get_conn()
-        try:
-            conn.execute("DELETE FROM product_snapshots WHERE product_id = ?", (product_id,))
-            conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
-            conn.commit()
-        finally:
-            conn.close()
-
-    def search_products(self, keyword="", limit=100, offset=0) -> list[dict]:
-        """搜索商品（按名称或ID），返回含物流成本的完整数据供历史列表使用"""
-        conn = self._get_conn()
-        try:
-            base_sql = """SELECT id, name, cost, domestic_shipping,
-                                 head_haul_cost, fixed_service_fee, tail_haul_cost,
-                                 selling_price_rmb, selling_price_usd,
-                                 target_profit_rate, promotion_reserve_rate,
-                                 status, created_at, updated_at
-                          FROM products"""
-            if keyword:
-                pattern = f"%{keyword}%"
-                rows = conn.execute(
-                    base_sql + " WHERE name LIKE ? OR id LIKE ? ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                    (pattern, pattern, limit, offset),
-                ).fetchall()
+            if old_version < CURRENT_SCHEMA_VERSION:
+                self._migrate_from(old_version)
             else:
-                rows = conn.execute(
-                    base_sql + " ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-                    (limit, offset),
-                ).fetchall()
-            return [dict(r) for r in rows]
+                self._init_db()
+                self._seed_current_data()
+        else:
+            self._init_db()
+            self._seed_current_data()
+            # 利润调整规则仅在首次建库时种子
+            self._seed_profit_adjustment_rules_first_time()
+        self._validate_database_file()
+
+    def _peek_schema_version(self) -> int:
+        """只读连接读取版本号，读完后立即关闭"""
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
+            return row["version"] if row else 0
+        except sqlite3.OperationalError:
+            return 0
         finally:
             conn.close()
 
-    def list_all_products(self, limit=200) -> list[dict]:
-        return self.search_products(keyword="", limit=limit)
+    def _migrate_from(self, old_version: int):
+        """从旧版本迁移到当前版本，失败时恢复原数据库。"""
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = self.db_path + f".backup_v{old_version}_to_v{CURRENT_SCHEMA_VERSION}_{ts}.db"
+        shutil.copy2(self.db_path, backup_path)
 
-    # ─── 快照管理 ──────────────────────────────────────────
-
-    def save_snapshot(self, product_id: str, data: dict, rules: dict = None):
-        """
-        保存第一次推算快照（如果已存在则跳过）
-
-        Args:
-            product_id: 商品ID
-            data: 商品数据dict
-            rules: 当时的费率规则 dict，如 {'exchange_rate': 7.2, 'head_haul_rate': 100.0, ...}
-        """
-        now = datetime.now().isoformat()
-        snapshot_json = json.dumps(data, ensure_ascii=False)
-
-        conn = self._get_conn()
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
         try:
-            existing = conn.execute(
-                "SELECT id FROM product_snapshots WHERE product_id = ?", (product_id,)
-            ).fetchone()
-            if existing is None:
-                snap_id = str(uuid.uuid4())[:8]
-                ex_rate = rules.get("exchange_rate") if rules else None
-                hd_rate = rules.get("head_haul_rate") if rules else None
-                fx_fee = rules.get("fixed_service_fee") if rules else None
-                conn.execute(
-                    """INSERT INTO product_snapshots
-                       (id, product_id, snapshot_data, exchange_rate, head_haul_rate,
-                        fixed_service_fee, rule_version, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (snap_id, product_id, snapshot_json, ex_rate, hd_rate, fx_fee,
-                     CURRENT_SCHEMA_VERSION, now),
-                )
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("BEGIN TRANSACTION")
+            self._apply_migration(conn, old_version)
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.OperationalError:
+                pass
+            conn.close()
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, self.db_path)
+            raise
+        finally:
+            try:
+                conn.close()
+            except sqlite3.ProgrammingError:
+                pass
+
+    def _apply_migration(self, conn, old_version: int):
+        """在一个已开启的事务中完成结构、种子和旧状态回填。"""
+        for stmt in [
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS business_rule_version (version INTEGER PRIMARY KEY, description TEXT DEFAULT '', applied_at TEXT NOT NULL)",
+            """CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY, name TEXT DEFAULT '', cost REAL, domestic_shipping REAL,
+                net_weight REAL, net_length REAL, net_width REAL, net_height REAL,
+                packaged_weight REAL, packaged_length REAL, packaged_width REAL, packaged_height REAL,
+                freight_forwarder TEXT DEFAULT NULL,
+                head_haul_cost REAL, fixed_service_fee REAL, tail_haul_cost REAL,
+                shein_price REAL, selling_price_rmb REAL, selling_price_usd REAL,
+                target_profit_rate REAL, promotion_reserve_rate REAL,
+                current_rule_snapshot TEXT, current_calculation_results TEXT,
+                calculation_schema_version INTEGER DEFAULT 1, calculated_at TEXT,
+                notes TEXT DEFAULT '', status TEXT DEFAULT 'active', image_path TEXT DEFAULT '',
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""",
+            """CREATE TABLE IF NOT EXISTS product_snapshots (
+                id TEXT PRIMARY KEY, product_id TEXT NOT NULL UNIQUE,
+                snapshot_data TEXT NOT NULL, exchange_rate REAL, head_haul_rate REAL,
+                fixed_service_fee REAL, tail_haul_cost REAL, volume_divisor INTEGER DEFAULT 8000,
+                rule_version INTEGER DEFAULT 1, rule_snapshot TEXT, created_at TEXT NOT NULL,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE)""",
+            "CREATE TABLE IF NOT EXISTS route_config (route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0), display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL, fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000, is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS profit_adjustment_rules (rule_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(rule_id)) > 0), display_name TEXT NOT NULL, condition_field TEXT, condition_operator TEXT, condition_value REAL, adjustment_direction TEXT NOT NULL, adjustment_type TEXT NOT NULL, adjustment_value REAL NOT NULL, currency TEXT NOT NULL, percentage_base TEXT, is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0, description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+        ]:
+            conn.execute(stmt)
+
+        product_columns = {
+            "name": "TEXT DEFAULT ''",
+            "cost": "REAL",
+            "domestic_shipping": "REAL",
+            "net_weight": "REAL",
+            "net_length": "REAL",
+            "net_width": "REAL",
+            "net_height": "REAL",
+            "packaged_weight": "REAL",
+            "packaged_length": "REAL",
+            "packaged_width": "REAL",
+            "packaged_height": "REAL",
+            "freight_forwarder": "TEXT DEFAULT NULL",
+            "head_haul_cost": "REAL",
+            "fixed_service_fee": "REAL",
+            "tail_haul_cost": "REAL",
+            "shein_price": "REAL",
+            "selling_price_rmb": "REAL",
+            "selling_price_usd": "REAL",
+            "target_profit_rate": "REAL",
+            "promotion_reserve_rate": "REAL",
+            "current_rule_snapshot": "TEXT",
+            "current_calculation_results": "TEXT",
+            "calculation_schema_version": f"INTEGER DEFAULT {CALCULATION_SCHEMA_VERSION}",
+            "calculated_at": "TEXT",
+            "notes": "TEXT DEFAULT ''",
+            "status": "TEXT DEFAULT 'active'",
+            "image_path": "TEXT DEFAULT ''",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
+            "weight_unit_version": "TEXT DEFAULT 'legacy_unknown'",
+        }
+        snapshot_columns = {
+            "exchange_rate": "REAL",
+            "head_haul_rate": "REAL",
+            "fixed_service_fee": "REAL",
+            "tail_haul_cost": "REAL",
+            "volume_divisor": "INTEGER DEFAULT 8000",
+            "rule_version": "INTEGER DEFAULT 1",
+            "rule_snapshot": "TEXT",
+            "created_at": "TEXT",
+        }
+        self._require_columns(conn, "products", {"id"})
+        self._require_columns(
+            conn, "product_snapshots", {"id", "product_id", "snapshot_data"}
+        )
+        for column, column_type in product_columns.items():
+            self._add_column_if_missing(conn, "products", column, column_type)
+        for column, column_type in snapshot_columns.items():
+            self._add_column_if_missing(conn, "product_snapshots", column, column_type)
+
+        legacy_to_id = self._rebuild_route_config_v6(conn)
+        for legacy_id, route_id in legacy_to_id.items():
+            conn.execute("UPDATE products SET freight_forwarder=? WHERE freight_forwarder=?", (route_id, legacy_id))
+
+        self._migrate_route_references(conn, legacy_to_id)
+        if not conn.execute("SELECT 1 FROM route_config LIMIT 1").fetchone():
+            self._seed_routes_in_conn(conn)
+        conn.execute("UPDATE products SET weight_unit_version='legacy_unknown' WHERE weight_unit_version IS NULL OR weight_unit_version='' ")
+        conn.execute(
+            "INSERT OR IGNORE INTO business_rule_version (version, description, applied_at) VALUES (?,?,?)",
+            (CURRENT_RULE_VERSION, "动态货代规则", datetime.now().isoformat()),
+        )
+        for key, value in DEFAULT_CONFIG.items():
+            conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (key, value))
+        self._seed_profit_adjustment_rules(conn)
+
+        self._backfill_current_state(conn)
+        self._validate_migrated_schema(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?,?)",
+            (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()),
+        )
+
+    def _rebuild_route_config_v6(self, conn):
+        """Rebuild pre-v6 route tables so route_id is a real non-null PK.
+
+        SQLite cannot add a primary-key constraint with ALTER TABLE.  Building
+        a replacement table inside the caller's migration transaction keeps
+        this operation atomic and makes a successfully migrated v6 database a
+        no-op on subsequent opens.
+        """
+        info = conn.execute("PRAGMA table_info(route_config)").fetchall()
+        is_v6_pk = any(row["name"] == "route_id" and row["pk"] == 1 and row["notnull"] == 1 for row in info)
+        if is_v6_pk:
+            return {}
+        rows = [dict(row) for row in conn.execute("SELECT * FROM route_config").fetchall()]
+        now = datetime.now()
+        records, legacy_to_id = [], {}
+        for index, row in enumerate(rows):
+            legacy_id = row.get("route_key") or row.get("forwarder")
+            route_id = row.get("route_id") or str(uuid.uuid4())
+            if not str(route_id).strip():
+                route_id = str(uuid.uuid4())
+            if legacy_id and legacy_id != route_id:
+                legacy_to_id[legacy_id] = route_id
+            timestamp = (now + timedelta(microseconds=index)).isoformat()
+            name = row.get("display_name") or {"shenzhen": "深圳", "yiwu": "义乌"}.get(legacy_id, legacy_id or route_id)
+            records.append((route_id, name, row.get("head_haul_rate"), row.get("fixed_service_fee"),
+                            row.get("volume_divisor") or 8000, int(row.get("is_enabled", 1) if row.get("is_enabled") is not None else 1),
+                            int(row.get("is_archived", 0) if row.get("is_archived") is not None else 0),
+                            row.get("description") or "", row.get("created_at") or timestamp,
+                            row.get("updated_at") or timestamp))
+        conn.execute("DROP TABLE IF EXISTS route_config_v6_rebuild")
+        conn.execute("""CREATE TABLE route_config_v6_rebuild (
+            route_id TEXT PRIMARY KEY NOT NULL CHECK(length(trim(route_id)) > 0),
+            display_name TEXT NOT NULL, head_haul_rate REAL NOT NULL,
+            fixed_service_fee REAL NOT NULL, volume_divisor REAL NOT NULL DEFAULT 8000,
+            is_enabled INTEGER NOT NULL DEFAULT 1, is_archived INTEGER NOT NULL DEFAULT 0,
+            description TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+        conn.executemany("""INSERT INTO route_config_v6_rebuild
+            (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,is_archived,description,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""", records)
+        conn.execute("DROP TABLE route_config")
+        conn.execute("ALTER TABLE route_config_v6_rebuild RENAME TO route_config")
+        return legacy_to_id
+
+    def _seed_profit_adjustment_rules_first_time(self):
+        """仅在首次建库时种子利润调整规则（不依赖名称重复检查）。"""
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM profit_adjustment_rules").fetchone()[0]
+            if count == 0:
+                now = datetime.now().isoformat()
+                conn.execute("""INSERT INTO profit_adjustment_rules
+                    (rule_id,display_name,condition_field,condition_operator,condition_value,
+                     adjustment_direction,adjustment_type,adjustment_value,currency,percentage_base,
+                     is_enabled,is_archived,description,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (str(uuid.uuid4()), "SHEIN 29美元以下运费补贴", "final_price_usd", "<", 29.0,
+                     "income", "fixed", 2.99, "USD", None, 1, 0, "", now, now))
                 conn.commit()
         finally:
             conn.close()
 
-    def get_snapshot(self, product_id: str) -> dict | None:
-        """获取快照数据（包含费率信息）"""
+    @staticmethod
+    def _seed_profit_adjustment_rules(conn):
+        now = datetime.now().isoformat()
+        exists = conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE display_name=?", ("SHEIN 29美元以下运费补贴",)).fetchone()
+        if not exists:
+            conn.execute("""INSERT INTO profit_adjustment_rules
+                (rule_id,display_name,condition_field,condition_operator,condition_value,
+                 adjustment_direction,adjustment_type,adjustment_value,currency,percentage_base,
+                 is_enabled,is_archived,description,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), "SHEIN 29美元以下运费补贴", "final_price_usd", "<", 29.0,
+                 "income", "fixed", 2.99, "USD", None, 1, 0, "", now, now))
+
+    def _backfill_current_state(self, conn):
+        """从旧首次快照回填缺失的当前状态；无法可靠恢复的字段保持缺失。"""
+        rows = conn.execute(
+            """SELECT p.id, p.current_rule_snapshot, p.current_calculation_results,
+                      s.snapshot_data, s.rule_snapshot
+               FROM products p
+               LEFT JOIN product_snapshots s ON s.product_id = p.id"""
+        ).fetchall()
+        for row in rows:
+            rule_json = row["current_rule_snapshot"]
+            calc_json = row["current_calculation_results"]
+            if rule_json is None and row["rule_snapshot"]:
+                rule_json = row["rule_snapshot"]
+            if calc_json is None and row["snapshot_data"]:
+                try:
+                    snapshot_data = json.loads(row["snapshot_data"])
+                    calculation_results = snapshot_data.get("_calculation_results")
+                    if isinstance(calculation_results, dict):
+                        calc_json = json.dumps(calculation_results, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    pass
+            if rule_json is not None or calc_json is not None:
+                conn.execute(
+                    """UPDATE products
+                       SET current_rule_snapshot=COALESCE(current_rule_snapshot, ?),
+                           current_calculation_results=COALESCE(current_calculation_results, ?),
+                           calculation_schema_version=COALESCE(calculation_schema_version, ?)
+                       WHERE id=?""",
+                    (rule_json, calc_json, CALCULATION_SCHEMA_VERSION, row["id"]),
+                )
+
+    @staticmethod
+    def _table_columns(conn, table):
+        return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+    def _require_columns(self, conn, table, required):
+        missing = required - self._table_columns(conn, table)
+        if missing:
+            raise RuntimeError(f"{table} 缺少不可安全推断的关键字段: {sorted(missing)}")
+
+    def _validate_migrated_schema(self, conn):
+        required_product_columns = {
+            "id", "name", "cost", "domestic_shipping",
+            "net_weight", "net_length", "net_width", "net_height",
+            "packaged_weight", "packaged_length", "packaged_width", "packaged_height",
+            "freight_forwarder", "head_haul_cost", "fixed_service_fee", "tail_haul_cost",
+            "shein_price", "selling_price_rmb", "selling_price_usd",
+            "target_profit_rate", "promotion_reserve_rate",
+            "current_rule_snapshot", "current_calculation_results",
+            "calculation_schema_version", "calculated_at",
+            "notes", "status", "image_path", "created_at", "updated_at",
+            "weight_unit_version",
+        }
+        required_snapshot_columns = {
+            "id", "product_id", "snapshot_data", "exchange_rate", "head_haul_rate",
+            "fixed_service_fee", "tail_haul_cost", "volume_divisor", "rule_version",
+            "rule_snapshot",
+        }
+        required_route_columns = {
+            "route_id", "display_name", "head_haul_rate", "fixed_service_fee",
+            "volume_divisor", "is_enabled", "is_archived", "description",
+            "created_at", "updated_at",
+        }
+        self._require_columns(conn, "products", required_product_columns)
+        self._require_columns(conn, "product_snapshots", required_snapshot_columns)
+        self._require_columns(conn, "route_config", required_route_columns)
+        self._require_columns(conn, "profit_adjustment_rules", {"rule_id", "display_name", "condition_field", "condition_operator", "condition_value", "adjustment_direction", "adjustment_type", "adjustment_value", "currency", "percentage_base", "is_enabled", "is_archived", "description", "created_at", "updated_at"})
+        route_info = {row["name"]: row for row in conn.execute("PRAGMA table_info(route_config)")}
+        route_id_info = route_info["route_id"]
+        if route_id_info["pk"] != 1 or route_id_info["notnull"] != 1:
+            raise RuntimeError("route_config.route_id 必须为非空主键")
+        integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise RuntimeError(f"数据库完整性检查失败: {integrity}")
+        foreign_key_errors = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise RuntimeError("数据库外键检查失败")
+
+    def _validate_database_file(self):
         conn = self._get_conn()
         try:
-            row = conn.execute(
-                """SELECT snapshot_data, exchange_rate, head_haul_rate,
-                          fixed_service_fee, rule_version
-                   FROM product_snapshots WHERE product_id = ?""",
-                (product_id,),
-            ).fetchone()
-            if row:
-                result = json.loads(row["snapshot_data"])
-                result["_snapshot_exchange_rate"] = row["exchange_rate"]
-                result["_snapshot_head_haul_rate"] = row["head_haul_rate"]
-                result["_snapshot_fixed_service_fee"] = row["fixed_service_fee"]
-                result["_snapshot_rule_version"] = row["rule_version"]
-                return result
-            return None
+            self._validate_migrated_schema(conn)
         finally:
             conn.close()
 
-    # ─── 配置管理 ──────────────────────────────────────────
-
-    def get_config(self, key: str, default=None) -> str | None:
-        conn = self._get_conn()
+    def _init_db(self):
+        """建表（不写版本号，不写种子数据）"""
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
         try:
-            row = conn.execute("SELECT value FROM config WHERE key = ?", (key,)).fetchone()
-            return row["value"] if row else default
-        finally:
-            conn.close()
-
-    def set_config(self, key: str, value: str):
-        conn = self._get_conn()
-        try:
-            conn.execute(
-                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, value)
-            )
+            conn.executescript(SCHEMA_SQL)
             conn.commit()
         finally:
             conn.close()
 
-    def get_all_config(self) -> dict:
-        conn = self._get_conn()
+    def _seed_current_data(self):
+        """确保当前版本号、配置和货代种子存在。利润调整规则不在此处种子。"""
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
         try:
-            rows = conn.execute("SELECT key, value FROM config").fetchall()
-            return {r["key"]: r["value"] for r in rows}
+            conn.execute("INSERT OR REPLACE INTO schema_version (version, applied_at) VALUES (?,?)",
+                         (CURRENT_SCHEMA_VERSION, datetime.now().isoformat()))
+            conn.execute("INSERT OR IGNORE INTO business_rule_version (version, description, applied_at) VALUES (?,?,?)",
+                         (CURRENT_RULE_VERSION, "双货代规则", datetime.now().isoformat()))
+            for k, v in DEFAULT_CONFIG.items():
+                conn.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?,?)", (k, v))
+            if not conn.execute("SELECT 1 FROM route_config LIMIT 1").fetchone():
+                self._seed_routes_in_conn(conn)
+            # 利润调整规则只在首次建库或迁移时种子，不在每次启动时重复
+            conn.commit()
         finally:
             conn.close()
+
+    def _seed_routes_in_conn(self, conn):
+        """Only used for a new database: defaults are data, never runtime rules."""
+        now = datetime.now()
+        for index, rates in enumerate(DEFAULT_ROUTES.values()):
+            row_time = (now + timedelta(microseconds=index)).isoformat()
+            conn.execute(
+                """INSERT INTO route_config
+                (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,
+                 is_enabled,is_archived,description,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (str(uuid.uuid4()), rates["display_name"], rates["head_haul_rate"],
+                 rates["fixed_service_fee"], rates["volume_divisor"], rates["is_enabled"],
+                 0, rates["description"], row_time, row_time),
+            )
+
+    def _migrate_route_references(self, conn, legacy_to_id):
+        """Move v4 keys inside frozen JSON without changing its historical name."""
+        if not legacy_to_id:
+            return
+
+        def replace_ids(value):
+            if isinstance(value, list):
+                return [replace_ids(item) for item in value]
+            if not isinstance(value, dict):
+                return value
+
+            updated = {key: replace_ids(item) for key, item in value.items()}
+            rule_keys = ("route_id", "route_key", "forwarder")
+            old_rule_id = next(
+                (value.get(key) for key in rule_keys if value.get(key) in legacy_to_id),
+                None,
+            )
+            if old_rule_id:
+                route_id = legacy_to_id[old_rule_id]
+                updated["route_id"] = route_id
+                updated["route_key"] = route_id
+                updated["forwarder"] = route_id
+            old_product_id = value.get("freight_forwarder")
+            if old_product_id in legacy_to_id:
+                updated["freight_forwarder"] = legacy_to_id[old_product_id]
+            return updated
+
+        for table, id_col, json_col in (("products", "id", "current_rule_snapshot"),
+                                        ("product_snapshots", "id", "rule_snapshot"),
+                                        ("product_snapshots", "id", "snapshot_data")):
+            for row in conn.execute(f"SELECT {id_col},{json_col} FROM {table} WHERE {json_col} IS NOT NULL").fetchall():
+                try:
+                    data = json.loads(row[json_col])
+                except (TypeError, ValueError):
+                    continue
+                migrated = replace_ids(data)
+                if migrated != data:
+                    conn.execute(
+                        f"UPDATE {table} SET {json_col}=? WHERE {id_col}=?",
+                        (json.dumps(migrated, ensure_ascii=False), row[id_col]),
+                    )
+
+    def _add_column_if_missing(self, conn, table, column, col_type):
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+
+    def _get_conn(self):
+        conn = sqlite3.connect(self.db_path); conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON"); return conn
+
+    def backup_to(self, destination: str) -> str:
+        """Create a consistent SQLite backup and atomically replace destination."""
+        destination = os.path.abspath(destination)
+        source_path = os.path.abspath(self.db_path)
+        if destination == source_path:
+            raise ValueError("备份文件不能覆盖当前正在使用的数据库")
+        os.makedirs(os.path.dirname(destination) or ".", exist_ok=True)
+        temp_path = destination + f".tmp-{uuid.uuid4().hex}"
+        source = self._get_conn()
+        target = sqlite3.connect(temp_path)
+        try:
+            source.backup(target)
+            integrity = target.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise RuntimeError(f"备份完整性检查失败: {integrity}")
+            target.commit()
+            target.close()
+            source.close()
+            os.replace(temp_path, destination)
+            return destination
+        except Exception:
+            try:
+                target.close()
+            finally:
+                source.close()
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+
+    def restore_from(self, source_path: str) -> str:
+        """Validate/migrate a backup copy, then atomically restore it.
+
+        Returns the safety backup path of the database state before restoration.
+        """
+        source_path = os.path.abspath(source_path)
+        current_path = os.path.abspath(self.db_path)
+        if source_path == current_path:
+            raise ValueError("不能从当前正在使用的数据库恢复")
+        if not os.path.isfile(source_path):
+            raise ValueError("所选备份文件不存在")
+        with open(source_path, "rb") as source_file:
+            if source_file.read(16) != b"SQLite format 3\x00":
+                raise ValueError("所选文件不是有效的 SQLite 数据库备份")
+
+        target_dir = os.path.dirname(current_path)
+        candidate_path = os.path.join(
+            target_dir, f".restore_candidate_{uuid.uuid4().hex}.db"
+        )
+        shutil.copy2(source_path, candidate_path)
+        safety_path = self.db_path + (
+            ".before_restore_"
+            + datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            + ".db"
+        )
+        replaced = False
+        try:
+            DatabaseManager(candidate_path)
+            self.backup_to(safety_path)
+            os.replace(candidate_path, current_path)
+            replaced = True
+            self._validate_database_file()
+            return safety_path
+        except Exception:
+            if replaced and os.path.exists(safety_path):
+                shutil.copy2(safety_path, current_path)
+            raise
+        finally:
+            if os.path.exists(candidate_path):
+                os.remove(candidate_path)
+            candidate_name = os.path.basename(candidate_path)
+            for name in os.listdir(target_dir):
+                if name.startswith(candidate_name + ".backup_"):
+                    os.remove(os.path.join(target_dir, name))
+
+    def get_schema_version(self) -> int:
+        conn = self._get_conn()
+        try:
+            row = conn.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
+            return row["version"] if row else 0
+        except sqlite3.OperationalError: return 0
+        finally: conn.close()
+
+    def get_rule_version(self) -> int:
+        conn = self._get_conn()
+        try:
+            row = conn.execute("SELECT version FROM business_rule_version ORDER BY version DESC LIMIT 1").fetchone()
+            return row["version"] if row else CURRENT_RULE_VERSION
+        except sqlite3.OperationalError: return CURRENT_RULE_VERSION
+        finally: conn.close()
+
+    def get_route_rates(self, fwd: str) -> dict | None:
+        conn = self._get_conn()
+        try:
+            r = conn.execute("SELECT * FROM route_config WHERE route_id=?", (fwd,)).fetchone()
+            if not r: return None
+            d = dict(r); d["route_key"] = d["route_id"]; d["forwarder"] = d["route_id"]
+            d["volume_divisor"] = d.get("volume_divisor") or VOLUME_DIVISOR
+            d["is_enabled"] = bool(d.get("is_enabled", 1))
+            d["is_archived"] = bool(d.get("is_archived", 0))
+            return d
+        finally: conn.close()
+
+    def get_all_routes(self, include_archived=True) -> list[dict]:
+        conn = self._get_conn()
+        try:
+            query = "SELECT * FROM route_config" + ("" if include_archived else " WHERE is_archived=0") + " ORDER BY created_at, route_id"
+            return [self._route_dict(r) for r in conn.execute(query).fetchall()]
+        finally: conn.close()
+
+    @staticmethod
+    def _route_dict(row):
+        d = dict(row); d["route_key"] = d["route_id"]; d["forwarder"] = d["route_id"]
+        d["is_enabled"] = bool(d["is_enabled"]); d["is_archived"] = bool(d["is_archived"])
+        return d
+
+    def get_enabled_routes(self):
+        conn = self._get_conn()
+        try:
+            return [self._route_dict(r) for r in conn.execute(
+                "SELECT * FROM route_config WHERE is_enabled=1 AND is_archived=0 ORDER BY created_at,route_id").fetchall()]
+        finally: conn.close()
+
+    @staticmethod
+    def _validated_route_values(route):
+        import math
+        name = str(route.get("display_name", "")).strip()
+        try:
+            rate, fixed, divisor = (float(route[k]) for k in ("head_haul_rate", "fixed_service_fee", "volume_divisor"))
+        except (KeyError, TypeError, ValueError):
+            raise ValueError("货代费率、服务费和体积重除数必须为数字")
+        if not name or len(name) > 30: raise ValueError("货代名称必须为1至30个字符")
+        if not all(math.isfinite(v) for v in (rate, fixed, divisor)) or rate <= 0 or fixed < 0 or divisor <= 0:
+            raise ValueError("头程单价>0，固定服务费>=0，体积重除数>0，且均须为有限数字")
+        enabled = int(bool(route.get("is_enabled", True))); archived = int(bool(route.get("is_archived", False)))
+        return name, rate, fixed, divisor, enabled, archived, str(route.get("description", ""))
+
+    def save_route(self, route: dict, route_id=None):
+        """Validate and atomically create/update a route. IDs are immutable UUIDs."""
+        name, rate, fixed, divisor, enabled, archived, description = self._validated_route_values(route)
+        now = datetime.now().isoformat(); route_id = route_id or route.get("route_id") or str(uuid.uuid4())
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN")
+            duplicate = conn.execute("SELECT 1 FROM route_config WHERE lower(trim(display_name))=lower(?) AND is_enabled=1 AND is_archived=0 AND route_id<>?", (name, route_id)).fetchone()
+            if enabled and not archived and duplicate: raise ValueError("启用货代名称不能重复")
+            exists = conn.execute("SELECT 1 FROM route_config WHERE route_id=?", (route_id,)).fetchone()
+            if exists:
+                conn.execute("UPDATE route_config SET display_name=?,head_haul_rate=?,fixed_service_fee=?,volume_divisor=?,is_enabled=?,is_archived=?,description=?,updated_at=? WHERE route_id=?", (name,rate,fixed,divisor,enabled,archived,description,now,route_id))
+            else:
+                conn.execute("INSERT INTO route_config (route_id,display_name,head_haul_rate,fixed_service_fee,volume_divisor,is_enabled,is_archived,description,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (route_id,name,rate,fixed,divisor,enabled,archived,description,now,now))
+            conn.execute("COMMIT"); return route_id
+        except Exception:
+            conn.execute("ROLLBACK"); raise
+        finally: conn.close()
+
+    def route_is_referenced(self, route_id):
+        conn = self._get_conn()
+        try:
+            if conn.execute("SELECT 1 FROM products WHERE freight_forwarder=? LIMIT 1", (route_id,)).fetchone(): return True
+            like = f'%{route_id}%'
+            return bool(conn.execute("SELECT 1 FROM products WHERE current_rule_snapshot LIKE ? LIMIT 1", (like,)).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (like, like)).fetchone())
+        finally: conn.close()
+
+    def archive_or_delete_route(self, route_id):
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN")
+            if not conn.execute("SELECT 1 FROM route_config WHERE route_id=?", (route_id,)).fetchone():
+                raise ValueError("货代不存在")
+            referenced = bool(conn.execute("SELECT 1 FROM products WHERE freight_forwarder=? OR current_rule_snapshot LIKE ? LIMIT 1", (route_id, f'%{route_id}%')).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (f'%{route_id}%', f'%{route_id}%')).fetchone())
+            if referenced:
+                conn.execute("UPDATE route_config SET is_archived=1,is_enabled=0,updated_at=? WHERE route_id=?", (datetime.now().isoformat(), route_id)); result = "archived"
+            else:
+                conn.execute("DELETE FROM route_config WHERE route_id=?", (route_id,)); result = "deleted"
+            conn.execute("COMMIT"); return result
+        except Exception:
+            conn.execute("ROLLBACK"); raise
+        finally: conn.close()
+
+    # ─── 利润调整规则 ───────────────────────────────────────────────
+
+    @staticmethod
+    def _rule_dict(row):
+        data = dict(row)
+        data["is_enabled"] = bool(data["is_enabled"])
+        data["is_archived"] = bool(data["is_archived"])
+        return data
+
+    def get_profit_adjustment_rules(self, include_archived=True):
+        conn = self._get_conn()
+        try:
+            where = "" if include_archived else " WHERE is_archived=0"
+            return [self._rule_dict(row) for row in conn.execute(
+                "SELECT * FROM profit_adjustment_rules" + where + " ORDER BY created_at,rule_id").fetchall()]
+        finally: conn.close()
+
+    def get_enabled_profit_adjustment_rules(self):
+        conn = self._get_conn()
+        try:
+            return [self._rule_dict(row) for row in conn.execute(
+                "SELECT * FROM profit_adjustment_rules WHERE is_enabled=1 AND is_archived=0 ORDER BY created_at,rule_id").fetchall()]
+        finally: conn.close()
+
+    def get_profit_adjustment_rule(self, rule_id):
+        conn = self._get_conn()
+        try:
+            row = conn.execute("SELECT * FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)).fetchone()
+            return self._rule_dict(row) if row else None
+        finally: conn.close()
+
+    def save_profit_adjustment_rule(self, values, rule_id=None):
+        from calculation.profit_adjustments import validate_rule_values
+        prepared = validate_rule_values(values)
+        rule_id = rule_id or values.get("rule_id") or str(uuid.uuid4())
+        now = datetime.now().isoformat()
+        enabled, archived = int(bool(values.get("is_enabled", True))), int(bool(values.get("is_archived", False)))
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN")
+            duplicate = conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE lower(trim(display_name))=lower(?) AND is_archived=0 AND rule_id<>?", (prepared["display_name"], rule_id)).fetchone()
+            if duplicate:
+                raise ValueError("未归档规则名称不能重复")
+            existing = conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)).fetchone()
+            row = (prepared["display_name"], prepared["condition_field"], prepared["condition_operator"], prepared["condition_value"], prepared["adjustment_direction"], prepared["adjustment_type"], prepared["adjustment_value"], prepared["currency"], prepared["percentage_base"], enabled, archived, str(values.get("description", "")))
+            if existing:
+                conn.execute("""UPDATE profit_adjustment_rules SET display_name=?,condition_field=?,condition_operator=?,condition_value=?,adjustment_direction=?,adjustment_type=?,adjustment_value=?,currency=?,percentage_base=?,is_enabled=?,is_archived=?,description=?,updated_at=? WHERE rule_id=?""", row + (now, rule_id))
+            else:
+                conn.execute("""INSERT INTO profit_adjustment_rules (rule_id,display_name,condition_field,condition_operator,condition_value,adjustment_direction,adjustment_type,adjustment_value,currency,percentage_base,is_enabled,is_archived,description,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (rule_id,) + row + (now, now))
+            conn.execute("COMMIT")
+            return rule_id
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally: conn.close()
+
+    def profit_adjustment_rule_is_referenced(self, rule_id):
+        like = f'%{rule_id}%'
+        conn = self._get_conn()
+        try:
+            return bool(conn.execute("SELECT 1 FROM products WHERE current_rule_snapshot LIKE ? LIMIT 1", (like,)).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (like, like)).fetchone())
+        finally: conn.close()
+
+    def archive_or_delete_profit_adjustment_rule(self, rule_id):
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN")
+            if not conn.execute("SELECT 1 FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)).fetchone():
+                raise ValueError("利润调整规则不存在")
+            like = f'%{rule_id}%'
+            referenced = bool(conn.execute("SELECT 1 FROM products WHERE current_rule_snapshot LIKE ? LIMIT 1", (like,)).fetchone() or conn.execute("SELECT 1 FROM product_snapshots WHERE rule_snapshot LIKE ? OR snapshot_data LIKE ? LIMIT 1", (like, like)).fetchone())
+            if referenced:
+                conn.execute("UPDATE profit_adjustment_rules SET is_archived=1,is_enabled=0,updated_at=? WHERE rule_id=?", (datetime.now().isoformat(), rule_id)); result = "archived"
+            else:
+                conn.execute("DELETE FROM profit_adjustment_rules WHERE rule_id=?", (rule_id,)); result = "deleted"
+            conn.execute("COMMIT")
+            return result
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally: conn.close()
+
+    def restore_profit_adjustment_rule(self, rule_id):
+        rule = self.get_profit_adjustment_rule(rule_id)
+        if not rule:
+            raise ValueError("利润调整规则不存在")
+        rule["is_archived"] = False; rule["is_enabled"] = False
+        return self.save_profit_adjustment_rule(rule, rule_id=rule_id)
+
+    def save_settings_and_routes(self, global_values: dict, routes: list[dict]):
+        """原子保存全局设置和当前未归档货代。"""
+        import math
+        prepared = []
+        for route in routes:
+            route_id = route.get("route_id") or route.get("route_key")
+            if not route_id:
+                raise RuntimeError("缺少货代标识")
+            values = self._validated_route_values(route)
+            prepared.append((route_id, values))
+        enabled_names = [
+            values[0].casefold()
+            for _route_id, values in prepared
+            if values[4] and not values[5]
+        ]
+        if len(enabled_names) != len(set(enabled_names)):
+            raise ValueError("启用货代名称不能重复")
+        for key, value in global_values.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"{key} 必须为数字")
+            if not math.isfinite(number):
+                raise ValueError(f"{key} 必须为有限数字")
+            if key == "exchange_rate" and number <= 0:
+                raise ValueError("汇率必须大于 0")
+            if key == "default_tail_haul" and number < 0:
+                raise ValueError("默认尾程费用不能小于 0")
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN TRANSACTION")
+            updated_ids = {route_id for route_id, _values in prepared}
+            untouched_names = [
+                str(row["display_name"]).strip().casefold()
+                for row in conn.execute(
+                    "SELECT route_id,display_name FROM route_config "
+                    "WHERE is_enabled=1 AND is_archived=0"
+                ).fetchall()
+                if row["route_id"] not in updated_ids
+            ]
+            final_names = enabled_names + untouched_names
+            if len(final_names) != len(set(final_names)):
+                raise ValueError("启用货代名称不能重复")
+            for key, value in global_values.items():
+                conn.execute("INSERT OR REPLACE INTO config (key,value) VALUES (?,?)", (key, str(value)))
+            for route_id, values in prepared:
+                name, rate, fixed, divisor, enabled, _archived, _description = values
+                conn.execute(
+                    """UPDATE route_config
+                       SET display_name=?,head_haul_rate=?,fixed_service_fee=?,
+                           volume_divisor=?,is_enabled=?,updated_at=?
+                       WHERE route_id=? AND is_archived=0""",
+                    (name, rate, fixed, divisor, enabled, datetime.now().isoformat(), route_id),
+                )
+                if not conn.execute(
+                    "SELECT 1 FROM route_config WHERE route_id=? AND is_archived=0",
+                    (route_id,),
+                ).fetchone():
+                    raise RuntimeError("未找到未归档货代配置")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK"); raise
+        finally: conn.close()
+
+    # ─── CRUD ────────────────────────────────────────────
+
+    @staticmethod
+    def _json_or_none(value):
+        return json.dumps(value, ensure_ascii=False) if value is not None else None
+
+    @staticmethod
+    def _decode_product(row):
+        if row is None:
+            return None
+        data = dict(row)
+        for column, key in [
+            ("current_rule_snapshot", "_current_rule_snapshot"),
+            ("current_calculation_results", "_current_calculation_results"),
+        ]:
+            raw = data.get(column)
+            if raw:
+                try:
+                    data[key] = json.loads(raw)
+                except (TypeError, ValueError):
+                    data[key] = None
+            else:
+                data[key] = None
+        return data
+
+    def save_product_state(
+        self,
+        data: dict,
+        rules: dict,
+        calc_results: dict,
+        pid: str | None = None,
+    ) -> str:
+        """原子保存商品当前状态；新商品同时创建不可变首次快照。"""
+        now = datetime.now().isoformat()
+        rule_json = self._json_or_none(rules)
+        calc_json = self._json_or_none(calc_results)
+        conn = self._get_conn()
+        try:
+            conn.execute("BEGIN TRANSACTION")
+            if pid is None:
+                pid = str(uuid.uuid4())[:8]
+                self._insert_product(conn, pid, data, now, rule_json, calc_json)
+                self._insert_initial_snapshot(conn, pid, data, rules, calc_results, now)
+            else:
+                self._update_product_in_conn(
+                    conn, pid, data, now, rule_json, calc_json
+                )
+            conn.execute("COMMIT")
+            return pid
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.OperationalError:
+                pass
+            raise
+        finally:
+            conn.close()
+
+    def _insert_product(self, conn, pid, data, now, rule_json=None, calc_json=None):
+        conn.execute("""INSERT INTO products (id,name,cost,domestic_shipping,
+            net_weight,net_length,net_width,net_height,
+            packaged_weight,packaged_length,packaged_width,packaged_height,
+            freight_forwarder,head_haul_cost,fixed_service_fee,tail_haul_cost,
+            shein_price,selling_price_rmb,selling_price_usd,
+            target_profit_rate,promotion_reserve_rate,weight_unit_version,
+            current_rule_snapshot,current_calculation_results,
+            calculation_schema_version,calculated_at,
+            notes,status,image_path,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (pid, data.get("name",""), data.get("cost"), data.get("domestic_shipping"),
+             data.get("net_weight"), data.get("net_length"), data.get("net_width"), data.get("net_height"),
+             data.get("packaged_weight"), data.get("packaged_length"), data.get("packaged_width"), data.get("packaged_height"),
+             data.get("freight_forwarder"), data.get("head_haul_cost"), data.get("fixed_service_fee"), data.get("tail_haul_cost"),
+             data.get("shein_price"), data.get("selling_price_rmb"), data.get("selling_price_usd"),
+             data.get("target_profit_rate"), data.get("promotion_reserve_rate"), data.get("weight_unit_version", "g_v1"),
+             rule_json, calc_json, CALCULATION_SCHEMA_VERSION, now,
+             data.get("notes",""), data.get("status","active"), data.get("image_path",""), now, now))
+
+    def _update_product_in_conn(self, conn, pid, data, now, rule_json, calc_json):
+        assignments = []
+        values = []
+        for field in NUMERIC_FIELDS + ["name", "freight_forwarder", "weight_unit_version", "notes", "status", "image_path"]:
+            if field in data:
+                assignments.append(f"{field}=?")
+                values.append(data[field])
+        assignments.extend([
+            "current_rule_snapshot=?",
+            "current_calculation_results=?",
+            "calculation_schema_version=?",
+            "calculated_at=?",
+            "updated_at=?",
+        ])
+        values.extend([rule_json, calc_json, CALCULATION_SCHEMA_VERSION, now, now, pid])
+        conn.execute(f"UPDATE products SET {', '.join(assignments)} WHERE id=?", values)
+
+    def _insert_initial_snapshot(self, conn, pid, data, rules, calc_results, now):
+        if conn.execute(
+            "SELECT 1 FROM product_snapshots WHERE product_id=?", (pid,)
+        ).fetchone():
+            return
+        snap_data = dict(data)
+        if calc_results is not None:
+            snap_data["_calculation_results"] = calc_results
+        conn.execute(
+            """INSERT INTO product_snapshots (id,product_id,snapshot_data,
+               exchange_rate,head_haul_rate,fixed_service_fee,tail_haul_cost,
+               volume_divisor,rule_version,rule_snapshot,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                str(uuid.uuid4())[:8],
+                pid,
+                json.dumps(snap_data, ensure_ascii=False),
+                rules.get("exchange_rate") if rules else None,
+                rules.get("head_haul_rate") if rules else None,
+                rules.get("fixed_service_fee") if rules else None,
+                rules.get("tail_haul_cost") if rules else None,
+                rules.get("volume_divisor", VOLUME_DIVISOR) if rules else VOLUME_DIVISOR,
+                rules.get("rule_version", CURRENT_RULE_VERSION) if rules else CURRENT_RULE_VERSION,
+                self._json_or_none(rules),
+                now,
+            ),
+        )
+
+    def create_product(self, data: dict) -> str:
+        pid = str(uuid.uuid4())[:8]; now = datetime.now().isoformat()
+        conn = self._get_conn()
+        try:
+            self._insert_product(conn, pid, data, now)
+            conn.commit(); return pid
+        finally: conn.close()
+
+    def update_product(self, pid: str, data: dict):
+        now = datetime.now().isoformat(); data["updated_at"] = now
+        sc = []; vs = []
+        for f in NUMERIC_FIELDS + ["name","freight_forwarder","notes","status","image_path","updated_at"]:
+            if f in data: sc.append(f"{f}=?"); vs.append(data[f])
+        if not sc: return
+        vs.append(pid)
+        conn = self._get_conn()
+        try: conn.execute(f"UPDATE products SET {', '.join(sc)} WHERE id=?", vs); conn.commit()
+        finally: conn.close()
+
+    def get_product(self, pid: str) -> dict | None:
+        conn = self._get_conn()
+        try:
+            r = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+            return self._decode_product(r)
+        finally: conn.close()
+
+    def delete_product(self, pid: str):
+        conn = self._get_conn()
+        try: conn.execute("DELETE FROM product_snapshots WHERE product_id=?", (pid,)); conn.execute("DELETE FROM products WHERE id=?", (pid,)); conn.commit()
+        finally: conn.close()
+
+    def search_products(self, keyword="", limit=100, offset=0) -> list[dict]:
+        conn = self._get_conn()
+        try:
+            b = """SELECT id,name,cost,domestic_shipping,head_haul_cost,fixed_service_fee,tail_haul_cost,
+                   freight_forwarder,selling_price_rmb,selling_price_usd,
+                   target_profit_rate,promotion_reserve_rate,
+                   current_rule_snapshot,current_calculation_results,
+                   calculation_schema_version,calculated_at,
+                   status,created_at,updated_at FROM products"""
+            if keyword:
+                p = f"%{keyword}%"
+                rs = conn.execute(b+" WHERE name LIKE ? OR id LIKE ? ORDER BY updated_at DESC LIMIT ? OFFSET ?", (p,p,limit,offset)).fetchall()
+            else:
+                rs = conn.execute(b+" ORDER BY updated_at DESC LIMIT ? OFFSET ?", (limit,offset)).fetchall()
+            return [self._decode_product(r) for r in rs]
+        finally: conn.close()
+
+    # ─── 快照 ────────────────────────────────────────────
+
+    def save_snapshot(self, pid: str, data: dict, rules: dict = None, calc_results: dict = None):
+        now = datetime.now().isoformat()
+        conn = self._get_conn()
+        try:
+            self._insert_initial_snapshot(conn, pid, data, rules, calc_results, now)
+            conn.commit()
+        finally: conn.close()
+
+    def get_snapshot(self, pid: str) -> dict | None:
+        conn = self._get_conn()
+        try:
+            r = conn.execute("""SELECT snapshot_data,exchange_rate,head_haul_rate,fixed_service_fee,
+                tail_haul_cost,volume_divisor,rule_version,rule_snapshot
+                FROM product_snapshots WHERE product_id=?""", (pid,)).fetchone()
+            if r:
+                d = json.loads(r["snapshot_data"])
+                d["_snapshot_exchange_rate"] = r["exchange_rate"]
+                d["_snapshot_head_haul_rate"] = r["head_haul_rate"]
+                d["_snapshot_fixed_service_fee"] = r["fixed_service_fee"]
+                d["_snapshot_tail_haul_cost"] = r["tail_haul_cost"]
+                d["_snapshot_volume_divisor"] = r["volume_divisor"] or VOLUME_DIVISOR
+                d["_snapshot_rule_version"] = r["rule_version"]
+                if r["rule_snapshot"]:
+                    d["_snapshot_rule_full"] = json.loads(r["rule_snapshot"])
+                return d
+            return None
+        finally: conn.close()
+
+    def get_config(self, key: str, default=None) -> str | None:
+        conn = self._get_conn()
+        try:
+            r = conn.execute("SELECT value FROM config WHERE key=?", (key,)).fetchone()
+            return r["value"] if r else default
+        finally: conn.close()
+
+    def set_config(self, key: str, value: str):
+        conn = self._get_conn()
+        try: conn.execute("INSERT OR REPLACE INTO config (key,value) VALUES (?,?)", (key,value)); conn.commit()
+        finally: conn.close()
+
+    def get_all_config(self) -> dict:
+        conn = self._get_conn()
+        try: return {r["key"]: r["value"] for r in conn.execute("SELECT key,value FROM config").fetchall()}
+        finally: conn.close()

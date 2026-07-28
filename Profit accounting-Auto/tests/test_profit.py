@@ -10,28 +10,29 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from calculation.profit import (
-    total_cost,
-    profit_amount,
-    profit_rate,
-    suggested_price_from_rate,
+    total_cost, known_total_cost_subtotal,
+    profit_amount, profit_rate, suggested_price_from_rate,
 )
 
 
 class TestTotalCost:
-    """总成本计算"""
+    """总成本计算 — 严格模式"""
 
     def test_all_present(self):
         assert total_cost(50.0, 10.0, 100.0) == 160.0
 
     def test_some_none(self):
-        assert total_cost(50.0, None, 100.0) == 150.0
-        assert total_cost(None, None, 100.0) == 100.0
+        assert total_cost(50.0, None, 100.0) is None
+        assert total_cost(None, 10.0, 100.0) is None
 
     def test_all_none(self):
-        assert total_cost(None, None, None) == 0.0
+        assert total_cost(None, None, None) is None
 
     def test_zero(self):
         assert total_cost(0, 0, 0) == 0.0
+
+    def test_known_subtotal(self):
+        assert known_total_cost_subtotal(50.0, None, 100.0) == 150.0
 
 
 class TestProfitAmount:

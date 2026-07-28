@@ -1,0 +1,5 @@
+{
+  "project_name": "Profit accounting-Auto",
+  "test_command": "{python} -m pytest \"Profit accounting-Auto/tests\" -q",
+  "default_phase": "current"
+}
