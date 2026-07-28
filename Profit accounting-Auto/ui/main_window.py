@@ -9,9 +9,17 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 import math
 import sys
 import os
+import warnings
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from tkinterdnd2 import TkinterDnD
+    _DND_AVAILABLE = True
+except ImportError:
+    TkinterDnD = None
+    _DND_AVAILABLE = False
 
 from .product_page import ProductPage
 from .history_page import HistoryPage
@@ -692,7 +700,15 @@ class MainWindow:
         self._db = db_manager
         self._cfg = config_manager
 
-        self._root = tk.Tk()
+        if _DND_AVAILABLE:
+            self._root = TkinterDnD.Tk()
+        else:
+            self._root = tk.Tk()
+            warnings.warn(
+                "tkinterdnd2 未安装，拖拽功能不可用。请安装 tkinterdnd2 以启用拖拽支持。",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         self._root.title("微智能商品利润管理 v0.1")
         self._root.geometry("1050x700")
         self._root.minsize(900, 600)
