@@ -141,6 +141,9 @@ def estimate(
             chargeable_after_soft,
             vol_weight,
             user_weight=user_weight,
+            no_increment_max_g=int(
+                config.get("trusted_weight_no_increment_max_g", 50)
+            ),
         )
 
         chargeable = weight_result["chargeable_kg"]

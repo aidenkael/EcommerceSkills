@@ -1,7 +1,8 @@
 """可信重量规则 — 用户重量修正逻辑。
 
 规则:
-- 可信净重 → 计费重量 = 净重 + 0.05kg
+- 可信净重 ≤ 50g → 不再固定+0.05kg, 改为 max(用户净重, AI包装计费重, 体积重)
+- 可信净重 > 50g → 计费重量 = 净重 + 0.05kg, 再与体积重取较高值
 - 低可信/约值/未核实/参考/多规格未知 → 回退AI估重，标记需复核
 - 无用户重量 → 沿用AI估重
 """
@@ -16,6 +17,7 @@ VALID_WEIGHT_STATUS = ("未提供", "可信", "约值", "未核实", "参考", "
 TRUSTED_WEIGHT_STATUS = "可信"
 WEIGHT_INCREMENT_KG = 0.05
 ANOMALY_THRESHOLD_KG = 0.15
+DEFAULT_NO_INCREMENT_MAX_G = 50
 
 # ---------- UserWeight ----------
 
@@ -62,21 +64,23 @@ def apply_weight_correction(
     volume_weight_kg: float,
     *,
     user_weight: UserWeight | None = None,
+    no_increment_max_g: int = DEFAULT_NO_INCREMENT_MAX_G,
 ) -> dict[str, Any]:
     """根据用户重量修正计费重量。
 
     Args:
-        chargeable_kg_ai: AI 估算的计费重量
-        volume_weight_kg: 体积重（需要与用户重量+0.05比较取高）
+        chargeable_kg_ai: AI 估算的计费重量 (含包装+体积重比较后的值)
+        volume_weight_kg: 体积重
         user_weight: 用户提供的重量信息
+        no_increment_max_g: 超轻阈值(g), ≤此值的可信重量不再固定加增重
 
     Returns:
         {
-            "chargeable_kg": 修正后计费重��,
+            "chargeable_kg": 修正后计费重量,
             "user_weight_kg": 用户重量(kg),
             "trust_status": 可信状态,
             "weight_source": 来源说明,
-            "added_005": 是否加了0.05kg,
+            "added_005": 是否加了增量,
             "needs_review": 是否需要复核,
             "review_reason": 复核原因,
         }
@@ -102,10 +106,25 @@ def apply_weight_correction(
     result["trust_status"] = user_weight.trust_status
 
     if user_weight.is_trusted:
-        corrected = round(user_weight.value_kg + WEIGHT_INCREMENT_KG, 4)
-        result["chargeable_kg"] = round(max(corrected, volume_weight_kg), 4)
-        result["weight_source"] = f"用户可信重量({user_weight.value_g:.0f}g + {WEIGHT_INCREMENT_KG * 1000:.0f}g)"
-        result["added_005"] = True
+        if user_weight.value_g <= no_increment_max_g:
+            # 超轻品: 不再固定加增重, 取三者较高值
+            corrected = round(max(user_weight.value_kg, chargeable_kg_ai, volume_weight_kg), 4)
+            result["chargeable_kg"] = corrected
+            result["added_005"] = False
+            result["weight_source"] = (
+                f"用户可信超轻重量({user_weight.value_g:.0f}g, "
+                f"≤{no_increment_max_g}g不加增重, "
+                f"取max(用户{user_weight.value_kg:.3f}, AI{chargeable_kg_ai:.3f}, "
+                f"体积{volume_weight_kg:.3f})={corrected:.4f}kg)"
+            )
+        else:
+            corrected = round(user_weight.value_kg + WEIGHT_INCREMENT_KG, 4)
+            result["chargeable_kg"] = round(max(corrected, volume_weight_kg), 4)
+            result["added_005"] = True
+            result["weight_source"] = (
+                f"用户可信重量({user_weight.value_g:.0f}g + "
+                f"{WEIGHT_INCREMENT_KG * 1000:.0f}g)"
+            )
         return result
 
     # 低可信：回退 AI 估重，标记需复核
