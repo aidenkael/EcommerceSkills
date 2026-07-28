@@ -19,6 +19,9 @@ VALID_FOLDABILITY = ("good", "limited", "none", "unknown")
 VALID_COMPRESSIBILITY = ("good", "limited", "none", "unknown")
 VALID_CONFIDENCE = ("high", "medium", "low")
 VALID_QUANTITY_SOURCE = ("user_confirmed", "ai_inferred", "assumed")
+VALID_PACKAGING_TYPE = ("opp_bag", "retail_card", "small_box", "bubble_wrap", "original_box", "unknown")
+VALID_WEIGHT_SCOPE = ("net_weight", "packaged_weight", "original_box_weight", "unknown")
+VALID_DIMENSION_SCOPE = ("display_size", "product_size", "shipping_package_size", "unknown")
 
 
 @dataclass
@@ -71,6 +74,11 @@ class AiProductJson:
     folding_action: str = "常规折叠"
     compression_action: str = "轻度压缩"
 
+    # ---- 可选: 包装类型元数据 (v1 校准新增) ----
+    packaging_type: str = "unknown"        # opp_bag / retail_card / small_box / bubble_wrap / original_box / unknown
+    weight_scope: str = "unknown"          # net_weight / packaged_weight / original_box_weight / unknown
+    dimension_scope: str = "unknown"       # display_size / product_size / shipping_package_size / unknown
+
     # ---- 可选: 元数据 ----
     image_path: str = ""
     product_link: str = ""                                # 1688 链接, 仅保存
@@ -102,6 +110,12 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         d["confidence"] = "medium"
     if d.get("quantity_source") not in VALID_QUANTITY_SOURCE:
         d["quantity_source"] = "assumed"
+    if d.get("packaging_type") not in VALID_PACKAGING_TYPE:
+        d["packaging_type"] = "unknown"
+    if d.get("weight_scope") not in VALID_WEIGHT_SCOPE:
+        d["weight_scope"] = "unknown"
+    if d.get("dimension_scope") not in VALID_DIMENSION_SCOPE:
+        d["dimension_scope"] = "unknown"
 
     # 数量默认
     d.setdefault("quantity", 1)
@@ -118,6 +132,9 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     d.setdefault("packaging_method", "OPP袋")
     d.setdefault("folding_action", "")
     d.setdefault("compression_action", "")
+    d.setdefault("packaging_type", "unknown")
+    d.setdefault("weight_scope", "unknown")
+    d.setdefault("dimension_scope", "unknown")
     d.setdefault("product_link", "")
     d.setdefault("image_path", "")
     d.setdefault("notes", "")
@@ -148,6 +165,9 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         packaging_method=d["packaging_method"],
         folding_action=d["folding_action"],
         compression_action=d["compression_action"],
+        packaging_type=d["packaging_type"],
+        weight_scope=d["weight_scope"],
+        dimension_scope=d["dimension_scope"],
         image_path=d["image_path"],
         product_link=d["product_link"],
         notes=d["notes"],
@@ -242,6 +262,9 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
         "quantity": ai.quantity,
         "confidence": ai.confidence,
         "reasoning": ai.reasoning,
+        "packaging_type": ai.packaging_type,
+        "weight_scope": ai.weight_scope,
+        "dimension_scope": ai.dimension_scope,
     }
 
     return product_summary, raw_evidence, packaging_scenarios, ai_meta
