@@ -418,7 +418,13 @@ def resolve_evidence(
             if small_item and volume_weight > small_volume_limit:
                 reject(candidate, "small_item_volume_anomaly", "小饰品/发饰/钥匙扣候选尺寸导致体积重异常偏大")
                 continue
-            if product_summary.get("category_type") == "bag" and soft_item and volume_weight > soft_bag_volume_limit:
+            if (
+                product_summary.get("category_type") == "bag"
+                and soft_item
+                and context == "packaged_size"
+                and product_summary.get("size_class") != "large"
+                and volume_weight > soft_bag_volume_limit
+            ):
                 reject(candidate, "soft_bag_volume_anomaly", "普通软袋候选尺寸导致体积重超过合理复核阈值")
                 continue
             if context in REJECT_DIMENSION_CONTEXTS:

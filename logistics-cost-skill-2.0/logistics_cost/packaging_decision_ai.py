@@ -210,7 +210,12 @@ def validate_packaging_scenarios(
             error("small_item_package_anomaly", f"{mode}档小商品包装体积重异常偏大")
         if small and scenario["packaged_weight_kg"] > small_weight_limit:
             error("small_item_package_weight_anomaly", f"{mode}档小商品包装重量异常偏大")
-        if product_summary.get("category_type") == "bag" and soft and scenario_volume_weight > soft_bag_volume_limit:
+        if (
+            product_summary.get("category_type") == "bag"
+            and soft
+            and product_summary.get("size_class") != "large"
+            and scenario_volume_weight > soft_bag_volume_limit
+        ):
             error("soft_bag_package_anomaly", f"{mode}档软袋包装体积重异常偏大")
         if rigid and folding not in {"", "none", "no", "不折叠", "无"}:
             error("rigid_item_folded", f"{mode}档对硬质或需保形商品提出了折叠")

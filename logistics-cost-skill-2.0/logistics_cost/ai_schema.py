@@ -22,6 +22,11 @@ VALID_QUANTITY_SOURCE = ("user_confirmed", "ai_inferred", "assumed")
 VALID_PACKAGING_TYPE = ("opp_bag", "retail_card", "small_box", "bubble_wrap", "original_box", "unknown")
 VALID_WEIGHT_SCOPE = ("net_weight", "packaged_weight", "original_box_weight", "unknown")
 VALID_DIMENSION_SCOPE = ("display_size", "product_size", "shipping_package_size", "unknown")
+VALID_PACKAGING_STATE = (
+    "full_flat_fold", "strong_compression", "moderate_compression",
+    "shape_retained", "unknown",
+)
+VALID_PROPOSAL_SOURCE = ("legacy_local", "local_fallback", "external_ai", "vision_api", "user", "unknown")
 
 
 @dataclass
@@ -57,8 +62,8 @@ class AiProductJson:
     rigidity: str = "soft"                                # soft / semi_rigid / hard
     foldability: str = "good"                             # good / limited / none / unknown
     compressibility: str = "good"                         # good / limited / none / unknown
-    has_rigid_parts: bool = False
-    requires_shape_retention: bool = False
+    has_rigid_parts: bool | None = None
+    requires_shape_retention: bool | None = None
 
     # ---- 必填: AI 估算 ----
     ai_net_weight_kg: float = 0.05                        # AI 估算净重 (kg)
@@ -78,6 +83,19 @@ class AiProductJson:
     packaging_type: str = "unknown"        # opp_bag / retail_card / small_box / bubble_wrap / original_box / unknown
     weight_scope: str = "unknown"          # net_weight / packaged_weight / original_box_weight / unknown
     dimension_scope: str = "unknown"       # display_size / product_size / shipping_package_size / unknown
+    packaging_state: str = "unknown"
+    has_hard_bottom: bool | None = None
+    has_hard_backboard: bool | None = None
+    has_frame: bool | None = None
+    has_rigid_insert: bool | None = None
+    retail_box_visible: bool | None = None
+    hard_card_visible: bool | None = None
+    protrusion_flattenable: bool | None = None
+    proposal_source: str = "legacy_local"
+    reasoning_summary: str = ""
+    needs_review: bool = False
+    default_fields_used: list[str] = field(default_factory=list)
+    material: str = "unknown"
 
     # ---- 可选: 元数据 ----
     image_path: str = ""
@@ -116,17 +134,28 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         d["weight_scope"] = "unknown"
     if d.get("dimension_scope") not in VALID_DIMENSION_SCOPE:
         d["dimension_scope"] = "unknown"
+    if d.get("packaging_state") not in VALID_PACKAGING_STATE:
+        d["packaging_state"] = "unknown"
+    if d.get("proposal_source") not in VALID_PROPOSAL_SOURCE:
+        d["proposal_source"] = "unknown"
 
     # 数量默认
-    d.setdefault("quantity", 1)
-    d.setdefault("quantity_source", "assumed")
+    defaults_used = list(d.get("default_fields_used") or [])
+
+    def use_default(name: str, value: Any) -> None:
+        if name not in d:
+            d[name] = value
+            defaults_used.append(name)
+
+    use_default("quantity", 1)
+    use_default("quantity_source", "assumed")
 
     # AI 估算字段默认
-    d.setdefault("ai_net_weight_kg", 0.05)
-    d.setdefault("ai_package_size_cm", [15, 10, 4])
-    d.setdefault("ai_package_weight_kg", 0.06)
-    d.setdefault("conservative_package_size_cm", [20, 14, 6])
-    d.setdefault("conservative_package_weight_kg", 0.10)
+    use_default("ai_net_weight_kg", 0.05)
+    use_default("ai_package_size_cm", [15, 10, 4])
+    use_default("ai_package_weight_kg", 0.06)
+    use_default("conservative_package_size_cm", [20, 14, 6])
+    use_default("conservative_package_weight_kg", 0.10)
 
     # 可选字符串字段
     d.setdefault("packaging_method", "OPP袋")
@@ -135,14 +164,28 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     d.setdefault("packaging_type", "unknown")
     d.setdefault("weight_scope", "unknown")
     d.setdefault("dimension_scope", "unknown")
+    d.setdefault("packaging_state", "unknown")
+    d.setdefault("proposal_source", "legacy_local")
+    d.setdefault("reasoning_summary", "")
+    d.setdefault("material", "unknown")
     d.setdefault("product_link", "")
     d.setdefault("image_path", "")
     d.setdefault("notes", "")
     d.setdefault("reasoning", "")
 
     # 布尔字段
-    d.setdefault("has_rigid_parts", False)
-    d.setdefault("requires_shape_retention", False)
+    for name in (
+        "has_rigid_parts", "requires_shape_retention", "has_hard_bottom",
+        "has_hard_backboard", "has_frame", "has_rigid_insert",
+        "retail_box_visible", "hard_card_visible", "protrusion_flattenable",
+    ):
+        d.setdefault(name, None)
+        if d[name] is not None and not isinstance(d[name], bool):
+            raise ValueError(f"{name} 必须是 true/false/null")
+    d["default_fields_used"] = list(dict.fromkeys(defaults_used))
+    d["needs_review"] = bool(d.get("needs_review")) or bool(defaults_used)
+    if defaults_used:
+        d["confidence"] = "low"
 
     # 构造
     return AiProductJson(
@@ -168,6 +211,19 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         packaging_type=d["packaging_type"],
         weight_scope=d["weight_scope"],
         dimension_scope=d["dimension_scope"],
+        packaging_state=d["packaging_state"],
+        has_hard_bottom=d["has_hard_bottom"],
+        has_hard_backboard=d["has_hard_backboard"],
+        has_frame=d["has_frame"],
+        has_rigid_insert=d["has_rigid_insert"],
+        retail_box_visible=d["retail_box_visible"],
+        hard_card_visible=d["hard_card_visible"],
+        protrusion_flattenable=d["protrusion_flattenable"],
+        proposal_source=d["proposal_source"],
+        reasoning_summary=d["reasoning_summary"],
+        needs_review=d["needs_review"],
+        default_fields_used=d["default_fields_used"],
+        material=d["material"],
         image_path=d["image_path"],
         product_link=d["product_link"],
         notes=d["notes"],
@@ -192,13 +248,24 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
     product_summary = {
         "product_type": ai.product_type,
         "category_type": ai.category,
-        "material": "unknown",
+        "material": ai.material,
         "rigidity": ai.rigidity,
         "foldability": ai.foldability,
         "compression": ai.compressibility,
         "fragility": "low",
         "has_rigid_parts": ai.has_rigid_parts,
         "requires_shape_retention": ai.requires_shape_retention,
+        "has_hard_bottom": ai.has_hard_bottom,
+        "has_hard_backboard": ai.has_hard_backboard,
+        "has_frame": ai.has_frame,
+        "has_rigid_insert": ai.has_rigid_insert,
+        "retail_box_visible": ai.retail_box_visible,
+        "hard_card_visible": ai.hard_card_visible,
+        "protrusion_flattenable": ai.protrusion_flattenable,
+        "packaging_state": ai.packaging_state,
+        "proposal_source": ai.proposal_source,
+        "dimension_scope": ai.dimension_scope,
+        "weight_scope": ai.weight_scope,
         "quantity": ai.quantity,
         "size_class": size_class,
         "confidence": ai.confidence,
@@ -206,15 +273,22 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
         "quantity_source": ai.quantity_source,
     }
 
-    # 尺寸证据: raw_text 避免 "包装尺寸" 关键词导致被强制推断为 packaged_size
-    pkg_size_text = f"AI推算商品外廓 {ai.ai_package_size_cm[0]}x{ai.ai_package_size_cm[1]}x{ai.ai_package_size_cm[2]}cm"
+    dimension_context = {
+        "shipping_package_size": "packaged_size",
+        "product_size": "product_body_size",
+        "display_size": "product_body_size",
+    }.get(ai.dimension_scope, "product_body_size")
+    weight_context = "gross_weight" if ai.weight_scope in {"packaged_weight", "original_box_weight"} else "net_weight"
+    weight_value = ai.ai_package_weight_kg if weight_context == "gross_weight" else ai.ai_net_weight_kg
+    pkg_size_text = f"AI尺寸候选 {ai.ai_package_size_cm[0]}x{ai.ai_package_size_cm[1]}x{ai.ai_package_size_cm[2]}cm"
     raw_evidence = [
         {
             "evidence_type": "weight",
-            "raw_text": f"AI推算净重 {ai.ai_net_weight_kg}kg",
-            "value_kg": ai.ai_net_weight_kg,
+            "raw_text": f"AI重量候选 {weight_value}kg",
+            "value_kg": weight_value,
             "source": "ai_estimated",
-            "interpreted_as": "net_weight",
+            "interpreted_as": weight_context,
+            "weight_scope": ai.weight_scope,
             "quantity_basis": ai.quantity,
             "confidence": ai.confidence,
         },
@@ -224,9 +298,11 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
             "value": list(ai.ai_package_size_cm),
             "unit": "cm",
             "source": "ai_estimated",
-            "interpreted_as": "product_body_size",  # 避免 strict packaged_size 校验
+            "interpreted_as": dimension_context,
+            "dimension_scope": ai.dimension_scope,
             "quantity_basis": ai.quantity,
             "confidence": ai.confidence,
+            "needs_review": ai.needs_review,
         },
     ]
 
@@ -242,6 +318,7 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
             "used_evidence_indices": [0, 1],
             "reason": ai.reasoning or "AI推断包装",
             "confidence": ai.confidence,
+            "needs_review": ai.needs_review,
         },
         "conservative": {
             "packaged_size_cm": list(ai.conservative_package_size_cm),
@@ -265,6 +342,11 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
         "packaging_type": ai.packaging_type,
         "weight_scope": ai.weight_scope,
         "dimension_scope": ai.dimension_scope,
+        "packaging_state": ai.packaging_state,
+        "proposal_source": ai.proposal_source,
+        "reasoning_summary": ai.reasoning_summary,
+        "needs_review": ai.needs_review,
+        "default_fields_used": list(ai.default_fields_used),
     }
 
     return product_summary, raw_evidence, packaging_scenarios, ai_meta
@@ -301,6 +383,12 @@ def estimate_from_ai_json(
     uw = None
     if user_weight is not None:
         uw = UserWeight(user_weight, user_weight_unit, user_weight_trust)
+    elif ai_data.get("user_weight_kg") is not None:
+        embedded_trust = str(ai_data.get("user_weight_trust") or "未核实")
+        uw = UserWeight(ai_data["user_weight_kg"], "kg", embedded_trust)
+        ai_meta["embedded_user_weight_mapped"] = True
+        if embedded_trust != "可信":
+            ai_meta["needs_review"] = True
 
     result = estimate(
         product_summary=summary,
@@ -311,4 +399,15 @@ def estimate_from_ai_json(
     )
 
     result["ai_meta"] = ai_meta
+    if ai.needs_review:
+        reason = (
+            f"AI JSON 使用兼容默认值: {', '.join(ai.default_fields_used)}"
+            if ai.default_fields_used
+            else "AI输入主动要求人工复核"
+        )
+        result["needs_review"] = True
+        result["review_reasons"] = list(dict.fromkeys(
+            result.get("review_reasons", [])
+            + [reason]
+        ))
     return result

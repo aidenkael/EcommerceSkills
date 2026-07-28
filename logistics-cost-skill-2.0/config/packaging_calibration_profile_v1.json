@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.0",
+  "profile_version": "2026-07-final-local-v1",
+  "generated_at": "2026-07-28",
+  "source_commit": "0ff62604282a0a471bd28cde7e4d0519389fadc5",
+  "enabled": true,
+  "scope": "local packaging candidate calibration only; excludes freight rates and formulas",
+  "supported_packaging_states": [
+    "full_flat_fold",
+    "strong_compression",
+    "moderate_compression",
+    "shape_retained",
+    "unknown"
+  ],
+  "active_rules": [
+    {
+      "id": "structure_safety_guard",
+      "enabled": true,
+      "conditions": {
+        "blocked_when_true": [
+          "has_hard_bottom",
+          "has_hard_backboard",
+          "has_frame",
+          "has_rigid_insert",
+          "has_rigid_parts",
+          "requires_shape_retention",
+          "retail_box_visible",
+          "hard_card_visible"
+        ]
+      },
+      "ranges": {},
+      "prohibitions": [
+        "unknown structural flags never count as false",
+        "hard shell, hard bottom, hard backboard, frame, rigid insert, retail box, or shape retention cannot use aggressive compression"
+      ],
+      "evidence_refs": ["CAL-045", "CAL-064", "CAL-075"]
+    },
+    {
+      "id": "thin_soft_fabric_fold",
+      "enabled": true,
+      "conditions": {
+        "packaging_states": ["full_flat_fold", "strong_compression"],
+        "material_markers": ["thin", "sheer", "lace", "lightweight", "薄", "蕾丝", "冰丝"],
+        "material_family_markers": ["fabric", "knit", "lace", "textile", "silk", "面料", "针织"],
+        "requires_explicit_no_hard_card": true
+      },
+      "ranges": {
+        "normal_thickness_ratio": [0.55, 0.75],
+        "conservative_thickness_ratio": [0.8, 1.0]
+      },
+      "prohibitions": [
+        "do not use for thick winter socks",
+        "do not mix weight evidence with volume evidence",
+        "do not reduce confirmed packaged dimensions"
+      ],
+      "evidence_refs": ["CAL-032", "CAL-049", "CAL-055", "CAL-059"]
+    },
+    {
+      "id": "full_flat_fold",
+      "enabled": true,
+      "conditions": {
+        "packaging_state": "full_flat_fold",
+        "requires_all_structure_flags_false": true
+      },
+      "ranges": {
+        "normal_secondary_axis_ratio": [0.45, 0.6],
+        "normal_thickness_ratio": [0.25, 0.4],
+        "conservative_thickness_ratio": [0.65, 0.8]
+      },
+      "prohibitions": [
+        "material alone cannot trigger this rule",
+        "do not use a fixed package template",
+        "do not ignore original dimensions, weight, or quantity"
+      ],
+      "evidence_refs": ["CAL-068", "CAL-075"]
+    },
+    {
+      "id": "strong_compression",
+      "enabled": true,
+      "conditions": {
+        "packaging_state": "strong_compression",
+        "requires_all_structure_flags_false": true
+      },
+      "ranges": {
+        "normal_thickness_ratio": [0.4, 0.6],
+        "conservative_thickness_ratio": [0.65, 0.8]
+      },
+      "prohibitions": [
+        "do not use for rigid or shape-retained bags",
+        "do not treat unknown structure as soft"
+      ],
+      "evidence_refs": ["CAL-076", "CAL-045", "CAL-064"]
+    }
+  ],
+  "tentative_rules": [
+    {
+      "id": "moderate_compression",
+      "enabled": true,
+      "conditions": {
+        "packaging_state": "moderate_compression",
+        "requires_all_structure_flags_false": true
+      },
+      "ranges": {
+        "normal_thickness_ratio": [0.6, 0.7],
+        "conservative_thickness_ratio": [0.8, 1.0]
+      },
+      "prohibitions": [
+        "do not use for shaped PU bags, WOC bags, hard inserts, or retail boxes"
+      ],
+      "evidence_refs": ["CAL-065", "CAL-045", "CAL-064"]
+    },
+    {
+      "id": "soft_flattened_protrusion",
+      "enabled": true,
+      "conditions": {
+        "protrusion_flattenable": true,
+        "packaging_states": ["strong_compression", "moderate_compression"]
+      },
+      "ranges": {
+        "normal_thickness_ratio": [0.6, 0.75],
+        "conservative_thickness_ratio": [0.8, 1.0]
+      },
+      "prohibitions": [
+        "do not use when a protrusion has a rigid support",
+        "historical 2cm is not a universal thickness"
+      ],
+      "evidence_refs": ["CAL-047"]
+    }
+  ],
+  "observation_rules": [
+    {
+      "id": "thin_soft_fabric_weight",
+      "enabled": false,
+      "conditions": {
+        "quantity_aware": true
+      },
+      "ranges": {},
+      "prohibitions": [
+        "do not infer multi-pack weight from a single generic sock weight",
+        "cards, tags, and hooks must be separate evidence"
+      ],
+      "evidence_refs": ["CAL-004", "CAL-014", "CAL-016", "CAL-018", "CAL-024", "CAL-028"]
+    }
+  ],
+  "safety_limits": {
+    "minimum_axis_cm": 1.0,
+    "maximum_axis_cm": 200.0,
+    "minimum_normal_to_conservative_volume_ratio": 0.05,
+    "unknown_state_allows_aggressive_compression": false
+  },
+  "evidence_refs": [
+    "CAL-032",
+    "CAL-045",
+    "CAL-047",
+    "CAL-049",
+    "CAL-055",
+    "CAL-059",
+    "CAL-064",
+    "CAL-065",
+    "CAL-068",
+    "CAL-075",
+    "CAL-076"
+  ]
+}

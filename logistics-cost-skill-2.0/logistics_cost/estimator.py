@@ -28,6 +28,7 @@ from .calculator import calc_head_cost, calc_volume_weight, calc_freight_costs
 from .config import BASE_DIR, load_config, normalize_category
 from .evidence_resolver import resolve_evidence, _is_soft
 from .packaging_decision_ai import validate_packaging_scenarios
+from .packaging_calibration import calibrate_packaging_scenarios
 from .soft_goods_rules import check_soft_goods_volume, is_soft_goods
 from .storage import archive_local_image
 from .weight_rules import UserWeight, apply_weight_correction
@@ -52,6 +53,7 @@ def estimate(
     image_path: str = "",
     product_link: str = "",
     user_weight: UserWeight | None = None,
+    calibration_profile_path: str | Path | None = None,
     persist: bool = False,
 ) -> dict[str, Any]:
     """执行完整的融合估算流水线。
@@ -65,12 +67,19 @@ def estimate(
     summary = dict(product_summary or {})
     evidence = list(raw_evidence or [])
     scenarios = dict(packaging_scenarios or {})
+    calibration = {
+        "applied_rules": [], "conflicts": [], "warnings": [],
+        "original_scenarios": scenarios, "adjusted_scenarios": scenarios,
+    }
 
     # ---- 1. 证据仲裁 ----
     resolution = resolve_evidence(summary, evidence)
 
     # ---- 2. 包装校验 ----
     if scenarios and "normal" in scenarios and "conservative" in scenarios:
+        scenarios, calibration = calibrate_packaging_scenarios(
+            summary, scenarios, profile_path=calibration_profile_path,
+        )
         category_type = normalize_category(summary.get("category_type"), config)
         if not summary.get("category_type"):
             summary["category_type"] = category_type
@@ -124,7 +133,9 @@ def estimate(
         if soft:
             soft_result = check_soft_goods_volume(
                 vol_weight, pkg_weight, ai_net_weight,
-                is_packaged_dimension=is_packaged,
+                is_packaged_dimension=(
+                    is_packaged or bool(calibration.get("applied_rules"))
+                ),
                 scenario_label=mode,
             )
 
@@ -188,6 +199,8 @@ def estimate(
             review_reasons.append(r)
     review_reasons.extend(resolution.get("review_reasons") or [])
     review_reasons.extend(decision.get("review_reasons") or [])
+    review_reasons.extend(calibration.get("warnings") or [])
+    review_reasons.extend(calibration.get("conflicts") or [])
     review_reasons = list(dict.fromkeys(r for r in review_reasons if r))
 
     result: dict[str, Any] = {
@@ -215,6 +228,7 @@ def estimate(
         "needs_review": bool(review_reasons),
         "review_reasons": review_reasons,
         "confidence": str(summary.get("confidence") or "low"),
+        "packaging_calibration": calibration,
         "formula_version": config.get("formula_version", "unknown"),
     }
 
