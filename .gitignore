@@ -9,6 +9,7 @@ build/
 
 # Virtual environments
 .venv/
+.venv-*/
 venv/
 env/
 
@@ -59,6 +60,21 @@ node_modules/
 # 临时文件
 *.tmp
 *.temp
+
+# 测试会话与临时数据
+test_sessions/
+temp_acceptance/
+*.mypy_cache/
+.ruff_cache/
+
+# 浏览器数据与AI缓存
+browser_profile/
+.ai_cache/
+*_cache/
+
+# 临时图片目录
+temp_images/
+screenshots/
 
 # 系统文件
 Thumbs.db
