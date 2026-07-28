@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
+EXAMPLES = PROJECT / "examples"
 sys.path.insert(0, str(PROJECT))
 
 import pytest
@@ -17,7 +18,7 @@ from logistics_cost.calculator import calc_freight_costs
 
 
 def _load(path: str) -> AiProductJson:
-    with open(path, encoding="utf-8") as f:
+    with open(EXAMPLES / path, encoding="utf-8") as f:
         return validate(json.load(f))
 
 
@@ -51,7 +52,7 @@ def test_freight_service_fee_included():
 # === Both normal and conservative return dual provider costs ===
 
 def test_both_modes_have_provider_costs():
-    ai = _load("examples/socks_ai.json")
+    ai = _load("socks_ai.json")
     s, e, sc, _ = to_estimate_inputs(ai)
     r = estimate(product_summary=s, raw_evidence=e, packaging_scenarios=sc)
     assert r["status"] == "calculated"
@@ -106,7 +107,7 @@ def test_no_categories_fallback():
 # === estimate_from_ai_json thin entry ===
 
 def test_estimate_from_ai_json():
-    with open("examples/socks_ai.json", encoding="utf-8") as f:
+    with open(EXAMPLES / "socks_ai.json", encoding="utf-8") as f:
         ai_data = json.load(f)
     result = estimate_from_ai_json(ai_data)
     assert result["status"] == "calculated"
@@ -114,7 +115,7 @@ def test_estimate_from_ai_json():
     assert "ai_meta" in result
 
 def test_estimate_from_ai_json_with_weight():
-    with open("examples/socks_ai.json", encoding="utf-8") as f:
+    with open(EXAMPLES / "socks_ai.json", encoding="utf-8") as f:
         ai_data = json.load(f)
     result = estimate_from_ai_json(ai_data, user_weight=65, user_weight_unit="g")
     assert result["status"] == "calculated"
@@ -125,7 +126,7 @@ def test_estimate_from_ai_json_with_weight():
 # === Existing tests — must still pass ===
 
 def test_socks_no_user_weight():
-    ai = _load("examples/socks_ai.json")
+    ai = _load("socks_ai.json")
     s, e, sc, _ = to_estimate_inputs(ai)
     r = estimate(product_summary=s, raw_evidence=e, packaging_scenarios=sc)
     assert r["status"] == "calculated"
@@ -134,7 +135,7 @@ def test_socks_no_user_weight():
 
 
 def test_socks_trusted_weight():
-    ai = _load("examples/socks_ai.json")
+    ai = _load("socks_ai.json")
     s, e, sc, _ = to_estimate_inputs(ai)
     r = estimate(product_summary=s, raw_evidence=e, packaging_scenarios=sc,
                  user_weight=UserWeight(65, "g", "可信"))
@@ -145,7 +146,7 @@ def test_socks_trusted_weight():
 
 
 def test_socks_untrusted_weight():
-    ai = _load("examples/socks_ai.json")
+    ai = _load("socks_ai.json")
     s, e, sc, _ = to_estimate_inputs(ai)
     r = estimate(product_summary=s, raw_evidence=e, packaging_scenarios=sc,
                  user_weight=UserWeight(65, "g", "约值"))
@@ -174,7 +175,7 @@ def test_soft_goods_ice_sleeves():
 def test_link_no_network():
     import socket
     from unittest.mock import patch
-    ai = _load("examples/socks_ai.json")
+    ai = _load("socks_ai.json")
     s, e, sc, _ = to_estimate_inputs(ai)
     with patch.object(socket, "socket", side_effect=AssertionError("Network")):
         r = estimate(product_summary=s, raw_evidence=e, packaging_scenarios=sc,
@@ -207,9 +208,13 @@ def test_validate_defaults():
 
 def test_e2e_socks():
     import subprocess
-    r = subprocess.run(["python", "run.py", "--ai-json", "examples/socks_ai.json"],
-                       capture_output=True, text=True)
-    assert r.returncode == 0
+    r = subprocess.run(
+        [sys.executable, str(PROJECT / "run.py"), "--ai-json", str(EXAMPLES / "socks_ai.json")],
+        cwd=str(PROJECT),
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, f"stdout={r.stdout!r} stderr={r.stderr!r}"
     data = json.loads(r.stdout)
     assert data["status"] == "calculated"
     assert "provider_costs" in data["normal"]

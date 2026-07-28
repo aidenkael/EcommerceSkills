@@ -37,8 +37,11 @@ def _make_png(tmp_path, name="a.png"):
 
 @pytest.fixture
 def _tkroot():
-    root = tk.Tk()
-    root.withdraw()
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError as exc:
+        pytest.skip(f"Tcl/Tk 环境不可用（managed Python 缺少 Tcl/Tk 运行库）: {exc}")
     yield root
     try: root.destroy()
     except: pass
@@ -114,11 +117,18 @@ class TestUploadPaste:
 
 
 class TestProductPageFill:
+    def _try_tk(self):
+        try:
+            r = tk.Tk(); r.withdraw()
+            return r
+        except tk.TclError as exc:
+            pytest.skip(f"Tcl/Tk 环境不可用（managed Python 缺少 Tcl/Tk 运行库）: {exc}")
+
     def test_bare_fills_net_fields(self, tmp_path):
         from ui.product_page import ProductPage
         from database.db_manager import DatabaseManager
         from config.config_manager import ConfigManager
-        r = tk.Tk(); r.withdraw()
+        r = self._try_tk()
         try:
             db = DatabaseManager(db_path=str(tmp_path/"f1.db"))
             cfg = ConfigManager(db)
@@ -133,7 +143,7 @@ class TestProductPageFill:
         from ui.product_page import ProductPage
         from database.db_manager import DatabaseManager
         from config.config_manager import ConfigManager
-        r = tk.Tk(); r.withdraw()
+        r = self._try_tk()
         try:
             db = DatabaseManager(db_path=str(tmp_path/"f2.db"))
             cfg = ConfigManager(db)
@@ -148,7 +158,7 @@ class TestProductPageFill:
         from ui.product_page import ProductPage
         from database.db_manager import DatabaseManager
         from config.config_manager import ConfigManager
-        r = tk.Tk(); r.withdraw()
+        r = self._try_tk()
         try:
             db = DatabaseManager(db_path=str(tmp_path/"f3.db"))
             cfg = ConfigManager(db)
@@ -164,7 +174,7 @@ class TestProductPageFill:
         from ui.product_page import ProductPage
         from database.db_manager import DatabaseManager
         from config.config_manager import ConfigManager
-        r = tk.Tk(); r.withdraw()
+        r = self._try_tk()
         try:
             db = DatabaseManager(db_path=str(tmp_path/"f4.db"))
             cfg = ConfigManager(db)
