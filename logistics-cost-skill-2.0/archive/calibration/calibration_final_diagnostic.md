@@ -1,66 +1,80 @@
-# CALIBRATION FINAL DIAGNOSTIC
+# CALIBRATION FINAL DIAGNOSTIC (v2 修正)
 
 ## 数据概览
 - 总记录数: 77 (CAL-001 ~ CAL-077)
-- 首次估算样本: 73
-- 修正后样本: 3
-- 排除样本: 4
-- 独立商品组: 75
-- 证据类型: freight_inferred=66, merchant_spec=10
+- 首次估算样本: 58
+- 修正后样本: 15
+- 排除样本: 19
+- 独立商品组: 56
 
-## 首次估算准确率
-- 命中(match): 10 (13.7%)
-- 高估(overestimate): 52 (71.2%)
-- 低估(underestimate): 11 (15.1%)
-- 平均误差: 38.3%
+## 首次估算准确率（仅真正首轮估算）
+- 命中(match): 5 (8.6%)
+- 高估(overestimate): 20 (34.5%)
+- 低估(underestimate): 33 (56.9%)
+- 平均误差: 29.9%
 - 中位误差: 20.0%
 
-## 修正后结果
-- 修正样本数: 3
-  - CAL-054: match 0% (第一轮按10×3×3/30-40g偏低43%, 修正12×5×4/80g后命中)
-  - CAL-057: match 0% (第一轮OPP袋12×10×4cm低估57%, 修正挂卡纸盒16×13×5cm后命中)
-  - CAL-062: match 0% (第一轮估60g偏低40%, 按商家规格100g修正后命中)
+## 排除样本详情
+- CAL-001: 非首次估算
+- CAL-002: 非首次估算
+- CAL-003: 无实际运费
+- CAL-007: 非首次估算
+- CAL-009: 非首次估算; 无实际运费
+- CAL-016: 无实际运费
+- CAL-021: 非首次估算
+- CAL-026: 非首次估算
+- CAL-031: 非首次估算
+- CAL-033: 非首次估算
+- CAL-037: 非首次估算
+- CAL-038: 非首次估算
+- CAL-041: 非首次估算
+- CAL-044: 非首次估算
+- CAL-047: 非首次估算
+- CAL-054: 修正后命中, 不参与首次估算统计
+- CAL-057: 修正后命中, 不参与首次估算统计
+- CAL-062: 修正后命中, 不参与首次估算统计
+- CAL-070: 实际尺寸已忘记; 方向未知
 
-## 按商品品类分组
-- **bag**: 14条, 命中4, 高估8, 低估2
-- **general**: 33条, 命中0, 高估32, 低估1
-- **hair_accessory**: 9条, 命中1, 高估5, 低估3
-- **matched**: 3条, 命中3, 高估0, 低估0
-- **retail_packaging**: 8条, 命中1, 高估3, 低估4
-- **rigid_protrusion**: 3条, 命中1, 高估1, 低估1
-- **thin_soft**: 3条, 命中0, 高估3, 低估0
-
-## 排除样本
-- CAL-054: 修正后命中: 第一轮按10×3×3/30-40g偏低43%, 修正12×5×4/80g后命中
-- CAL-057: 修正后命中: 第一轮OPP袋12×10×4cm低估57%, 修正挂卡纸盒16×13×5cm后命中
-- CAL-062: 修正后命中: 第一轮估60g偏低40%, 按商家规格100g修正后命中
-- CAL-070: 实际尺寸已忘记, 按中段尺寸估, 无法确定误差来源
-
-## 独立商品组 (合并3次重复发货)
-- 唯一组数: 75
-- CAL-071/072/073 -> hair_claw_3ship (1组)
+## 修正后样本
+- CAL-001: est=55.0, act=44.2, dir=overestimate
+- CAL-002: est=38.4, act=18.05, dir=overestimate
+- CAL-007: est=73.9, act=18.5, dir=overestimate
+- CAL-009: est=9.0, act=0, dir=underestimate
+- CAL-021: est=0, act=4.75, dir=underestimate
+- CAL-026: est=12.0, act=12.0, dir=match
+- CAL-031: est=12.0, act=12.0, dir=match
+- CAL-033: est=0, act=6.0, dir=underestimate
+- CAL-037: est=10.0, act=12.0, dir=underestimate
+- CAL-041: est=0, act=3.0, dir=underestimate
+- CAL-044: est=17.3, act=19.0, dir=underestimate
+- CAL-047: est=18.48, act=12.0, dir=overestimate
+- CAL-054: est=8.0, act=8.0, dir=match
+- CAL-057: est=14.0, act=14.0, dir=match
+- CAL-062: est=10.0, act=10.0, dir=match
 
 ## 候选修正规则 (≥2独立组支持)
-### 候选 1: thin_soft_fabric_volume_correction
-- 描述: 薄款针织/弹性面料(袜/袖套): 折叠后体积重偏高40-50%, 建议包装厚度≤3cm或体积重阈值降至×2
-- 支持条目: CAL-028, CAL-055, CAL-059
-- 独立组数: 3
-- 建议: ai_package_size_cm厚度从4cm→3cm, 或提高soft_volume_ignore阈值
+### 1. thin_soft_fabric_volume_correction
+- 薄款针织/弹性面料(袜/袖套): 折叠后体积重偏高40-50%, 建议ai_package_size_cm厚度从4cm→3cm
+- 支持条目: CAL-028, CAL-055, CAL-059, CAL-068, CAL-075
+- 独立组数: 5
+- ⚠️ 当前soft_volume_ignore阈值=×3(提高数值=更少忽略; 降低数值=更多忽略)。本建议只调ai_package_size_cm, 不修改阈值。
 
-### 候选 2: bag_three_tier_compression
-- 描述: 包袋品类三档压缩规则: 皮包×0.65 / PVC薄款全折叠3cm模板 / 布包×0.4
+### 2. bag_three_tier_compression
+- 包袋品类三档压缩: 皮包×0.65 / PVC全折叠3cm模板 / 布包×0.4
 - 支持条目: CAL-065, CAL-068, CAL-076
 - 独立组数: 3
-- 建议: 在AI JSON生成时按材质分类选择压缩因子
 
-### 候选 3: rigid_protrusion_packaging
-- 描述: 手柄/夹扣类硬质突出商品: 商家规格仅本体尺寸, 包装需加+2cm厚度和额外配件重量
-- 支持条目: CAL-054, CAL-056
-- 独立组数: 2
-- 建议: has_rigid_parts=true时ai_package_size_cm厚度≥本体+2cm
+### 3. rigid_protrusion_packaging
+- 手柄/夹扣类硬质突出: 包装厚度≥本体+2cm, 配件重量额外计入
+- 支持条目: CAL-047, CAL-054, CAL-056
+- 独立组数: 3
 
-## 已排除 / 不作全局修改的
-- CAL-070: 规格忘记, 仅保留为案例
-- CAL-071/072/073: 同组重复发货, 不独立推动算法修改
-- 修正后命中条目: 反映"诊断→修正"流程效果, 不计入首次估算准确率
-- Round 01 (CAL-001~051): 历史基线, 本次不调整
+## 方向判定方法
+- 方向优先按 estimated vs actual 对比, 不按误差百分比正负号
+- 原始 error_direction 不一致时以 est vs act 为准
+- act=0 或无实际运费 → unknown
+
+## 已排除/不修改
+- Round 01 原始校准文件不变
+- Round 02 原始校准文件不变
+- 物流算法、配置、CAL 原始数据均未修改
