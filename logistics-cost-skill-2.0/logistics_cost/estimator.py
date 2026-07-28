@@ -68,8 +68,12 @@ def estimate(
     evidence = list(raw_evidence or [])
     scenarios = dict(packaging_scenarios or {})
     calibration = {
-        "applied_rules": [], "conflicts": [], "warnings": [],
-        "original_scenarios": scenarios, "adjusted_scenarios": scenarios,
+        "applied_rules": [], "applied_rule_details": [],
+        "proposed_rule_ids": [], "proposed_rule_details": [],
+        "conflicts": [], "warnings": [], "needs_review": False,
+        "original_scenarios": scenarios,
+        "local_proposed_scenarios": scenarios,
+        "adjusted_scenarios": scenarios,
     }
 
     # ---- 1. 证据仲裁 ----
@@ -185,6 +189,9 @@ def estimate(
             "v21_added_005": weight_result["added_005"],
             "v21_needs_review": weight_result["needs_review"],
             "v21_review_reason": weight_result["review_reason"],
+            "needs_review": bool(
+                scenario.get("needs_review") or weight_result["needs_review"]
+            ),
         }
 
     # ---- 4. 合并输出 ----

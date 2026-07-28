@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from logistics_cost.ai_schema import estimate_from_ai_json, to_estimate_inputs, validate
 from logistics_cost.calculator import calc_freight_costs, calc_volume_weight
 from logistics_cost.estimator import estimate
+
+PROJECT = Path(__file__).resolve().parent.parent
 
 
 def _ai(**overrides):
@@ -146,6 +151,103 @@ def test_external_ai_conflict_preserves_original_candidate():
     assert calibration["original_scenarios"] == calibration["adjusted_scenarios"]
     assert calibration["conflicts"]
     assert result["needs_review"] is True
+
+
+def test_moderate_compression_tentative_requires_review():
+    result = estimate_from_ai_json(_ai(packaging_state="moderate_compression"))
+    calibration = result["packaging_calibration"]
+    assert result["normal"]["packaged_size_cm"] != [30.0, 20.0, 10.0]
+    assert result["normal"]["needs_review"] is True
+    assert result["conservative"]["needs_review"] is True
+    assert result["needs_review"] is True
+    assert any("moderate_compression" in reason for reason in result["review_reasons"])
+    detail = next(
+        item for item in calibration["applied_rule_details"]
+        if item["rule_id"] == "moderate_compression"
+    )
+    assert detail["rule_group"] == "tentative"
+    assert detail["evidence_refs"]
+    assert detail["trigger_reason"]
+
+
+def test_soft_flattened_protrusion_allowed_state_is_tentative():
+    result = estimate_from_ai_json(_ai(
+        packaging_state="moderate_compression",
+        protrusion_flattenable=True,
+    ))
+    calibration = result["packaging_calibration"]
+    assert "soft_flattened_protrusion" in calibration["applied_rules"]
+    detail = next(
+        item for item in calibration["applied_rule_details"]
+        if item["rule_id"] == "soft_flattened_protrusion"
+    )
+    assert detail["rule_group"] == "tentative"
+    assert result["normal"]["needs_review"] is True
+    assert result["conservative"]["needs_review"] is True
+    assert result["needs_review"] is True
+
+
+def test_soft_flattened_protrusion_disallowed_for_full_flat_fold():
+    result = estimate_from_ai_json(_ai(
+        packaging_state="full_flat_fold",
+        protrusion_flattenable=True,
+    ))
+    calibration = result["packaging_calibration"]
+    assert "full_flat_fold" in calibration["applied_rules"]
+    assert "soft_flattened_protrusion" not in calibration["applied_rules"]
+    assert result["normal"]["packaged_size_cm"] != [30.0, 20.0, 10.0]
+
+
+def test_shape_retained_never_applies_soft_flattened_protrusion():
+    result = estimate_from_ai_json(_ai(
+        packaging_state="shape_retained",
+        protrusion_flattenable=True,
+    ))
+    calibration = result["packaging_calibration"]
+    assert calibration["applied_rules"] == []
+    assert result["normal"]["packaged_size_cm"] == [30.0, 20.0, 10.0]
+    assert result["conservative"]["packaged_size_cm"] == [32.0, 22.0, 12.0]
+
+
+def test_external_ai_conflict_keeps_full_local_proposal_audit():
+    result = estimate_from_ai_json(_ai(proposal_source="external_ai"))
+    calibration = result["packaging_calibration"]
+    assert result["normal"]["packaged_size_cm"] == [30.0, 20.0, 10.0]
+    assert result["conservative"]["packaged_size_cm"] == [32.0, 22.0, 12.0]
+    assert calibration["original_scenarios"]
+    assert calibration["local_proposed_scenarios"]
+    assert calibration["local_proposed_scenarios"] != calibration["original_scenarios"]
+    assert calibration["adjusted_scenarios"] == calibration["original_scenarios"]
+    assert calibration["conflicts"]
+    assert calibration["proposed_rule_ids"] == ["strong_compression"]
+    assert calibration["needs_review"] is True
+    assert result["needs_review"] is True
+
+
+def test_active_strong_compression_is_not_mislabeled_tentative():
+    result = estimate_from_ai_json(_ai(packaging_state="strong_compression"))
+    calibration = result["packaging_calibration"]
+    assert calibration["applied_rules"] == ["strong_compression"]
+    detail = calibration["applied_rule_details"][0]
+    assert detail["rule_group"] == "active"
+    assert not any("暂定校准规则" in reason for reason in result["review_reasons"])
+
+
+@pytest.mark.parametrize(
+    ("fixture", "normal", "conservative"),
+    [
+        ("pu_small_chain_shoulder_bag_ai.json", 39.60, 48.00),
+        ("woc_bag_ai.json", 52.00, 60.00),
+        ("pvc_cosmetic_ai.json", 16.00, 22.26),
+        ("kitty_bag_ai.json", 10.00, 35.09),
+        ("backpack_ai.json", 78.00, 130.50),
+    ],
+)
+def test_representative_cal_amounts_do_not_change(fixture, normal, conservative):
+    data = json.loads((PROJECT / "examples" / fixture).read_text(encoding="utf-8"))
+    result = estimate_from_ai_json(data)
+    assert result["normal"]["head_cost_cny"] == pytest.approx(normal, abs=0.01)
+    assert result["conservative"]["head_cost_cny"] == pytest.approx(conservative, abs=0.01)
 
 
 def test_deterministic_freight_formula_and_both_forwarders_unchanged():

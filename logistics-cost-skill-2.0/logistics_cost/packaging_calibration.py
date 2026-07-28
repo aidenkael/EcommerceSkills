@@ -79,11 +79,17 @@ def load_calibration_profile(
         return deepcopy(SAFE_PROFILE), [f"包装校准配置加载失败，已使用内置安全默认且未自动压缩: {exc}"]
 
 
-def _rule(profile: dict[str, Any], rule_id: str) -> dict[str, Any] | None:
-    for group in ("active_rules", "tentative_rules"):
+def _find_rule(
+    profile: dict[str, Any],
+    rule_id: str,
+    *,
+    groups: tuple[str, ...] = ("active_rules", "tentative_rules"),
+) -> tuple[dict[str, Any], str] | None:
+    """Return an enabled rule together with its configured rule group."""
+    for group in groups:
         for item in profile.get(group, []):
             if item.get("id") == rule_id and item.get("enabled"):
-                return item
+                return item, group.removesuffix("_rules")
     return None
 
 
@@ -128,9 +134,14 @@ def calibrate_packaging_scenarios(
         "packaging_state": state,
         "proposal_source": source,
         "applied_rules": [],
+        "applied_rule_details": [],
+        "proposed_rule_ids": [],
+        "proposed_rule_details": [],
         "conflicts": [],
         "warnings": list(warnings),
+        "needs_review": bool(warnings),
         "original_scenarios": original,
+        "local_proposed_scenarios": deepcopy(original),
         "adjusted_scenarios": adjusted,
     }
     if not profile.get("enabled") or state not in SUPPORTED_STATES:
@@ -151,12 +162,14 @@ def calibrate_packaging_scenarios(
         metadata["conflicts"].append("包装状态要求压缩，但硬结构/保形字段存在、为真或仍未知")
         return adjusted, metadata
 
-    rule = _rule(profile, state)
-    if rule is None:
+    primary_match = _find_rule(profile, state)
+    if primary_match is None:
         return adjusted, metadata
+    rule, rule_group = primary_match
     minimum = float(profile["safety_limits"].get("minimum_axis_cm", 1.0))
     material = str(product_summary.get("material") or "").lower()
-    thin_rule = _rule(profile, "thin_soft_fabric_fold")
+    thin_match = _find_rule(profile, "thin_soft_fabric_fold")
+    thin_rule, thin_group = thin_match if thin_match else (None, None)
     thin_matches = bool(
         thin_rule
         and state in thin_rule["conditions"].get("packaging_states", [])
@@ -164,10 +177,12 @@ def calibrate_packaging_scenarios(
         and any(marker in material for marker in thin_rule["conditions"].get("material_markers", []))
         and any(marker in material for marker in thin_rule["conditions"].get("material_family_markers", []))
     )
-    protrusion_rule = (
-        _rule(profile, "soft_flattened_protrusion")
-        if product_summary.get("protrusion_flattenable") is True
-        else None
+    protrusion_match = _find_rule(profile, "soft_flattened_protrusion")
+    protrusion_rule, protrusion_group = protrusion_match if protrusion_match else (None, None)
+    protrusion_matches = bool(
+        protrusion_rule
+        and product_summary.get("protrusion_flattenable") is True
+        and state in protrusion_rule["conditions"].get("packaging_states", [])
     )
 
     def proposed(mode: str) -> list[float]:
@@ -181,28 +196,70 @@ def calibrate_packaging_scenarios(
                 minimum,
             )
         key = "normal_thickness_ratio" if mode == "normal" else "conservative_thickness_ratio"
-        ratio_rule = protrusion_rule or (thin_rule if thin_matches else rule)
+        ratio_rule = protrusion_rule if protrusion_matches else (thin_rule if thin_matches else rule)
         return _scale_smallest(dims, _mid(ratio_rule, key), minimum)
 
     candidates = {mode: proposed(mode) for mode in ("normal", "conservative")}
+    proposed_details = [{
+        "rule_id": rule["id"],
+        "rule_group": rule_group,
+        "trigger_reason": f"packaging_state={state} 满足规则条件",
+        "evidence_refs": list(rule.get("evidence_refs", [])),
+    }]
+    if thin_matches:
+        proposed_details.append({
+            "rule_id": thin_rule["id"],
+            "rule_group": thin_group,
+            "trigger_reason": "薄软面料标记、面料族和无硬卡条件同时满足",
+            "evidence_refs": list(thin_rule.get("evidence_refs", [])),
+        })
+    if protrusion_matches:
+        proposed_details.append({
+            "rule_id": protrusion_rule["id"],
+            "rule_group": protrusion_group,
+            "trigger_reason": (
+                "protrusion_flattenable=true 且 "
+                f"packaging_state={state} 位于规则允许状态"
+            ),
+            "evidence_refs": list(protrusion_rule.get("evidence_refs", [])),
+        })
+    metadata["proposed_rule_ids"] = [item["rule_id"] for item in proposed_details]
+    metadata["proposed_rule_details"] = deepcopy(proposed_details)
+    local_proposed = deepcopy(original)
+    for mode, dims in candidates.items():
+        local_proposed[mode]["packaged_size_cm"] = dims
+    metadata["local_proposed_scenarios"] = local_proposed
+
     if source in {"external_ai", "vision_api"}:
         if any(candidates[mode] != adjusted[mode]["packaged_size_cm"] for mode in candidates):
             metadata["conflicts"].append(
                 "AI包装候选与本地校准区间不一致；已保留AI原始候选，未静默覆盖"
             )
+            metadata["needs_review"] = True
         return adjusted, metadata
 
+    tentative_details = [
+        item for item in proposed_details if item["rule_group"] == "tentative"
+    ]
     for mode, dims in candidates.items():
         adjusted[mode]["packaged_size_cm"] = dims
-        adjusted[mode]["needs_review"] = bool(adjusted[mode].get("needs_review"))
+        adjusted[mode]["needs_review"] = bool(
+            adjusted[mode].get("needs_review") or tentative_details
+        )
         adjusted[mode]["reason"] = (
             f"{adjusted[mode].get('reason', '')}；本地条件规则 {state} "
             f"按原候选比例生成{mode}档"
         ).strip("；")
-    metadata["applied_rules"].append(rule["id"])
-    if thin_matches and thin_rule["id"] not in metadata["applied_rules"]:
-        metadata["applied_rules"].append(thin_rule["id"])
-    if protrusion_rule and protrusion_rule["id"] not in metadata["applied_rules"]:
-        metadata["applied_rules"].append(protrusion_rule["id"])
+    metadata["applied_rules"] = [item["rule_id"] for item in proposed_details]
+    metadata["applied_rule_details"] = deepcopy(proposed_details)
+    for detail in tentative_details:
+        warning = (
+            f"暂定校准规则 {detail['rule_id']} 已参与估算，"
+            "独立证据仍不足，需要人工复核包装结构。"
+        )
+        if warning not in metadata["warnings"]:
+            metadata["warnings"].append(warning)
+    if tentative_details:
+        metadata["needs_review"] = True
     metadata["adjusted_scenarios"] = deepcopy(adjusted)
     return adjusted, metadata
