@@ -1,610 +1,923 @@
 """
-新商品测算页面 — fix_02
+新商品测算页面 — fix_06
 
-修复清单：
-- fix_02-1: head_partial = (head_cost is None) 无条件检测
-- fix_02-2: _show_rate_notice 使用 _results_frame 避免 AttributeError
-- fix_02-3: load_product 时填充所有结果标签
-- fix_02-4: recalculate 在 historical_mode 下跳过（设置回调保护）
-- fix_02-5: _force_recalc 同步更新 fixed_fee/tail_haul 到当前配置
-- fix_02-6: 利润/利润率改为净利润（扣除推广预留）
-- fix_02-7: USD输入→自动换算RMB→计算利润
-- fix_02-8: 非数字输入标红提示
-- fix_02-9: 还原快照后更新结果
+核心修复：
+- 当前保存规则与首次还原规则分离
+- 当前规则和当前计算结果每次保存均原子持久化
+- 历史加载优先使用冻结的计算结果
+- 体积重除数参与实际公式
+- 严格 None 传播（用 known_* 函数显示下限）
 """
 
-import tkinter as tk
+import math, tkinter as tk, sys, os
 from tkinter import ttk, messagebox
-import sys
-import os
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from calculation import (
-    volumetric_weight, chargeable_weight, head_haul_cost, total_logistics_cost,
-    total_cost, profit_amount, profit_rate, suggested_price_from_rate,
-    net_profit_amount, net_profit_rate,
-    rmb_to_usd, usd_to_rmb,
+    volumetric_weight, chargeable_weight, head_haul_cost,
+    total_logistics_cost, known_logistics_subtotal,
+    total_cost, known_total_cost_subtotal,
+    profit_amount, profit_rate, suggested_price_from_rate,
+    net_profit_amount, net_profit_rate, rmb_to_usd, usd_to_rmb, evaluate_rule,
+    compare_rule_contexts,
 )
+from config.config_manager import VOLUME_DIVISOR, FORWARDER_LABELS
+from database.db_manager import CALCULATION_SCHEMA_VERSION
+from image_intake.result_models import MeasurementScope
 
 
 def _safe_float(val):
-    if val is None or str(val).strip() == "":
-        return None
+    if val is None or str(val).strip() == "": return None
     try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
+        f = float(val)
+        if math.isnan(f) or math.isinf(f): return None
+        return f
+    except (ValueError, TypeError): return None
+
+
+def _is_valid_number(val):
+    s = str(val).strip() if val is not None else ""
+    if s == "": return True
+    try:
+        f = float(s)
+        if math.isnan(f) or math.isinf(f): return False
+        return f >= 0
+    except (ValueError, TypeError): return False
+
+
+def _is_valid_rate(val):
+    s = str(val).strip() if val is not None else ""
+    if s == "": return True
+    try:
+        f = float(s)
+        if math.isnan(f) or math.isinf(f): return False
+        return 0 <= f < 100
+    except (ValueError, TypeError): return False
 
 
 class ProductPage(ttk.Frame):
-
     def __init__(self, parent, db_manager, config_manager):
         super().__init__(parent)
         self._db = db_manager
         self._cfg = config_manager
         self._product_id = None
         self._calc_direction = None
-        self._last_modified = None   # 用于区分 USD/RMB 来源
+        self._last_modified = None
         self._programmatic = False
+        self._ocr_dialog_factory = None  # 可注入，测试用
+        self._ocr_controller = None  # 可注入，默认由 dialog 自建
         self._has_snapshot = False
-        self._historical_mode = False
-        self._calculated = {}
-        self._partial = {}
-        self._entry_widgets = {}     # fix_02-8: 存储entry引用用于标红
-
+        self._saved_rule_context = None
+        self._show_rate_banner = False
+        self._computed = {}
+        self._entry_vars = {}
+        self._entry_widgets = {}
+        self._weight_unit_version = "g_v1"
+        self._weight_confirmed = True
+        self._saved_profit_rule = None
+        self._profit_rule_source = "none"  # frozen / current / none
+        self._profit_rule_explicitly_changed = False
+        self._profit_rule_unavailable_notice = False
         self._build_ui()
         self.new_product()
 
-    # ─── UI 构建 ─────────────────────────────────────────
+    # ─── UI ───────────────────────────────────────────────
 
     def _build_ui(self):
-        paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        left = ttk.Frame(paned)
-        paned.add(left, weight=3)
-        canvas = tk.Canvas(left, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(left, orient=tk.VERTICAL, command=canvas.yview)
+        paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL); paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        left = ttk.Frame(paned); paned.add(left, weight=3)
+        canvas = tk.Canvas(left, highlightthickness=0); scrollbar = ttk.Scrollbar(left, orient=tk.VERTICAL, command=canvas.yview)
         self._input_frame = ttk.Frame(canvas)
         self._input_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=self._input_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True); scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
-
-        right = ttk.Frame(paned)
-        paned.add(right, weight=2)
-        self._results_frame = right   # fix_02-2: 保留引用
-
+        right = ttk.Frame(paned); paned.add(right, weight=2)
+        self._results_frame = right
         self._rate_notice_var = tk.StringVar()
-        self._rate_notice_label = ttk.Label(
-            right, textvariable=self._rate_notice_var,
-            foreground="#cc6600", font=("", 9, "italic"), wraplength=280
-        )
+        self._rate_notice_label = ttk.Label(right, textvariable=self._rate_notice_var, foreground="#cc6600", font=("", 9, "italic"), wraplength=280)
         self._build_results(right)
-
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Button(btn_frame, text="新建", command=self.new_product).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="保存", command=self.save_product).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="还原", command=self.restore_product).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="清空", command=self.clear_form).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="用当前费率重算", command=self._force_recalc).pack(side=tk.LEFT, padx=2)
-
+        btn_frame = ttk.Frame(self); btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        for txt, cmd in [("新建", self.new_product), ("保存", self.save_product), ("还原", self.restore_product),
+                          ("清空", self.clear_form), ("用当前规则重算", self._force_recalc)]:
+            ttk.Button(btn_frame, text=txt, command=cmd).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="OCR录入", command=self._open_ocr_intake).pack(side=tk.LEFT, padx=2)
         self._build_inputs()
 
-    def _make_entry(self, parent, label, row, col=1, default=""):
+    def _make_number_entry(self, parent, label, row, name, default=""):
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky=tk.W, padx=5, pady=2)
-        var = tk.StringVar(value=default)
-        entry = ttk.Entry(parent, textvariable=var, width=22)
-        entry.grid(row=row, column=col, sticky=tk.EW, padx=5, pady=2)
-        return var, entry
+        var = tk.StringVar(value=default); entry = tk.Entry(parent, textvariable=var, width=22, bg="white", relief="sunken")
+        entry.grid(row=row, column=1, sticky=tk.EW, padx=5, pady=2)
+        var.trace_add("write", lambda *_, n=name: self._validate_field(n))
+        self._entry_vars[name] = var; self._entry_widgets[name] = entry
+        return var
 
     def _make_section(self, parent, title, row_start):
-        ttk.Label(parent, text=title, font=("", 10, "bold")).grid(
-            row=row_start, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(10, 2))
+        ttk.Label(parent, text=title, font=("", 10, "bold")).grid(row=row_start, column=0, columnspan=2, sticky=tk.W, padx=5, pady=(10, 2))
 
     def _build_inputs(self):
-        pf = self._input_frame
-        r = 0
-
+        pf = self._input_frame; r = 0
         self._make_section(pf, "基本信息", r); r += 1
-        self._var_name, e = self._make_entry(pf, "商品名称：", r); self._entry_widgets["name"] = e; r += 1
-        self._var_cost, e = self._make_entry(pf, "商品成本 (元)：", r); self._entry_widgets["cost"] = e; r += 1
-        self._var_domestic, e = self._make_entry(pf, "发往义乌运费 (元)：", r); self._entry_widgets["domestic"] = e; r += 1
+        self._var_name = tk.StringVar()
+        ttk.Entry(pf, textvariable=self._var_name, width=46).grid(row=r, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=2); r += 1
+        self._var_cost = self._make_number_entry(pf, "商品成本 (元)：", r, "cost"); r += 1
+        self._var_domestic = self._make_number_entry(pf, "发往中转仓运费 (元)：", r, "domestic"); r += 1
+
+        self._make_section(pf, "货代选择", r); r += 1
+        ff = ttk.Frame(pf); ff.grid(row=r, column=0, columnspan=2, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(ff, text="货代：").pack(side=tk.LEFT)
+        self._forwarder_var = tk.StringVar(value="")
+        self._forwarder_combo = ttk.Combobox(ff, textvariable=self._forwarder_var, values=[""], state="readonly", width=16)
+        self._refresh_route_choices()
+        cb = self._forwarder_combo
+        cb.pack(side=tk.LEFT, padx=5); cb.bind("<<ComboboxSelected>>", lambda e: self._on_forwarder_changed())
+        ttk.Label(ff, text="(留空=未选择)", foreground="gray", font=("", 8)).pack(side=tk.LEFT, padx=5); r += 1
 
         self._make_section(pf, "裸件数据", r); r += 1
-        self._var_net_w, e = self._make_entry(pf, "裸重 (kg)：", r); self._entry_widgets["net_w"] = e; r += 1
-        self._var_net_l, e = self._make_entry(pf, "裸长 (cm)：", r); self._entry_widgets["net_l"] = e; r += 1
-        self._var_net_wi, e = self._make_entry(pf, "裸宽 (cm)：", r); self._entry_widgets["net_wi"] = e; r += 1
-        self._var_net_h, e = self._make_entry(pf, "裸高 (cm)：", r); self._entry_widgets["net_h"] = e; r += 1
+        self._var_net_w = self._make_number_entry(pf, "裸重 (g)：", r, "net_w"); r += 1
+        self._var_net_l = self._make_number_entry(pf, "裸长 (cm)：", r, "net_l"); r += 1
+        self._var_net_wi = self._make_number_entry(pf, "裸宽 (cm)：", r, "net_wi"); r += 1
+        self._var_net_h = self._make_number_entry(pf, "裸高 (cm)：", r, "net_h"); r += 1
 
-        self._make_section(pf, "包装数据（手动填写）", r); r += 1
-        self._var_pkg_w, e = self._make_entry(pf, "包装后重量 (kg)：", r); self._entry_widgets["pkg_w"] = e; r += 1
-        self._var_pkg_l, e = self._make_entry(pf, "包装后长 (cm)：", r); self._entry_widgets["pkg_l"] = e; r += 1
-        self._var_pkg_wi, e = self._make_entry(pf, "包装后宽 (cm)：", r); self._entry_widgets["pkg_wi"] = e; r += 1
-        self._var_pkg_h, e = self._make_entry(pf, "包装后高 (cm)：", r); self._entry_widgets["pkg_h"] = e; r += 1
+        self._make_section(pf, "包��数据", r); r += 1
+        self._var_pkg_w = self._make_number_entry(pf, "包装后重量 (g)：", r, "pkg_w"); r += 1
+        self._var_pkg_l = self._make_number_entry(pf, "包装后长 (cm)：", r, "pkg_l"); r += 1
+        self._var_pkg_wi = self._make_number_entry(pf, "包装后宽 (cm)：", r, "pkg_wi"); r += 1
+        self._var_pkg_h = self._make_number_entry(pf, "包装后高 (cm)：", r, "pkg_h"); r += 1
 
         self._make_section(pf, "物流费用", r); r += 1
-        self._var_fixed_fee, e = self._make_entry(pf, "固定服务费 (元)：", r, default=str(self._cfg.fixed_service_fee)); self._entry_widgets["fixed"] = e; r += 1
-        self._var_tail_haul, e = self._make_entry(pf, "尾程费用 (元)：", r, default=str(self._cfg.default_tail_haul)); self._entry_widgets["tail"] = e; r += 1
+        self._var_tail_haul = self._make_number_entry(pf, "尾程费用 (元)：", r, "tail", default=str(self._cfg.default_tail_haul)); r += 1
 
         self._make_section(pf, "售价与利润", r); r += 1
-        self._var_shein, _ = self._make_entry(pf, "SHEIN二次核价 (元)：", r); r += 1
-        self._var_price_rmb, e = self._make_entry(pf, "当前售价人民币 (元)：", r); self._entry_widgets["price_rmb"] = e; r += 1
-        self._var_price_usd, e = self._make_entry(pf, "当前售价美元 ($)：", r); self._entry_widgets["price_usd"] = e; r += 1
-        self._var_target_rate, e = self._make_entry(pf, "目标净利率 (%)：", r); self._entry_widgets["target_rate"] = e; r += 1
-        self._var_promo_rate, e = self._make_entry(pf, "推广预留比例 (%)：", r); self._entry_widgets["promo_rate"] = e; r += 1
+        self._var_shein = self._make_number_entry(pf, "SHEIN二次核价 ($)：", r, "shein"); r += 1
+        self._var_price_rmb = self._make_number_entry(pf, "当前售价人民币 (元)：", r, "price_rmb"); r += 1
+        self._var_price_usd = self._make_number_entry(pf, "当前售价美元 ($)：", r, "price_usd"); r += 1
+        self._var_target_rate = self._make_number_entry(pf, "目标净利率 (%)：", r, "target_rate"); r += 1
+        self._var_promo_rate = self._make_number_entry(pf, "推广预留比例 (%)：", r, "promo_rate"); r += 1
+
+        pr = ttk.Frame(pf); pr.grid(row=r, column=0, columnspan=2, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(pr, text="利润调整规则：").pack(side=tk.LEFT)
+        self._profit_rule_var = tk.StringVar(value="无")
+        self._profit_rule_combo = ttk.Combobox(pr, textvariable=self._profit_rule_var, state="readonly", width=24)
+        self._profit_rule_combo.pack(side=tk.LEFT, padx=5)
+        self._profit_rule_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_profit_rule_changed())
+        self._refresh_profit_rule_choices(); r += 1
 
         self._make_section(pf, "备注", r); r += 1
         self._var_notes = tk.StringVar()
         ttk.Entry(pf, textvariable=self._var_notes, width=46).grid(row=r, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=2); r += 1
         pf.columnconfigure(1, weight=1)
 
-        # trace 绑定
-        num_vars = [self._var_cost, self._var_domestic,
-                    self._var_net_w, self._var_net_l, self._var_net_wi, self._var_net_h,
-                    self._var_pkg_w, self._var_pkg_l, self._var_pkg_wi, self._var_pkg_h,
-                    self._var_fixed_fee, self._var_tail_haul, self._var_shein]
-        for var in num_vars:
-            var.trace_add("write", lambda *_, v=var: self._on_field_changed("cost", v))
-
-        self._var_price_rmb.trace_add("write", lambda *_, v=self._var_price_rmb: self._on_field_changed("price_rmb", v))
-        self._var_price_usd.trace_add("write", lambda *_, v=self._var_price_usd: self._on_field_changed("price_usd", v))
-        self._var_target_rate.trace_add("write", lambda *_, v=self._var_target_rate: self._on_field_changed("target_rate", v))
-        self._var_promo_rate.trace_add("write", lambda *_, v=self._var_promo_rate: self._on_field_changed("promo_rate", v))
+        for n in ["cost","domestic","net_w","net_l","net_wi","net_h","pkg_w","pkg_l","pkg_wi","pkg_h","tail","shein"]:
+            if n in self._entry_vars: self._entry_vars[n].trace_add("write", lambda *_, x=n: self._on_field_changed(x))
+        for n in ["price_rmb","price_usd","target_rate","promo_rate"]:
+            if n in self._entry_vars: self._entry_vars[n].trace_add("write", lambda *_, x=n: self._on_field_changed(x))
 
     def _build_results(self, parent):
         ttk.Label(parent, text="计算结果", font=("", 11, "bold")).pack(anchor=tk.W, padx=5, pady=(5, 10))
-
         self._result_labels = {}
-        fields = [
-            ("vol_weight", "体积重 (kg)："),
-            ("charge_weight", "计费重量 (kg)："),
-            ("head_haul", "头程费用 (元)："),
-            ("total_logistics", "总物流成本 (元)："),
-            ("total_cost", "总成本 (元)："),
-            ("profit", "净利润 (元)："),
-            ("profit_rate", "净利率 (%)："),
-            ("suggested_price", "建议售价 (元)："),
-            ("converted_usd", "折合美元 ($)："),
-        ]
-        for key, label in fields:
-            frm = ttk.Frame(parent)
-            frm.pack(fill=tk.X, padx=5, pady=2)
+        for key, label in [("vol_weight","体积重 (kg)："),("charge_weight","计费重量 (kg)："),
+            ("head_haul","头程费用 (元)："),("total_logistics","总物流成本 (元)："),
+            ("total_cost","总成本 (元)："),("profit","净利润 (元)："),
+            ("profit_rate","净利率 (%)："),("suggested_price","建议售价 (元)："),("converted_usd","折合美元 ($)：")]:
+            frm = ttk.Frame(parent); frm.pack(fill=tk.X, padx=5, pady=2)
             ttk.Label(frm, text=label, width=18).pack(side=tk.LEFT)
-            var = tk.StringVar(value="—")
-            lbl = ttk.Label(frm, textvariable=var, font=("", 10, "bold"))
-            lbl.pack(side=tk.LEFT)
+            var = tk.StringVar(value="—"); ttk.Label(frm, textvariable=var, font=("", 10, "bold")).pack(side=tk.LEFT)
             self._result_labels[key] = var
 
-    # ─── 事件处理 ─────────────────────────────────────────
+        self._profit_adjustment_var = tk.StringVar(value="未选择规则")
+        ttk.Label(parent, textvariable=self._profit_adjustment_var, foreground="#336699", wraplength=280).pack(anchor=tk.W, padx=5, pady=5)
 
-    def _on_field_changed(self, field_type, var=None):
-        if self._programmatic:
-            return
+    # ─── 规则上下文 ────────────────────────────────────────
 
-        # fix_02-8: 校验输入并标红
-        if var and field_type in ("cost", "price_rmb", "price_usd", "target_rate", "promo_rate"):
-            self._validate_entry(var)
+    @staticmethod
+    def _build_product_rule_context(product):
+        """读取商品最近一次保存的规则，不回退到首次快照。"""
+        rules = product.get("_current_rule_snapshot") if product else None
+        return dict(rules) if isinstance(rules, dict) else None
 
-        if field_type in ("price_rmb", "price_usd"):
-            self._calc_direction = "price"
-            self._last_modified = field_type
-        elif field_type == "target_rate":
-            self._calc_direction = "rate"
-        # promo_rate 不改变方向
+    @staticmethod
+    def _build_snapshot_rule_context(snapshot):
+        """只从首次快照构建还原规则，禁止混入当前商品字段。"""
+        if not snapshot:
+            return None
+        full = snapshot.get("_snapshot_rule_full")
+        if isinstance(full, dict):
+            return dict(full)
+        return {
+            "forwarder": snapshot.get("freight_forwarder"),
+            "head_haul_rate": snapshot.get("_snapshot_head_haul_rate"),
+            "fixed_service_fee": snapshot.get("_snapshot_fixed_service_fee"),
+            "tail_haul_cost": snapshot.get("_snapshot_tail_haul_cost"),
+            "exchange_rate": snapshot.get("_snapshot_exchange_rate"),
+            "volume_divisor": snapshot.get("_snapshot_volume_divisor", VOLUME_DIVISOR),
+            "rule_version": snapshot.get("_snapshot_rule_version"),
+        }
 
-        if self._historical_mode:
-            self._historical_mode = False
-            self._show_rate_notice(None)
+    def _build_current_rule_context(self):
+        """从当前UI和配置构建当前规则"""
+        fwd = self._get_forwarder_key()
+        route = self._cfg.get_route_rates(fwd) if fwd else {}
+        return {
+            "route_id": fwd,
+            "forwarder": fwd,
+            "route_key": fwd,
+            "route_display_name": route.get("display_name") if route else None,
+            "head_haul_rate": route.get("head_haul_rate") if route else None,
+            "fixed_service_fee": route.get("fixed_service_fee") if route else None,
+            "tail_haul_cost": _safe_float(self._entry_vars.get("tail", tk.StringVar()).get()) if "tail" in self._entry_vars else self._cfg.default_tail_haul,
+            "exchange_rate": self._cfg.exchange_rate,
+            "volume_divisor": route.get("volume_divisor") if route else None,
+            "rule_version": self._cfg.rule_version,
+        }
 
+    def _get_active_rule_context(self):
+        """优先使用保存的规则上下文，否则用当前配置"""
+        if self._saved_rule_context is not None:
+            return self._saved_rule_context
+        return self._build_current_rule_context()
+
+    # ─── 校验 ─────────────────────────────────────────────
+
+    def _validate_field(self, name):
+        entry = self._entry_widgets.get(name); var = self._entry_vars.get(name)
+        if not entry or not var: return
+        val = var.get().strip()
+        if val == "": entry.configure(bg="white"); return
+        ok = _is_valid_rate(val) if name in ("target_rate","promo_rate") else _is_valid_number(val)
+        entry.configure(bg="white" if ok else "#ffcccc")
+
+    def _has_any_invalid(self):
+        for name in self._entry_vars:
+            val = self._entry_vars[name].get().strip()
+            if val == "": continue
+            ok = _is_valid_rate(val) if name in ("target_rate","promo_rate") else _is_valid_number(val)
+            if not ok: return True
+        tr = _safe_float(self._entry_vars.get("target_rate", tk.StringVar()).get())
+        pr = _safe_float(self._entry_vars.get("promo_rate", tk.StringVar()).get())
+        if tr is not None and pr is not None and (tr + pr) >= 100: return True
+        return False
+
+    def _get_invalid_list(self):
+        inv = []
+        num_fields = [("cost","商品成本"),("domestic","发往中转仓运费"),
+            ("net_w","裸重"),("net_l","裸长"),("net_wi","裸宽"),("net_h","裸高"),
+            ("pkg_w","包装后重量"),("pkg_l","包装后长"),("pkg_wi","包装后宽"),("pkg_h","包装后高"),
+            ("tail","尾程费用"),("shein","SHEIN二次核价"),("price_rmb","售价人民币"),("price_usd","售价美元")]
+        for n, lb in num_fields:
+            if n in self._entry_vars:
+                v = self._entry_vars[n].get().strip()
+                if v != "" and not _is_valid_number(v): inv.append(f"{lb}(非法)")
+        for n, lb in [("target_rate","目标净利率"),("promo_rate","推广预留比例")]:
+            if n in self._entry_vars:
+                v = self._entry_vars[n].get().strip()
+                if v != "" and not _is_valid_rate(v): inv.append(f"{lb}(非法)")
+        tr = _safe_float(self._entry_vars.get("target_rate", tk.StringVar()).get())
+        pr = _safe_float(self._entry_vars.get("promo_rate", tk.StringVar()).get())
+        if tr is not None and pr is not None and (tr + pr) >= 100: inv.append(f"净利率+推广≥100%（{tr+pr:.0f}%）")
+        return inv
+
+    # ─── 事件 ─────────────────────────────────────────────
+
+    def _on_field_changed(self, field_type):
+        if self._programmatic: return
+        if field_type in ("net_w", "pkg_w"):
+            self._weight_confirmed = True
+        if field_type in ("price_rmb","price_usd"): self._calc_direction = "price"; self._last_modified = field_type
+        elif field_type == "target_rate": self._calc_direction = "rate"
+        # 不改变 _saved_rule_context — 历史规则仅在显式切换时改变
         self.recalculate()
 
-    def _validate_entry(self, var):
-        """fix_02-8: 非数字输入标红"""
-        val = var.get().strip()
-        if val == "":
-            return  # 空值是合法的
-        try:
-            float(val)
-        except ValueError:
-            pass  # 静默处理，不合法的值 _safe_float 会转为 None
+    def _on_forwarder_changed(self):
+        if self._programmatic: return
+        self._saved_rule_context = None; self._show_rate_banner = False
+        self._show_rate_notice(None); self.recalculate()
+
+    def _on_profit_rule_changed(self):
+        if not self._programmatic:
+            self._profit_rule_explicitly_changed = True
+            self._profit_rule_source = "none" if self._profit_rule_var.get() == "无" else "current"
+            self._saved_profit_rule = None
+            self._profit_rule_unavailable_notice = False
+            self.recalculate()
 
     def recalculate(self):
-        # fix_02-4: 历史模式下不自动重算（保护设置回调）
-        if self._historical_mode:
-            return
+        if self._programmatic: return
         self._programmatic = True
         try:
-            self._do_recalculate()
+            if self._has_any_invalid():
+                for k in self._result_labels: self._result_labels[k].set("输入错误")
+                self._computed = {}
+            else:
+                self._do_recalculate()
+        finally: self._programmatic = False
+
+    # ─── OCR 录入接入 ─────────────────────────────────────
+
+    def _open_ocr_intake(self):
+        """打开 OCR 录入对话框，确认后回填字段。取消则不改任何字段。"""
+        factory = self._ocr_dialog_factory or self._default_ocr_dialog
+        root = self.winfo_toplevel()
+        dlg = factory(root, self._ocr_controller)
+        # 真实 OcrIntakeDialog 是 Toplevel，需等待关闭；测试 FakeDialog 无需等待
+        if isinstance(dlg, tk.Toplevel):
+            root.wait_window(dlg)
+        result = getattr(dlg, "result", None)
+        if result is None:
+            return
+        self._apply_ocr_selections(result)
+
+    def _default_ocr_dialog(self, parent, controller):
+        from ui.ocr_intake_dialog import OcrIntakeDialog
+        return OcrIntakeDialog(parent, controller=controller)
+
+    def _apply_ocr_selections(self, selections):
+        """将 OCR FieldSelection 回填到 _entry_vars，触发重新计算。
+
+        - 价格/成本/运费：直接回填；
+        - 尺寸/重量：仅 measurement_scope=bare 回填 net_*；
+        - 未确认字段不清空；
+        - user_modified=True 时用 confirmed_value；
+        - 不自动保存、不写数据库、不创建历史快照。
+        """
+        price_map = {
+            "shein_price_usd": "shein",
+            "product_cost_rmb": "cost",
+            "domestic_shipping_rmb": "domestic",
+        }
+        dim_map = {
+            "weight_g": "net_w",
+            "length_cm": "net_l",
+            "width_cm": "net_wi",
+            "height_cm": "net_h",
+        }
+        self._programmatic = True
+        try:
+            for field_name, sel in selections.items():
+                if sel.confirmed_value is None:
+                    continue
+                value = sel.confirmed_value
+                if field_name in price_map:
+                    self._entry_vars[price_map[field_name]].set(self._fmt(value))
+                elif field_name in dim_map:
+                    if sel.measurement_scope == MeasurementScope.BARE:
+                        self._entry_vars[dim_map[field_name]].set(self._fmt(value))
         finally:
             self._programmatic = False
+        # 统一重新计算一次
+        self.recalculate()
 
     def _force_recalc(self):
-        """fix_02-5: 用当前费率重算，同步 fixed_fee 和 tail_haul"""
-        self._historical_mode = False
-        self._show_rate_notice(None)
+        self._saved_rule_context = None; self._show_rate_banner = False; self._show_rate_notice(None)
+        if self._profit_rule_source == "frozen" and self._saved_profit_rule:
+            current = self._cfg.get_profit_adjustment_rule(self._saved_profit_rule.get("rule_id"))
+            if current and current.get("is_enabled") and not current.get("is_archived"):
+                self._profit_rule_source = "current"; self._saved_profit_rule = None
+                self._set_profit_rule_id(current["rule_id"])
+            else:
+                self._profit_rule_source = "none"; self._saved_profit_rule = None
+                self._set_profit_rule_id(None)
+                self._profit_rule_unavailable_notice = True
+                messagebox.showwarning("当前规则不可用", "原冻结规则当前已停用、归档或不存在，无法使用当前版本；已切换为“无规则”。")
         self._programmatic = True
-        try:
-            self._var_fixed_fee.set(str(self._cfg.fixed_service_fee))
-            self._var_tail_haul.set(str(self._cfg.default_tail_haul))
-        finally:
-            self._programmatic = False
+        try: self._entry_vars["tail"].set(str(self._cfg.default_tail_haul))
+        finally: self._programmatic = False
         self.recalculate()
 
     def _do_recalculate(self):
-        cost = _safe_float(self._var_cost.get())
-        domestic = _safe_float(self._var_domestic.get())
-        pkg_w = _safe_float(self._var_pkg_w.get())
-        pkg_l = _safe_float(self._var_pkg_l.get())
-        pkg_wi = _safe_float(self._var_pkg_wi.get())
-        pkg_h = _safe_float(self._var_pkg_h.get())
-        fixed_fee = _safe_float(self._var_fixed_fee.get())
-        tail_haul = _safe_float(self._var_tail_haul.get())
-        price_rmb = _safe_float(self._var_price_rmb.get())
-        target_rate = _safe_float(self._var_target_rate.get())
-        promo_rate = _safe_float(self._var_promo_rate.get())
-        exchange_rate = self._cfg.exchange_rate
+        ctx = self._get_active_rule_context()
+        cost = _safe_float(self._entry_vars.get("cost", tk.StringVar()).get())
+        domestic = _safe_float(self._entry_vars.get("domestic", tk.StringVar()).get())
+        pkg_w = _safe_float(self._entry_vars.get("pkg_w", tk.StringVar()).get())
+        pkg_l = _safe_float(self._entry_vars.get("pkg_l", tk.StringVar()).get())
+        pkg_wi = _safe_float(self._entry_vars.get("pkg_wi", tk.StringVar()).get())
+        pkg_h = _safe_float(self._entry_vars.get("pkg_h", tk.StringVar()).get())
+        tail_haul = _safe_float(self._entry_vars.get("tail", tk.StringVar()).get())
+        price_rmb = _safe_float(self._entry_vars.get("price_rmb", tk.StringVar()).get())
+        target_rate = _safe_float(self._entry_vars.get("target_rate", tk.StringVar()).get())
+        promo_rate = _safe_float(self._entry_vars.get("promo_rate", tk.StringVar()).get())
 
-        # fix_02-7: USD → RMB 换算
+        if self._weight_unit_version == "legacy_unknown" and not self._weight_confirmed:
+            for key in ("head_haul", "total_logistics", "total_cost", "profit", "profit_rate"):
+                self._set_result(key, None, partial=True)
+            self._rate_notice_var.set("历史重量单位待确认，请核对后重新填写克数并保存。")
+            return
+        actual_weight_kg = pkg_w / 1000.0 if pkg_w is not None else None
+        head_rate = ctx.get("head_haul_rate")
+        fixed_fee = ctx.get("fixed_service_fee")
+        exchange_rate = ctx.get("exchange_rate")
+        forwarder = ctx.get("forwarder")
+        volume_divisor = ctx.get("volume_divisor")
+
+        # === 写入 _computed（完整规则快照） ===
+        self._computed = {
+            "forwarder": forwarder,
+            "head_haul_rate": head_rate,
+            "fixed_service_fee": fixed_fee,
+            "tail_haul_cost": tail_haul,
+            "exchange_rate": exchange_rate,
+            "volume_divisor": volume_divisor,
+            "rule_version": ctx.get("rule_version"),
+            "calculation_schema_version": CALCULATION_SCHEMA_VERSION,
+        }
+
+        # 未选货代 → 不计算
+        if forwarder is None or head_rate is None or fixed_fee is None:
+            for k in self._result_labels: self._result_labels[k].set("请选择货代" if k == "head_haul" else "—")
+            self._computed.update({"head_haul": None, "total_logistics": None, "total_cost": None,
+                                    "profit": None, "profit_rate": None, "suggested_price": None,
+                                    "volumetric_weight": None, "chargeable_weight": None,
+                                    "converted_usd": None})
+            return
+
+        # USD→RMB
         if self._last_modified == "price_usd":
-            price_usd = _safe_float(self._var_price_usd.get())
-            if price_usd is not None and exchange_rate > 0:
-                price_rmb = price_usd * exchange_rate
-                self._var_price_rmb.set(f"{price_rmb:.2f}")
-                self._last_modified = "price_rmb"  # 转回RMB方向
+            pu = _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get())
+            if pu is not None and exchange_rate is not None and exchange_rate > 0:
+                price_rmb = pu * exchange_rate
+                self._entry_vars.get("price_rmb", tk.StringVar()).set(f"{price_rmb:.2f}")
+                self._last_modified = "price_rmb"
 
-        # 1. 体积重
-        vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h)
-        self._set_result("vol_weight", vol_w, " kg")
-
-        # 2. 计费重量
-        chg_w = chargeable_weight(pkg_w, vol_w)
-        self._set_result("charge_weight", chg_w, " kg")
-
-        # 3. 头程费用
-        head_rate = self._cfg.head_haul_rate
+        vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h, volume_divisor)
+        chg_w = chargeable_weight(actual_weight_kg, vol_w)
         head_cost = head_haul_cost(chg_w, head_rate)
-        # fix_02-1: 头程缺失无条件标记为 partial
         head_partial = (head_cost is None)
-        self._set_result("head_haul", head_cost, " 元", partial=head_partial)
-        self._calculated["head_haul"] = head_cost
-        self._partial["head_haul"] = head_partial
 
-        # 4. 总物流成本
-        logistics = total_logistics_cost(head_cost, fixed_fee, tail_haul)
-        log_partial = head_partial
-        self._set_result("total_logistics", logistics, " 元", partial=log_partial)
-        self._calculated["total_logistics"] = logistics
-        self._partial["total_logistics"] = log_partial
+        fwd_label = ctx.get("route_display_name") or self._cfg.get_forwarder_label(forwarder)
+        self._set_result("vol_weight", vol_w, " kg")
+        self._set_result("charge_weight", chg_w, " kg")
+        self._set_result("head_haul", head_cost, f" 元({fwd_label})" if head_cost is not None else "", partial=head_partial)
 
-        # 5. 总成本
-        tc = total_cost(cost, domestic, logistics)
-        self._set_result("total_cost", tc, " 元", partial=log_partial)
-        self._calculated["total_cost"] = tc
-        self._partial["total_cost"] = log_partial
+        # 总物流：严格模式
+        logistics = total_logistics_cost(head_cost, fixed_fee, tail_haul) if not head_partial else None
+        if head_partial:
+            known_log = known_logistics_subtotal(head_cost, fixed_fee, tail_haul)
+            self._set_result("total_logistics", known_log if known_log > 0 else None, " 元", partial=True)
+        else:
+            self._set_result("total_logistics", logistics, " 元")
 
-        # 6-9. 利润/售价联动
-        if log_partial:
-            # 物流不完整，利润不可靠
+        # 总成本：严格模式
+        tc = total_cost(cost, domestic, logistics) if logistics is not None else None
+        if tc is None and logistics is None:
+            known_tc = known_total_cost_subtotal(cost, domestic, known_logistics_subtotal(head_cost, fixed_fee, tail_haul))
+            self._set_result("total_cost", known_tc if known_tc > 0 else None, " 元", partial=True)
+        else:
+            self._set_result("total_cost", tc, " 元")
+
+        self._computed["head_haul"] = head_cost
+        self._computed["total_logistics"] = logistics
+        self._computed["total_cost"] = tc
+        self._computed["volumetric_weight"] = vol_w
+        self._computed["chargeable_weight"] = chg_w
+        self._computed["actual_weight_g"] = pkg_w
+        self._computed["actual_weight_kg"] = actual_weight_kg
+
+        if head_partial or logistics is None or tc is None:
             self._set_result("profit", None, partial=True)
             self._set_result("profit_rate", None, partial=True)
             self._set_result("suggested_price", None)
             self._set_result("converted_usd", None)
+            self._computed.update({"profit": None, "profit_rate": None, "suggested_price": None,
+                                   "converted_usd": None})
             return
 
-        # fix_02-6: 使用净利润（扣除推广预留）
         p_rate = promo_rate if promo_rate is not None else 0
 
-        if self._calc_direction == "rate" and target_rate is not None and tc is not None:
-            # 方向=利润率 → 建议售价（不覆盖输入框）
-            suggested = suggested_price_from_rate(tc, target_rate, promo_rate or 0)
-            self._set_result("suggested_price", suggested, " 元")
-            self._calculated["suggested_price"] = suggested
-
-            if suggested is not None:
-                usd_s = rmb_to_usd(suggested, exchange_rate)
-                self._set_result("converted_usd", usd_s, " $")
-
-            # 如果用户有填售价，仍计算净利润
-            if price_rmb is not None and price_rmb > 0:
-                np = net_profit_amount(price_rmb, tc, p_rate)
-                self._set_result("profit", np, " 元")
-                self._calculated["profit"] = np
-                npr = net_profit_rate(price_rmb, tc, p_rate)
-                self._set_result("profit_rate", npr, " %")
-                self._calculated["profit_rate"] = npr
-                usd = rmb_to_usd(price_rmb, exchange_rate)
-                if usd is not None:
-                    self._var_price_usd.set(f"{usd:.2f}")
+        if self._calc_direction == "rate" and target_rate is not None:
+            if (target_rate + p_rate) >= 100:
+                self._set_result("suggested_price", None, suffix=" (利润率+推广≥100%)")
+                self._set_result("profit", None); self._set_result("profit_rate", None)
+                self._computed.update({"suggested_price": None, "profit": None, "profit_rate": None})
             else:
-                self._set_result("profit", None, " 元")
-                self._set_result("profit_rate", None, " %")
+                sp = suggested_price_from_rate(tc, target_rate, promo_rate or 0)
+                self._set_result("suggested_price", sp, " 元")
+                self._computed["suggested_price"] = sp
+                converted = rmb_to_usd(sp, exchange_rate) if sp is not None else None
+                self._set_result("converted_usd", converted, " $")
+                self._computed["converted_usd"] = converted
+                if price_rmb is not None and price_rmb > 0:
+                    np = net_profit_amount(price_rmb, tc, p_rate); np, npr = self._apply_profit_adjustment(np, price_rmb, exchange_rate, logistics)
+                    self._set_result("profit", np, " 元"); self._set_result("profit_rate", npr, " %")
+                    self._computed["profit"] = np; self._computed["profit_rate"] = npr
+                    u = rmb_to_usd(price_rmb, exchange_rate)
+                    if u is not None: self._entry_vars["price_usd"].set(f"{u:.2f}")
+                else:
+                    self._set_result("profit", None); self._set_result("profit_rate", None)
+                    self._computed["profit"] = None; self._computed["profit_rate"] = None
         else:
-            # 方向=售价 → 净利润
             if price_rmb is not None and price_rmb > 0:
-                np = net_profit_amount(price_rmb, tc, p_rate)
-                self._set_result("profit", np, " 元")
-                self._calculated["profit"] = np
-                npr = net_profit_rate(price_rmb, tc, p_rate)
-                self._set_result("profit_rate", npr, " %")
-                self._calculated["profit_rate"] = npr
-
-                usd = rmb_to_usd(price_rmb, exchange_rate)
-                self._set_result("converted_usd", usd, " $")
-                self._calculated["converted_usd"] = usd
-                if usd is not None:
-                    self._var_price_usd.set(f"{usd:.2f}")
+                np = net_profit_amount(price_rmb, tc, p_rate); np, npr = self._apply_profit_adjustment(np, price_rmb, exchange_rate, logistics)
+                self._set_result("profit", np, " 元"); self._set_result("profit_rate", npr, " %")
+                self._computed["profit"] = np; self._computed["profit_rate"] = npr
+                u = rmb_to_usd(price_rmb, exchange_rate)
+                self._set_result("converted_usd", u, " $")
+                self._computed["converted_usd"] = u
+                if u is not None: self._entry_vars["price_usd"].set(f"{u:.2f}")
             else:
-                self._set_result("profit", None, " 元")
-                self._set_result("profit_rate", None, " %")
+                self._set_result("profit", None); self._set_result("profit_rate", None)
                 self._set_result("converted_usd", None, " $")
+                self._computed["profit"] = None; self._computed["profit_rate"] = None
+                self._computed["converted_usd"] = None
             self._set_result("suggested_price", None)
-            self._calculated["suggested_price"] = None
+            self._computed["suggested_price"] = None
 
     def _set_result(self, key, value, suffix="", partial=False):
         var = self._result_labels.get(key)
-        if var is None:
-            return
+        if not var: return
         if value is None:
-            if partial:
-                var.set("数据不足(物流费用不完整)")
-            else:
-                var.set("数据不足")
-        elif partial:
-            var.set(f"≥{value:.2f}{suffix}(估算)")
-        else:
-            var.set(f"{value:.2f}{suffix}")
+            if partial: var.set("数据不足(物流费用不完整)")
+            elif suffix: var.set(f"数据不足{suffix}")
+            else: var.set("数据不足")
+        elif partial: var.set(f"≥{value:.2f}{suffix}(估算)")
+        else: var.set(f"{value:.2f}{suffix}")
 
-    def _show_rate_notice(self, rules_diff):
-        """fix_02-2: 安全显示费率变更提示"""
-        if rules_diff:
-            lines = []
-            if 'exchange_rate' in rules_diff:
-                lines.append(f"汇率 {rules_diff['exchange_rate'][0]:.2f}→{rules_diff['exchange_rate'][1]:.2f}")
-            if 'head_haul_rate' in rules_diff:
-                lines.append(f"头程 {rules_diff['head_haul_rate'][0]:.0f}→{rules_diff['head_haul_rate'][1]:.0f}元/kg")
-            if 'fixed_service_fee' in rules_diff:
-                lines.append(f"固定费 {rules_diff['fixed_service_fee'][0]:.0f}→{rules_diff['fixed_service_fee'][1]:.0f}元")
-            self._rate_notice_var.set("历史记录 | 费率已变更: " + ", ".join(lines) + " | 点「用当前费率重算」更新")
-            # 使用 _results_frame 安全引用
+    def _apply_profit_adjustment(self, base_profit, price_rmb, exchange_rate, logistics):
+        rule = self._saved_profit_rule if self._profit_rule_source == "frozen" else None
+        rule_id = self._get_profit_rule_id()
+        if rule is None and self._profit_rule_source == "current":
+            rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
+
+        price_var = self._entry_vars.get("price_usd")
+        price_usd = _safe_float(price_var.get()) if price_var is not None else None
+        if price_usd is None:
+            price_usd = rmb_to_usd(price_rmb, exchange_rate)
+        cost_var = self._entry_vars.get("cost")
+        result = evaluate_rule(rule, {"final_price_usd": price_usd, "final_price_rmb": price_rmb,
+                                      "product_cost_rmb": _safe_float(cost_var.get()) if cost_var is not None else None,
+                                      "logistics_cost_rmb": logistics}, exchange_rate)
+        snapshot = dict(rule) if rule else None
+        self._computed["profit_adjustment"] = {"rule": snapshot, **result}
+        self._computed["profit_before_adjustment"] = base_profit
+        adjusted = base_profit + result.get("adjustment_rmb", 0.0) if base_profit is not None else None
+        rate = adjusted / price_rmb * 100 if adjusted is not None and price_rmb and price_rmb > 0 else None
+        if not rule:
+            self._profit_adjustment_var.set(
+                "无规则（原冻结规则当前已停用、归档或不存在）"
+                if getattr(self, "_profit_rule_unavailable_notice", False) else "无规则"
+            )
+        else:
+            prefix = "历史冻结规则" if self._profit_rule_source == "frozen" else "当前规则"
+            sign = "+" if result.get("adjustment_rmb", 0) >= 0 else ""
+            self._profit_adjustment_var.set(f"{prefix}：{rule['display_name']}\n判断结果：{result['reason']}\n调整：{result.get('amount_original', 0):.2f} {result.get('currency') or rule.get('currency')}（{sign}{result.get('adjustment_rmb', 0):.2f} RMB）")
+        return adjusted, rate
+
+    def _show_rate_notice(self, diffs):
+        if diffs:
+            lines = [f"{k} {v[0]}→{v[1]}" for k, v in diffs.items()]
+            self._rate_notice_var.set("费率已变更: " + ", ".join(lines) + " | 点「用当前规则重算」更新")
             if not self._rate_notice_label.winfo_ismapped():
                 children = self._results_frame.winfo_children()
-                if children:
-                    self._rate_notice_label.pack(in_=self._results_frame, before=children[0], fill=tk.X, padx=5, pady=(0, 5))
-                else:
-                    self._rate_notice_label.pack(in_=self._results_frame, fill=tk.X, padx=5, pady=(0, 5))
+                tgt = children[0] if children else None
+                if tgt: self._rate_notice_label.pack(in_=self._results_frame, before=tgt, fill=tk.X, padx=5, pady=(0, 5))
+                else: self._rate_notice_label.pack(in_=self._results_frame, fill=tk.X, padx=5, pady=(0, 5))
         else:
-            self._rate_notice_var.set("")
-            self._rate_notice_label.pack_forget()
+            self._rate_notice_var.set(""); self._rate_notice_label.pack_forget()
 
-    # ─── 按钮操作 ─────────────────────────────────────────
+    # ─── 按钮 ─────────────────────────────────────────────
+
+    def _get_forwarder_key(self):
+        return self._route_display_to_key.get(self._forwarder_var.get())
+
+    def _set_forwarder_key(self, key):
+        route = self._cfg.get_route_rates(key) if key and hasattr(self._cfg, "get_route_rates") else None
+        self._forwarder_var.set((route or {}).get("display_name") or FORWARDER_LABELS.get(key, ""))
+
+    def _refresh_route_choices(self):
+        routes = self._cfg.get_enabled_routes()
+        self._route_display_to_key = {r["display_name"]: r["route_id"] for r in routes}
+        if hasattr(self, "_forwarder_combo"):
+            self._forwarder_combo["values"] = [""] + list(self._route_display_to_key)
+
+    def _get_profit_rule_id(self):
+        var = getattr(self, "_profit_rule_var", None)
+        return self._profit_rule_display_to_id.get(var.get()) if var is not None else None
+
+    def _set_profit_rule_id(self, rule_id):
+        if not hasattr(self, "_profit_rule_var"):
+            return
+        rule = self._cfg.get_profit_adjustment_rule(rule_id) if rule_id else None
+        self._profit_rule_var.set((rule or {}).get("display_name") or "无")
+
+    def _refresh_profit_rule_choices(self):
+        profit_rule_var = getattr(self, "_profit_rule_var", None)
+        selected = profit_rule_var.get() if profit_rule_var is not None else "无"
+        rules = self._cfg.get_enabled_profit_adjustment_rules()
+        self._profit_rule_display_to_id = {rule["display_name"]: rule["rule_id"] for rule in rules}
+        if hasattr(self, "_profit_rule_combo"):
+            self._profit_rule_combo["values"] = ["无"] + list(self._profit_rule_display_to_id)
+        if self._profit_rule_source != "frozen" and selected not in self._profit_rule_display_to_id:
+            self._profit_rule_var.set("无")
 
     def new_product(self):
-        self._product_id = None
-        self._has_snapshot = False
-        self._calc_direction = None
-        self._last_modified = None
-        self._historical_mode = False
-        self._show_rate_notice(None)
-        self.clear_form()
+        self._product_id = None; self._has_snapshot = False
+        self._calc_direction = None; self._last_modified = None
+        self._saved_rule_context = None; self._show_rate_banner = False
+        self._saved_profit_rule = None; self._profit_rule_source = "none"; self._profit_rule_explicitly_changed = False; self._profit_rule_unavailable_notice = False
+        self._show_rate_notice(None); self._forwarder_var.set(""); self.clear_form()
+        self._reset_profit_adjustment_display()
+
+    def _reset_profit_adjustment_display(self):
+        if hasattr(self, "_profit_adjustment_var") and self._profit_adjustment_var is not None:
+            self._profit_adjustment_var.set("未选择规则")
 
     def clear_form(self):
-        self._product_id = None
-        self._has_snapshot = False
-        self._historical_mode = False
-        self._calc_direction = None
-        self._last_modified = None
-        self._show_rate_notice(None)
+        self._product_id = None; self._has_snapshot = False
+        self._saved_rule_context = None; self._show_rate_banner = False
+        self._calc_direction = None; self._last_modified = None; self._show_rate_notice(None)
+        self._reset_profit_adjustment_display()
         self._programmatic = True
         try:
-            for var in [
-                self._var_name, self._var_cost, self._var_domestic,
-                self._var_net_w, self._var_net_l, self._var_net_wi, self._var_net_h,
-                self._var_pkg_w, self._var_pkg_l, self._var_pkg_wi, self._var_pkg_h,
-                self._var_shein, self._var_price_rmb, self._var_price_usd,
-                self._var_target_rate, self._var_promo_rate, self._var_notes,
-            ]:
-                var.set("")
-            self._var_fixed_fee.set(str(self._cfg.fixed_service_fee))
-            self._var_tail_haul.set(str(self._cfg.default_tail_haul))
-            for key in self._result_labels:
-                self._result_labels[key].set("—")
-            self._calculated = {}
-            self._partial = {}
-        finally:
-            self._programmatic = False
+            for n, v in self._entry_vars.items(): v.set(str(self._cfg.default_tail_haul) if n == "tail" else "")
+            self._var_name.set(""); self._var_notes.set(""); self._forwarder_var.set("")
+            if hasattr(self, "_profit_rule_var"): self._profit_rule_var.set("无")
+            self._saved_profit_rule = None; self._profit_rule_source = "none"; self._profit_rule_explicitly_changed = False; self._profit_rule_unavailable_notice = False
+            for k in self._result_labels: self._result_labels[k].set("—")
+            self._computed = {}
+        finally: self._programmatic = False
+
+    def _build_rule_snapshot(self):
+        return {
+            "route_id": self._computed.get("forwarder"),
+            "route_key": self._computed.get("forwarder"),
+            "route_display_name": self._cfg.get_forwarder_label(self._computed.get("forwarder")) if hasattr(self, "_cfg") and hasattr(self._cfg, "get_forwarder_label") else FORWARDER_LABELS.get(self._computed.get("forwarder")),
+            "exchange_rate": self._computed.get("exchange_rate"),
+            "head_haul_rate": self._computed.get("head_haul_rate"),
+            "fixed_service_fee": self._computed.get("fixed_service_fee"),
+            "tail_haul_cost": self._computed.get("tail_haul_cost"),
+            "volume_divisor": self._computed.get("volume_divisor"),
+            "forwarder": self._computed.get("forwarder"),
+            "rule_version": self._computed.get("rule_version"),
+            "weight_unit": getattr(self, "_weight_unit_version", "g_v1"),
+            "profit_adjustment": self._computed.get("profit_adjustment"),
+        }
+
+    def _build_calculation_snapshot(self):
+        return {
+            "calculation_schema_version": CALCULATION_SCHEMA_VERSION,
+            "volumetric_weight": self._computed.get("volumetric_weight"),
+            "actual_weight_g": self._computed.get("actual_weight_g"),
+            "actual_weight_kg": self._computed.get("actual_weight_kg"),
+            "chargeable_weight": self._computed.get("chargeable_weight"),
+            "head_haul_cost": self._computed.get("head_haul"),
+            "total_logistics_cost": self._computed.get("total_logistics"),
+            "total_cost": self._computed.get("total_cost"),
+            "net_profit_amount": self._computed.get("profit"),
+            "net_profit_rate": self._computed.get("profit_rate"),
+            "suggested_price_rmb": self._computed.get("suggested_price"),
+            "converted_usd": self._computed.get("converted_usd"),
+            "profit_before_adjustment": self._computed.get("profit_before_adjustment"),
+            "profit_adjustment": self._computed.get("profit_adjustment"),
+        }
 
     def save_product(self):
+        inv = self._get_invalid_list()
+        if inv:
+            messagebox.showwarning("输入错误", "以下字段存在错误：\n\n" + "\n".join(f"  - {f}" for f in inv))
+            return
         data = self._gather_data()
-        if self._product_id:
-            self._db.update_product(self._product_id, data)
-            self._historical_mode = False
-            self._show_rate_notice(None)
-            messagebox.showinfo("提示", f"商品 {self._product_id} 已更新。")
-        else:
-            self._product_id = self._db.create_product(data)
-            rules = {
-                "exchange_rate": self._cfg.exchange_rate,
-                "head_haul_rate": self._cfg.head_haul_rate,
-                "fixed_service_fee": self._cfg.fixed_service_fee,
-            }
-            self._db.save_snapshot(self._product_id, data, rules)
-            self._has_snapshot = True
-            self._historical_mode = False
-            self._show_rate_notice(None)
+        rules = self._build_rule_snapshot()
+        calc_results = self._build_calculation_snapshot()
+        was_new = self._product_id is None
+        try:
+            self._product_id = self._db.save_product_state(
+                data, rules, calc_results, pid=self._product_id
+            )
+        except Exception as exc:
+            messagebox.showerror("保存失败", f"商品未保存，数据库已回滚：{exc}")
+            return
+        self._saved_rule_context = dict(rules)
+        saved_adjustment = rules.get("profit_adjustment") or self._computed.get("profit_adjustment") or {}
+        saved_rule = saved_adjustment.get("rule") if isinstance(saved_adjustment, dict) else None
+        self._saved_profit_rule = dict(saved_rule) if saved_rule else None
+        self._profit_rule_source = "frozen" if saved_rule else "none"
+        self._profit_rule_explicitly_changed = False
+        self._profit_rule_unavailable_notice = False
+        if hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set(f"历史冻结规则：{saved_rule.get('display_name')}" if saved_rule else "无")
+        if hasattr(self, "_profit_adjustment_var"):
+            if not saved_rule:
+                self._profit_adjustment_var.set("无规则")
+            else:
+                self._profit_adjustment_var.set(f"历史冻结规则：{saved_rule.get('display_name')}\n判断结果：{saved_adjustment.get('reason', '已保存')}\n调整：{saved_adjustment.get('amount_original', 0):.2f} {saved_adjustment.get('currency', saved_rule.get('currency'))}（{saved_adjustment.get('adjustment_rmb', 0):+.2f} RMB）")
+        self._has_snapshot = True
+        if was_new:
             messagebox.showinfo("提示", f"商品已保存，ID: {self._product_id}")
+        else:
+            messagebox.showinfo("提示", f"商品 {self._product_id} 已更新。")
 
     def restore_product(self):
         if not self._product_id:
-            messagebox.showinfo("提示", "当前商品尚未保存，无法还原。")
-            return
+            messagebox.showinfo("提示", "尚未保存，无法还原。"); return
         snap = self._db.get_snapshot(self._product_id)
         if not snap:
-            messagebox.showinfo("提示", "没有可还原的快照。")
-            return
+            messagebox.showinfo("提示", "没有可还原的快照。"); return
+        snapshot_rules = self._build_snapshot_rule_context(snap)
+        if snapshot_rules:
+            self._set_forwarder_key(snapshot_rules.get("forwarder", ""))
         self._load_data(snap)
-        # fix_02-9: 还原后填充结果
-        self._populate_results_from_product(snap)
+        self._saved_rule_context = snapshot_rules
+        adjustment = (snapshot_rules or {}).get("profit_adjustment") or {}
+        rule = adjustment.get("rule") if isinstance(adjustment, dict) else None
+        self._saved_profit_rule = dict(rule) if rule else None
+        self._profit_rule_source = "frozen" if rule else "none"
+        self._profit_rule_explicitly_changed = False
+        self._profit_rule_unavailable_notice = False
+        if hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set(f"历史冻结规则：{rule.get('display_name')}" if rule else "无")
+        self._populate_results_from_saved(
+            snap,
+            snap.get("_calculation_results"),
+            snapshot_rules,
+        )
         messagebox.showinfo("提示", "已还原到首次保存的状态。")
 
     def load_product(self, product_id: str):
-        """fix_02-3: 加载时填充结果"""
         product = self._db.get_product(product_id)
-        if not product:
-            messagebox.showerror("错误", f"未找到商品: {product_id}")
-            return
-
+        if not product: messagebox.showerror("错误", f"未找到: {product_id}"); return
         self._product_id = product_id
         self._has_snapshot = self._db.get_snapshot(product_id) is not None
-        self._historical_mode = True
-        self._calc_direction = None
-        self._last_modified = None
-
+        self._calc_direction = None; self._last_modified = None
         self._load_data(product)
-        self._populate_results_from_product(product)
-        self._check_rate_changes()
+        snap = self._db.get_snapshot(product_id)
+        self._saved_rule_context = self._build_product_rule_context(product)
+        if self._saved_rule_context is None and snap:
+            self._saved_rule_context = self._build_snapshot_rule_context(snap)
+        fwd = (
+            self._saved_rule_context.get("forwarder")
+            if self._saved_rule_context else product.get("freight_forwarder")
+        )
+        self._set_forwarder_key(fwd if fwd else "")
+        adjustment = (self._saved_rule_context or {}).get("profit_adjustment") or {}
+        adjustment_rule = adjustment.get("rule") if isinstance(adjustment, dict) else None
+        self._saved_profit_rule = dict(adjustment_rule) if adjustment_rule else None
+        self._profit_rule_source = "frozen" if adjustment_rule else "none"
+        self._profit_rule_explicitly_changed = False
+        self._profit_rule_unavailable_notice = False
+        if adjustment_rule and hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set(f"历史冻结规则：{adjustment_rule.get('display_name', '未命名规则')}")
+        elif hasattr(self, "_profit_rule_var"):
+            self._profit_rule_var.set("无")
+        self._show_rate_banner = True
+        self._populate_results_from_saved(
+            product,
+            product.get("_current_calculation_results"),
+            self._saved_rule_context,
+        )
+        if self._saved_rule_context: self._check_rate_changes()
 
-    def _populate_results_from_product(self, product):
-        """fix_02-3: 从数据库商品填充结果标签"""
-        # 体积重
-        pkg_l = product.get("packaged_length")
-        pkg_wi = product.get("packaged_width")
-        pkg_h = product.get("packaged_height")
-        vol_w = volumetric_weight(pkg_l, pkg_wi, pkg_h)
-        self._set_result("vol_weight", vol_w, " kg")
-        self._calculated["vol_weight"] = vol_w
+    @staticmethod
+    def _saved_result(calc, canonical_key, legacy_key=None):
+        if not isinstance(calc, dict):
+            return False, None
+        if canonical_key in calc:
+            return True, calc.get(canonical_key)
+        if legacy_key and legacy_key in calc:
+            return True, calc.get(legacy_key)
+        return False, None
 
-        # 计费重量
-        pkg_w = product.get("packaged_weight")
-        chg_w = chargeable_weight(pkg_w, vol_w)
-        self._set_result("charge_weight", chg_w, " kg")
-        self._calculated["charge_weight"] = chg_w
+    def _populate_results_from_saved(self, data, calc=None, rule_context=None):
+        rule_context = rule_context or {}
+        pkg_l = data.get("packaged_length"); pkg_wi = data.get("packaged_width")
+        pkg_h = data.get("packaged_height"); pkg_w = data.get("packaged_weight")
+        found, vol_w = self._saved_result(calc, "volumetric_weight")
+        if not found or vol_w is None:
+            vol_w = volumetric_weight(
+                pkg_l, pkg_wi, pkg_h, rule_context.get("volume_divisor", VOLUME_DIVISOR)
+            )
+        found, chg_w = self._saved_result(calc, "chargeable_weight")
+        if not found or chg_w is None:
+            chg_w = chargeable_weight(pkg_w, vol_w)
+        self._set_result("vol_weight", vol_w, " kg"); self._set_result("charge_weight", chg_w, " kg")
 
-        # 头程费用 — 使用保存值
-        head = product.get("head_haul_cost")
-        self._set_result("head_haul", head, " 元")
-        self._calculated["head_haul"] = head
+        found, head = self._saved_result(calc, "head_haul_cost", "head_haul")
+        if not found:
+            head = data.get("head_haul_cost")
+        fwd = rule_context.get("forwarder") or data.get("freight_forwarder") or ""
+        fwd_l = FORWARDER_LABELS.get(fwd, fwd) if fwd else ""
+        if head is not None: self._set_result("head_haul", head, f" 元({fwd_l})" if fwd_l else " 元")
+        else: self._set_result("head_haul", None, partial=True)
 
-        # 总物流成本
-        fixed = product.get("fixed_service_fee") or 0
-        tail = product.get("tail_haul_cost") or 0
-        logistics = (head or 0) + fixed + tail
-        self._set_result("total_logistics", logistics, " 元")
-        self._calculated["total_logistics"] = logistics
+        fixed = data.get("fixed_service_fee"); tail = data.get("tail_haul_cost")
+        missing = (head is None or fixed is None or tail is None)
+        found, logistics = self._saved_result(calc, "total_logistics_cost", "total_logistics")
+        if not found:
+            logistics = total_logistics_cost(head, fixed, tail) if not missing else None
+        cost = data.get("cost"); domestic = data.get("domestic_shipping")
+        found, tc = self._saved_result(calc, "total_cost")
+        if not found:
+            tc = total_cost(cost, domestic, logistics) if logistics is not None else None
 
-        # 总成本
-        cost = product.get("cost") or 0
-        domestic = product.get("domestic_shipping") or 0
-        tc = cost + domestic + logistics
-        self._set_result("total_cost", tc, " 元")
-        self._calculated["total_cost"] = tc
+        self._set_result("total_logistics", logistics, " 元", partial=missing)
+        self._set_result("total_cost", tc, " 元", partial=(missing or tc is None))
+        found_profit, net_profit = self._saved_result(calc, "net_profit_amount", "profit")
+        found_rate, net_rate = self._saved_result(calc, "net_profit_rate", "profit_rate")
+        if not found_profit or not found_rate:
+            price_rmb = data.get("selling_price_rmb"); promo = data.get("promotion_reserve_rate") or 0
+            if not missing and tc is not None and price_rmb is not None and price_rmb > 0:
+                net_profit = net_profit_amount(price_rmb, tc, promo)
+                net_rate = net_profit_rate(price_rmb, tc, promo)
+            else:
+                net_profit = None
+                net_rate = None
+        if net_profit is None or net_rate is None:
+            self._set_result("profit", None, partial=True); self._set_result("profit_rate", None, partial=True)
+        else:
+            self._set_result("profit", net_profit, " 元"); self._set_result("profit_rate", net_rate, " %")
+        _, suggested = self._saved_result(calc, "suggested_price_rmb", "suggested_price")
+        found_usd, converted_usd = self._saved_result(calc, "converted_usd")
+        if not found_usd:
+            converted_usd = data.get("selling_price_usd")
+        self._set_result("converted_usd", converted_usd, " $")
+        self._set_result("suggested_price", suggested, " 元")
 
-        # 净利润
-        price_rmb = product.get("selling_price_rmb")
-        promo = product.get("promotion_reserve_rate") or 0
-        if price_rmb is not None and price_rmb > 0:
-            np = net_profit_amount(price_rmb, tc, promo)
-            self._set_result("profit", np, " 元")
-            self._calculated["profit"] = np
-            npr = net_profit_rate(price_rmb, tc, promo)
-            self._set_result("profit_rate", npr, " %")
-            self._calculated["profit_rate"] = npr
+        # 恢复利润调整结果（Phase 1.6 冻结规则）
+        _, profit_before_adj = self._saved_result(calc, "profit_before_adjustment")
+        _, profit_adjustment = self._saved_result(calc, "profit_adjustment")
 
-        # 美元
-        usd = product.get("selling_price_usd")
-        self._set_result("converted_usd", usd, " $")
-        self._calculated["converted_usd"] = usd
-
-        self._set_result("suggested_price", None)
-        self._partial = {}
-        self._calculated["suggested_price"] = None
+        self._computed = {
+            "head_haul": head, "head_haul_rate": rule_context.get("head_haul_rate"),
+            "fixed_service_fee": fixed, "tail_haul_cost": tail,
+            "total_logistics": logistics, "total_cost": tc,
+            "exchange_rate": rule_context.get("exchange_rate"),
+            "forwarder": fwd or None,
+            "volume_divisor": rule_context.get("volume_divisor"),
+            "rule_version": rule_context.get("rule_version"),
+            "calculation_schema_version": (
+                calc.get("calculation_schema_version", CALCULATION_SCHEMA_VERSION)
+                if isinstance(calc, dict) else CALCULATION_SCHEMA_VERSION
+            ),
+            "volumetric_weight": vol_w, "chargeable_weight": chg_w,
+            "profit": net_profit, "profit_rate": net_rate,
+            "suggested_price": suggested, "converted_usd": converted_usd,
+            "profit_before_adjustment": profit_before_adj,
+            "profit_adjustment": profit_adjustment,
+        }
+        pa_rule = (profit_adjustment or {}).get("rule") if isinstance(profit_adjustment, dict) else None
+        if not hasattr(self, "_profit_adjustment_var"):
+            return
+        if not pa_rule:
+            self._profit_adjustment_var.set("无规则")
+        else:
+            source = "历史冻结规则" if self._profit_rule_source == "frozen" else "当前规则"
+            self._profit_adjustment_var.set(f"{source}：{pa_rule.get('display_name')}\n判断结果：{(profit_adjustment or {}).get('reason', '已保存')}\n调整：{(profit_adjustment or {}).get('amount_original', 0):.2f} {(profit_adjustment or {}).get('currency', pa_rule.get('currency'))}（{(profit_adjustment or {}).get('adjustment_rmb', 0):+.2f} RMB）")
 
     def _check_rate_changes(self):
-        if not self._product_id:
-            return
-        snap = self._db.get_snapshot(self._product_id)
-        if not snap:
-            return
-        changes = {}
-        snap_rate = snap.get("_snapshot_exchange_rate")
-        if snap_rate is not None and abs(snap_rate - self._cfg.exchange_rate) > 0.001:
-            changes["exchange_rate"] = (snap_rate, self._cfg.exchange_rate)
-        snap_head = snap.get("_snapshot_head_haul_rate")
-        if snap_head is not None and abs(snap_head - self._cfg.head_haul_rate) > 0.001:
-            changes["head_haul_rate"] = (snap_head, self._cfg.head_haul_rate)
-        snap_fixed = snap.get("_snapshot_fixed_service_fee")
-        if snap_fixed is not None and abs(snap_fixed - self._cfg.fixed_service_fee) > 0.001:
-            changes["fixed_service_fee"] = (snap_fixed, self._cfg.fixed_service_fee)
-        if changes:
-            self._show_rate_notice(changes)
-        else:
-            self._show_rate_notice(None)
+        saved = self._saved_rule_context
+        if not saved: return
+        current = self._build_current_rule_context()
+        diffs = compare_rule_contexts(saved, current)
+        self._show_rate_notice(diffs if diffs else None)
 
-    def _gather_data(self) -> dict:
+    def _gather_data(self):
         return {
             "name": self._var_name.get(),
-            "cost": _safe_float(self._var_cost.get()),
-            "domestic_shipping": _safe_float(self._var_domestic.get()),
-            "net_weight": _safe_float(self._var_net_w.get()),
-            "net_length": _safe_float(self._var_net_l.get()),
-            "net_width": _safe_float(self._var_net_wi.get()),
-            "net_height": _safe_float(self._var_net_h.get()),
-            "packaged_weight": _safe_float(self._var_pkg_w.get()),
-            "packaged_length": _safe_float(self._var_pkg_l.get()),
-            "packaged_width": _safe_float(self._var_pkg_wi.get()),
-            "packaged_height": _safe_float(self._var_pkg_h.get()),
-            "head_haul_cost": self._calculated.get("head_haul"),
-            "fixed_service_fee": _safe_float(self._var_fixed_fee.get()),
-            "tail_haul_cost": _safe_float(self._var_tail_haul.get()),
-            "shein_price": _safe_float(self._var_shein.get()),
-            "selling_price_rmb": _safe_float(self._var_price_rmb.get()),
-            "selling_price_usd": _safe_float(self._var_price_usd.get()),
-            "target_profit_rate": _safe_float(self._var_target_rate.get()),
-            "promotion_reserve_rate": _safe_float(self._var_promo_rate.get()),
+            "cost": _safe_float(self._entry_vars.get("cost", tk.StringVar()).get()),
+            "domestic_shipping": _safe_float(self._entry_vars.get("domestic", tk.StringVar()).get()),
+            "net_weight": _safe_float(self._entry_vars.get("net_w", tk.StringVar()).get()),
+            "net_length": _safe_float(self._entry_vars.get("net_l", tk.StringVar()).get()),
+            "net_width": _safe_float(self._entry_vars.get("net_wi", tk.StringVar()).get()),
+            "net_height": _safe_float(self._entry_vars.get("net_h", tk.StringVar()).get()),
+            "packaged_weight": _safe_float(self._entry_vars.get("pkg_w", tk.StringVar()).get()),
+            "packaged_length": _safe_float(self._entry_vars.get("pkg_l", tk.StringVar()).get()),
+            "packaged_width": _safe_float(self._entry_vars.get("pkg_wi", tk.StringVar()).get()),
+            "packaged_height": _safe_float(self._entry_vars.get("pkg_h", tk.StringVar()).get()),
+            "freight_forwarder": self._computed.get("forwarder"),
+            "head_haul_cost": self._computed.get("head_haul"),
+            "fixed_service_fee": self._computed.get("fixed_service_fee"),
+            "tail_haul_cost": self._computed.get("tail_haul_cost"),
+            "shein_price": _safe_float(self._entry_vars.get("shein", tk.StringVar()).get()),
+            "selling_price_rmb": _safe_float(self._entry_vars.get("price_rmb", tk.StringVar()).get()),
+            "selling_price_usd": _safe_float(self._entry_vars.get("price_usd", tk.StringVar()).get()),
+            "target_profit_rate": _safe_float(self._entry_vars.get("target_rate", tk.StringVar()).get()),
+            "promotion_reserve_rate": _safe_float(self._entry_vars.get("promo_rate", tk.StringVar()).get()),
+            "weight_unit_version": "g_v1" if getattr(self, "_weight_confirmed", True) else self._weight_unit_version,
             "notes": self._var_notes.get(),
         }
 
     def _load_data(self, data: dict):
+        self._weight_unit_version = data.get("weight_unit_version") or "legacy_unknown"
+        self._weight_confirmed = self._weight_unit_version == "g_v1"
         self._programmatic = True
         try:
-            self._var_name.set(data.get("name", "") or "")
-            self._var_cost.set(self._fmt(data.get("cost")))
-            self._var_domestic.set(self._fmt(data.get("domestic_shipping")))
-            self._var_net_w.set(self._fmt(data.get("net_weight")))
-            self._var_net_l.set(self._fmt(data.get("net_length")))
-            self._var_net_wi.set(self._fmt(data.get("net_width")))
-            self._var_net_h.set(self._fmt(data.get("net_height")))
-            self._var_pkg_w.set(self._fmt(data.get("packaged_weight")))
-            self._var_pkg_l.set(self._fmt(data.get("packaged_length")))
-            self._var_pkg_wi.set(self._fmt(data.get("packaged_width")))
-            self._var_pkg_h.set(self._fmt(data.get("packaged_height")))
-            self._var_shein.set(self._fmt(data.get("shein_price")))
-            self._var_price_rmb.set(self._fmt(data.get("selling_price_rmb")))
-            self._var_price_usd.set(self._fmt(data.get("selling_price_usd")))
-            self._var_target_rate.set(self._fmt(data.get("target_profit_rate")))
-            self._var_promo_rate.set(self._fmt(data.get("promotion_reserve_rate")))
-
-            ff = data.get("fixed_service_fee")
-            self._var_fixed_fee.set(self._fmt(ff, self._cfg.fixed_service_fee))
-            th = data.get("tail_haul_cost")
-            self._var_tail_haul.set(self._fmt(th, self._cfg.default_tail_haul))
-            self._var_notes.set(data.get("notes", "") or "")
-        finally:
-            self._programmatic = False
+            fm = {"cost":"cost","domestic":"domestic_shipping",
+                  "net_w":"net_weight","net_l":"net_length","net_wi":"net_width","net_h":"net_height",
+                  "pkg_w":"packaged_weight","pkg_l":"packaged_length","pkg_wi":"packaged_width","pkg_h":"packaged_height",
+                  "tail":"tail_haul_cost","shein":"shein_price",
+                  "price_rmb":"selling_price_rmb","price_usd":"selling_price_usd",
+                  "target_rate":"target_profit_rate","promo_rate":"promotion_reserve_rate"}
+            for en, dk in fm.items():
+                if en in self._entry_vars:
+                    v = data.get(dk)
+                    self._entry_vars[en].set(self._fmt(v))
+            self._var_name.set(data.get("name","") or ""); self._var_notes.set(data.get("notes","") or "")
+        finally: self._programmatic = False
 
     @staticmethod
     def _fmt(val, default=""):
-        if val is None:
-            return str(default) if default else ""
-        try:
-            return f"{float(val):.2f}"
-        except (ValueError, TypeError):
-            return str(val)
+        if val is None: return str(default) if default else ""
+        try: return f"{float(val):.2f}"
+        except: return str(val)
 
     @property
-    def product_id(self):
-        return self._product_id
+    def product_id(self): return self._product_id
