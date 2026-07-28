@@ -1,0 +1,22 @@
+{
+  "product_type": "car_seatbelt_extender_pair",
+  "quantity": 2,
+  "quantity_source": "user_confirmed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "none",
+  "compressibility": "none",
+  "has_rigid_parts": true,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [15, 8, 5],
+  "ai_package_weight_kg": 0.14,
+  "conservative_package_size_cm": [16, 9, 6],
+  "conservative_package_weight_kg": 0.16,
+  "packaging_method": "OPP袋",
+  "folding_action": "不折叠",
+  "compression_action": "不压缩",
+  "confidence": "medium",
+  "reasoning": "汽车安全带锁扣延长扣一对(2只), ABS硬质塑料, 硬质不可折叠, 一对约100g+包装40g=140g, 包装按15×8×5cm OPP袋",
+  "notes": "1688商品: 汽车安全带锁扣延长扣(120×50×25mm单只), 跨境一对装, 配金属卡扣"
+}
