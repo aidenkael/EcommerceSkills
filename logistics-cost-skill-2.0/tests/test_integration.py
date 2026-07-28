@@ -451,15 +451,15 @@ def test_original_file_unchanged():
 # -- Test 9: cleaned file integrity --
 
 def test_cleaned_file_integrity():
-    """清洗文件 29 条, CAL-001~CAL-029, 无重复, 含新字段。"""
+    """清洗文件 51 条, CAL-001~CAL-051, 无重复, 含新字段。"""
     cleaned_path = PROJECT / "archive" / "calibration" / "calibration_samples_cleaned_v1.json"
     assert cleaned_path.exists(), "Cleaned file must exist"
     with open(cleaned_path, encoding="utf-8") as f:
         data = json.load(f)
-    assert len(data) == 29
+    assert len(data) == 51
     ids = [d["sample_id"] for d in data]
     assert ids[0] == "CAL-001"
-    assert ids[-1] == "CAL-029"
+    assert ids[-1] == "CAL-051"
     assert len(ids) == len(set(ids)), "No duplicates"
     for d in data:
         assert "data_quality_status" in d

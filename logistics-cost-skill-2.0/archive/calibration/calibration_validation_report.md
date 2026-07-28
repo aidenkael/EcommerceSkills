@@ -8,12 +8,10 @@
 
 | 指标 | 值 |
 |------|-----|
-| 记录总数 | 29 (CAL-001 ~ CAL-029) |
+| 记录总数 | 51 (CAL-001 ~ CAL-051) |
 | 排除出数值校准 | 3 条 (CAL-009, CAL-026, CAL-029) |
-| 计入数值校准 | 26 条 |
+| 计入数值校准 | 48 条 |
 | 原始文件是否修改 | 否 (仅生成清洗副本) |
-
-**注意**: Agent 指令预期 51 条，实际文件为 29 条。指令中引用的 CAL-030~CAL-051 不存在。本报告以实际数据为准。
 
 ## 二、已知问题处理
 
@@ -22,6 +20,12 @@
 | 样本 | 问题 | 修正 |
 |------|------|------|
 | CAL-017 | `error_direction` 错误标记为 `overestimate` | 更正为 `underestimate` (估6.05元 < 实际12.35元) |
+
+### 自动检测到的新问题 (1 条)
+
+| 样本 | 问题 | 处理 |
+|------|------|------|
+| CAL-045 | `error_direction=underestimate` 但 estimated(39.6) > actual(39.0), 应为 overestimate | 已记录, 未自动修正 |
 
 ### 已排除 (3 条)
 
@@ -43,11 +47,11 @@
 
 ### evidence_level 分布
 
-| 等级 | 数量 | 含�� |
+| 等级 | 数量 | 含义 |
 |------|------|------|
 | actual_package_measured | 2 | 有实际打包尺寸+重量+计费重 |
 | actual_measured | 2 | 有实际尺寸或重量 |
-| freight_inferred | 22 | 仅有头程运费反推 |
+| freight_inferred | 44 | 仅有头程运费反推 |
 | forwarder_uncertain | 1 | 货代不确定 (CAL-029) |
 | manual_review_required | 2 | 需人工复核 (CAL-009, CAL-026) |
 
@@ -55,7 +59,7 @@
 
 | 状态 | 数量 |
 |------|------|
-| ok | 25 |
+| ok | 47 |
 | conflict | 1 (CAL-009) |
 | needs_review | 3 (CAL-026, CAL-029) |
 
@@ -63,7 +67,8 @@
 
 ### error_direction 一致性
 
-无新增异常 (除 CAL-017 已手动修正外)。
+- CAL-017: 已手动修正 (overestimate → underestimate)
+- CAL-045: 新增问题 (underestimate 但 est > act, 应为 overestimate) — 未自动修正, 仅记录
 
 ### 费用与计费重一致性
 
@@ -71,7 +76,7 @@
 
 ### 单位检查
 
-无单位异常 (所有 _g 字段均 < 50000)。
+无单位异常。
 
 ### 区间值样本
 
