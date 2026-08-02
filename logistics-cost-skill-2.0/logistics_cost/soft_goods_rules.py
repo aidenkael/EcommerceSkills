@@ -1,9 +1,10 @@
-"""软品体积重规则 — 防止展开尺寸误用导致头程高估。
+"""软品体积重规则 — v2 统一策略。
 
 规则:
 1. 软质/可折叠/可卷/可压缩商品不得使用展开尺寸直接计算体积重
-2. 无可信包装尺寸时，优先按净重或AI估重计算
-3. 体积重 > AI净重 × 3 时自动忽略体积重，标记复核
+2. 无可信包装尺寸时, 优先按净重或AI估重计算
+3. 两档使用一致的软品体积策略, 不再分别判定阈值
+4. 策略决定后, 两档各自用实际包装参数计算
 """
 from __future__ import annotations
 
@@ -13,6 +14,46 @@ from typing import Any
 # ---------- 常量 ----------
 
 SOFT_VOLUME_INFLATION_RATIO = 3.0  # 软品体积重超过净重此倍数即忽略
+
+# ---------- 统一软品体积策略 ----------
+
+SOFT_VOLUME_POLICY_VERIFIED = "verified_packaged_dimensions"
+SOFT_VOLUME_POLICY_SOFT_FLAT = "soft_flat_unverified_dimensions"
+SOFT_VOLUME_POLICY_SOFT_BULKY = "soft_bulky_unverified_dimensions"
+SOFT_VOLUME_POLICY_NOT_SOFT = "not_soft"
+
+
+def determine_soft_volume_policy(
+    is_soft: bool,
+    is_packaged_dimension: bool,
+    overall_form: str = "unknown",
+    ai_net_weight_kg: float = 0.0,
+    normal_volume_weight_kg: float = 0.0,
+) -> str:
+    """在进入两档计算前确定统一的软品体积策略。
+
+    Returns:
+        verified_packaged_dimensions | soft_flat_unverified_dimensions |
+        soft_bulky_unverified_dimensions | not_soft
+    """
+    if is_packaged_dimension:
+        return SOFT_VOLUME_POLICY_VERIFIED
+
+    if not is_soft:
+        return SOFT_VOLUME_POLICY_NOT_SOFT
+
+    # soft_flat: 正常档体积重已超标 → 忽略体积重
+    # soft_bulky: 允许体积重参与比较, 不给无条件忽略
+    if overall_form == "soft_bulky":
+        return SOFT_VOLUME_POLICY_SOFT_BULKY
+
+    # soft_flat / unknown: 统一基于正常档判定
+    if isfinite(ai_net_weight_kg) and ai_net_weight_kg > 0:
+        if normal_volume_weight_kg > ai_net_weight_kg * SOFT_VOLUME_INFLATION_RATIO:
+            return SOFT_VOLUME_POLICY_SOFT_FLAT
+
+    # 未触发阈值: 正常计算
+    return SOFT_VOLUME_POLICY_NOT_SOFT
 
 # ---------- 软品识别 ----------
 
@@ -68,44 +109,51 @@ def check_soft_goods_volume(
     ai_net_weight_kg: float,
     *,
     is_packaged_dimension: bool = False,
+    soft_volume_policy: str = SOFT_VOLUME_POLICY_NOT_SOFT,
     scenario_label: str = "",
 ) -> dict[str, Any]:
-    """检查软品体积重是否因展开尺寸误用而异常偏高。
+    """使用统一策略检查软品体积重。
+
+    soft_volume_policy 必须在进入两档前由 determine_soft_volume_policy() 确定。
 
     Args:
         volume_weight_kg: 体积重
         packaged_weight_kg: 打包后实重
         ai_net_weight_kg: AI 估算净重
-        is_packaged_dimension: 尺寸是否为已验证的包装尺寸
-        scenario_label: 场景标签(正常/保守)，仅用于警告文案
+        is_packaged_dimension: 是否已验证包装尺寸 (内部兼容, 策略已统一)
+        soft_volume_policy: 统一软品体积策略
+        scenario_label: 场景标签, 仅用于诊断
 
     Returns:
-        {"volume_ignored": bool, "chargeable_kg": float, "warning": str}
+        {"volume_ignored": bool, "chargeable_kg": float, "policy_used": str, "warning": str}
     """
     result: dict[str, Any] = {
         "volume_ignored": False,
         "chargeable_kg": packaged_weight_kg,
+        "policy_used": soft_volume_policy,
         "warning": "",
     }
 
-    if is_packaged_dimension:
-        # 有可信包装尺寸，不介入
+    if soft_volume_policy == SOFT_VOLUME_POLICY_VERIFIED:
         result["chargeable_kg"] = round(max(packaged_weight_kg, volume_weight_kg), 4)
         return result
 
-    if not isfinite(ai_net_weight_kg) or ai_net_weight_kg <= 0:
+    if soft_volume_policy == SOFT_VOLUME_POLICY_NOT_SOFT:
         result["chargeable_kg"] = round(max(packaged_weight_kg, volume_weight_kg), 4)
         return result
 
-    if volume_weight_kg > ai_net_weight_kg * SOFT_VOLUME_INFLATION_RATIO:
+    if soft_volume_policy == SOFT_VOLUME_POLICY_SOFT_FLAT:
         result["volume_ignored"] = True
         result["chargeable_kg"] = round(packaged_weight_kg, 4)
         result["warning"] = (
-            f"软品展开尺寸疑似误用: {scenario_label}档体积重{volume_weight_kg:.3f}kg超过"
-            f"AI净重{ai_net_weight_kg:.3f}kg的{SOFT_VOLUME_INFLATION_RATIO:.0f}倍，"
-            f"已改用实重{result['chargeable_kg']}kg计算头程"
+            f"软品统一策略soft_flat: {scenario_label}档体积重{volume_weight_kg:.3f}kg"
+            f"已忽略, 使用实重{result['chargeable_kg']}kg"
         )
-    else:
+        return result
+
+    if soft_volume_policy == SOFT_VOLUME_POLICY_SOFT_BULKY:
+        # soft_bulky: 允许体积重参与, 但正常档若已超标则保守档也取max
         result["chargeable_kg"] = round(max(packaged_weight_kg, volume_weight_kg), 4)
+        return result
 
     return result

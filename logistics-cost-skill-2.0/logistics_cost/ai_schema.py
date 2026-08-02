@@ -23,6 +23,19 @@ VALID_PACKAGING_TYPE = ("opp_bag", "retail_card", "small_box", "bubble_wrap", "o
 VALID_WEIGHT_SCOPE = ("net_weight", "packaged_weight", "original_box_weight", "unknown")
 VALID_DIMENSION_SCOPE = ("display_size", "product_size", "shipping_package_size", "unknown")
 
+# 新增: 结构形态与保守档风险来源 (v2 语义重构)
+VALID_OVERALL_FORM = ("soft_flat", "soft_bulky", "flexible_chain", "hard_flat", "hard_3d", "mixed", "unknown")
+VALID_CONSERVATIVE_RISK_BASIS = (
+    "known_package_no_uncertainty",
+    "weight_uncertainty",
+    "thickness_uncertainty",
+    "compression_uncertainty",
+    "protection_uncertainty",
+    "quantity_uncertainty",
+    "mixed_uncertainty",
+    "unknown",
+)
+
 
 @dataclass
 class PackagingScenario:
@@ -65,9 +78,15 @@ class AiProductJson:
     ai_package_size_cm: list[float] = field(default_factory=lambda: [15, 10, 4])
     ai_package_weight_kg: float = 0.06                    # AI 估算包装后重量
 
-    # ---- 保守档 (必填, AI 直接提供) ----
-    conservative_package_size_cm: list[float] = field(default_factory=lambda: [20, 14, 6])
-    conservative_package_weight_kg: float = 0.10
+    # ---- 保守档 ----
+    conservative_package_size_cm: list[float] = field(default_factory=list)
+    conservative_package_weight_kg: float | None = None
+
+    # ---- v2 新增: 结构形态 (必填, AI 根据商品本质形状填写) ----
+    overall_form: str = "unknown"  # soft_flat/soft_bulky/flexible_chain/hard_flat/hard_3d/mixed/unknown
+
+    # ---- v2 新增: 保守档风险来源 (可选, 说明为何保守档与正常档不同) ----
+    conservative_risk_basis: str = "unknown"  # known_package_no_uncertainty/weight_uncertainty/thickness_uncertainty/...
 
     # ---- 可选: 包装方式建议 ----
     packaging_method: str = "OPP袋"
@@ -116,6 +135,10 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         d["weight_scope"] = "unknown"
     if d.get("dimension_scope") not in VALID_DIMENSION_SCOPE:
         d["dimension_scope"] = "unknown"
+    if d.get("overall_form", "") not in VALID_OVERALL_FORM:
+        d["overall_form"] = "unknown"
+    if d.get("conservative_risk_basis", "") not in VALID_CONSERVATIVE_RISK_BASIS:
+        d["conservative_risk_basis"] = "unknown"
 
     # 数量默认
     d.setdefault("quantity", 1)
@@ -125,8 +148,16 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     d.setdefault("ai_net_weight_kg", 0.05)
     d.setdefault("ai_package_size_cm", [15, 10, 4])
     d.setdefault("ai_package_weight_kg", 0.06)
-    d.setdefault("conservative_package_size_cm", [20, 14, 6])
-    d.setdefault("conservative_package_weight_kg", 0.10)
+
+    # 保守档: 缺失时从正常档复制, 标记需复核 (不再使用固定机械放大)
+    if not d.get("conservative_package_size_cm"):
+        d["conservative_package_size_cm"] = list(d.get("ai_package_size_cm", [15, 10, 4]))
+    if d.get("conservative_package_weight_kg") is None:
+        d["conservative_package_weight_kg"] = d.get("ai_package_weight_kg", 0.06)
+    if d.get("conservative_risk_basis", "") in ("", "unknown") and d.get("conservative_package_size_cm") == d.get("ai_package_size_cm"):
+        # 保守档与正常档完全相同时, 检查是否有明确包装
+        if d.get("dimension_scope") == "shipping_package_size" and d.get("weight_scope") == "packaged_weight":
+            d["conservative_risk_basis"] = "known_package_no_uncertainty"
 
     # 可选字符串字段
     d.setdefault("packaging_method", "OPP袋")
@@ -139,6 +170,8 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     d.setdefault("image_path", "")
     d.setdefault("notes", "")
     d.setdefault("reasoning", "")
+    d.setdefault("overall_form", "unknown")
+    d.setdefault("conservative_risk_basis", "unknown")
 
     # 布尔字段
     d.setdefault("has_rigid_parts", False)
@@ -162,6 +195,8 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         ai_package_weight_kg=d["ai_package_weight_kg"],
         conservative_package_size_cm=d["conservative_package_size_cm"],
         conservative_package_weight_kg=d["conservative_package_weight_kg"],
+        overall_form=d["overall_form"],
+        conservative_risk_basis=d["conservative_risk_basis"],
         packaging_method=d["packaging_method"],
         folding_action=d["folding_action"],
         compression_action=d["compression_action"],
@@ -235,25 +270,36 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
             "packaged_size_cm": list(ai.ai_package_size_cm),
             "packaged_weight_kg": ai.ai_package_weight_kg,
             "method": ai.packaging_method or "OPP袋",
-            "folding_action": ai.folding_action or "常规折叠",
-            "compression_action": ai.compression_action or "轻度压缩",
+            "folding_action": ai.folding_action or (
+                "不折叠" if (ai.rigidity == "hard" or ai.has_rigid_parts or ai.requires_shape_retention) else "常规折叠"
+            ),
+            "compression_action": ai.compression_action or (
+                "不压缩" if ai.rigidity == "hard" else "轻度压缩"
+            ),
             "requires_box": ai.has_rigid_parts or ai.requires_shape_retention,
             "requires_bubble_wrap": False,
             "used_evidence_indices": [0, 1],
             "reason": ai.reasoning or "AI推断包装",
             "confidence": ai.confidence,
+            "overall_form": ai.overall_form,
         },
         "conservative": {
             "packaged_size_cm": list(ai.conservative_package_size_cm),
             "packaged_weight_kg": ai.conservative_package_weight_kg,
-            "method": f"稍大{ai.packaging_method or '外袋'}",
-            "folding_action": "较少折叠" if ai.foldability in ("good", "limited") else "无",
-            "compression_action": "弱压缩" if ai.compressibility in ("good", "limited") else "无",
+            "method": ai.packaging_method or "OPP袋",
+            "folding_action": ai.folding_action or (
+                "不折叠" if (ai.rigidity == "hard" or ai.has_rigid_parts or ai.requires_shape_retention) else "常规折叠"
+            ),
+            "compression_action": ai.compression_action or (
+                "不压缩" if ai.rigidity == "hard" else "轻度压缩"
+            ),
             "requires_box": ai.has_rigid_parts or ai.requires_shape_retention,
             "requires_bubble_wrap": False,
             "used_evidence_indices": [0, 1],
-            "reason": f"AI推断保守包装 ({ai.confidence})",
+            "reason": ai.reasoning or "AI推断保守包装",
             "confidence": ai.confidence,
+            "overall_form": ai.overall_form,
+            "risk_basis": ai.conservative_risk_basis,
         },
     }
 

@@ -28,7 +28,11 @@ from .calculator import calc_head_cost, calc_volume_weight, calc_freight_costs
 from .config import BASE_DIR, load_config, normalize_category
 from .evidence_resolver import resolve_evidence, _is_soft
 from .packaging_decision_ai import validate_packaging_scenarios
-from .soft_goods_rules import check_soft_goods_volume, is_soft_goods
+from .soft_goods_rules import (
+    check_soft_goods_volume, is_soft_goods,
+    determine_soft_volume_policy,
+    SOFT_VOLUME_POLICY_NOT_SOFT,
+)
 from .storage import archive_local_image
 from .weight_rules import UserWeight, apply_weight_correction
 
@@ -42,6 +46,58 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _apply_monotonicity_guard(scenarios_result: dict[str, Any]) -> None:
+    """v2 保守档单调性保护: 确保保守档计费重和费用不低于正常档。
+
+    不修改正常档, 不交换两档名称, 不倒挂时不做任何事。
+    """
+    normal = scenarios_result.get("normal") or {}
+    conservative = scenarios_result.get("conservative") or {}
+    if not normal.get("chargeable_weight_kg") or not conservative.get("chargeable_weight_kg"):
+        return
+
+    normal_cw = float(normal["chargeable_weight_kg"])
+    cons_cw = float(conservative["chargeable_weight_kg"])
+    adjusted = False
+    reasons: list[str] = []
+
+    # 检查计费重倒挂
+    if cons_cw < normal_cw:
+        conservative["chargeable_weight_kg"] = normal_cw
+        cons_cw = normal_cw
+        adjusted = True
+        reasons.append("soft_volume_policy_threshold_inversion")
+
+    # 重新计算保守档费用 (基于修正后的计费重)
+    if adjusted:
+        from .calculator import calc_freight_costs
+        ft = calc_freight_costs(cons_cw)
+        rec_provider = ft["recommended_provider"]
+        rec_costs = ft["provider_costs"].get(rec_provider, {})
+        conservative["provider_costs"] = ft["provider_costs"]
+        conservative["recommended_provider"] = rec_provider
+        conservative["recommended_cost_rmb"] = ft["recommended_cost_rmb"]
+        conservative["head_cost_cny"] = rec_costs.get("head_freight_rmb", 0.0)
+        conservative["service_fee_cny"] = rec_costs.get("service_fee_rmb", 0.0)
+        conservative["total_head_cost_cny"] = round(
+            float(rec_costs.get("head_freight_rmb", 0.0)) + float(rec_costs.get("service_fee_rmb", 0.0)), 2
+        )
+
+    # 检查两家货代费用倒挂
+    for provider in ("深圳货代", "义乌货代"):
+        n_fee = float((normal.get("provider_costs") or {}).get(provider, {}).get("head_freight_rmb", 0))
+        c_fee = float((conservative.get("provider_costs") or {}).get(provider, {}).get("head_freight_rmb", 0))
+        if c_fee < n_fee and not adjusted:
+            adjusted = True
+            reasons.append(f"provider_fee_inversion_{provider}")
+        if c_fee < n_fee:
+            reasons.append(f"{provider}_fee_corrected")
+
+    # 标记诊断
+    scenarios_result["scenario_monotonicity_adjusted"] = adjusted
+    scenarios_result["scenario_monotonicity_reason"] = "; ".join(reasons) if reasons else ""
 
 
 def estimate(
@@ -97,6 +153,20 @@ def estimate(
 
     soft = is_soft_goods(summary) or (summary and _is_soft(summary))
 
+    # ---- 3.0 统一软品体积策略 (v2) ----
+    overall_form = str(summary.get("overall_form") or scenarios["normal"].get("overall_form", "unknown"))
+    normal_dims = (decision.get("normal") or {}).get("packaged_size_cm", [0, 0, 0])
+    normal_vol_weight = round(_volume_weight(normal_dims, divisor), 4)
+    soft_policy = SOFT_VOLUME_POLICY_NOT_SOFT
+    if soft:
+        soft_policy = determine_soft_volume_policy(
+            is_soft=True,
+            is_packaged_dimension=is_packaged,
+            overall_form=overall_form,
+            ai_net_weight_kg=ai_net_weight,
+            normal_volume_weight_kg=normal_vol_weight,
+        )
+
     calculate_ok = decision.get("can_calculate", False)
     scenarios_result = {}
 
@@ -119,12 +189,13 @@ def estimate(
         pkg_weight = _safe_float(scenario.get("packaged_weight_kg"))
         vol_weight = round(_volume_weight(dims, divisor), 4)
 
-        # ---- 3a. 软品体积重检查 ----
-        soft_result = {"volume_ignored": False, "chargeable_kg": pkg_weight, "warning": ""}
+        # ---- 3a. 软品体积重检查 (v2: 统一策略) ----
+        soft_result = {"volume_ignored": False, "chargeable_kg": pkg_weight, "warning": "", "policy_used": SOFT_VOLUME_POLICY_NOT_SOFT}
         if soft:
             soft_result = check_soft_goods_volume(
                 vol_weight, pkg_weight, ai_net_weight,
                 is_packaged_dimension=is_packaged,
+                soft_volume_policy=soft_policy,
                 scenario_label=mode,
             )
 
@@ -175,6 +246,9 @@ def estimate(
             "v21_needs_review": weight_result["needs_review"],
             "v21_review_reason": weight_result["review_reason"],
         }
+
+    # ---- 3c. v2 单调性保护: 保守档费用不得低于正常档 ----
+    _apply_monotonicity_guard(scenarios_result)
 
     # ---- 4. 合并输出 ----
     estimate_id = f"EST-{datetime.now():%Y%m%d%H%M%S}-{uuid.uuid4().hex[:8]}"
