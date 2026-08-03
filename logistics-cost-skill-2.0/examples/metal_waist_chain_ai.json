@@ -1,0 +1,22 @@
+{
+  "product_type": "metal_waist_chain_belt",
+  "quantity": 1,
+  "quantity_source": "assumed",
+  "category": "general",
+  "rigidity": "hard",
+  "foldability": "good",
+  "compressibility": "good",
+  "has_rigid_parts": false,
+  "requires_shape_retention": false,
+  "ai_net_weight_kg": 0.10,
+  "ai_package_size_cm": [15, 10, 3],
+  "ai_package_weight_kg": 0.10,
+  "conservative_package_size_cm": [16, 11, 4],
+  "conservative_package_weight_kg": 0.12,
+  "packaging_method": "OPP袋",
+  "folding_action": "卷绕收拢",
+  "compression_action": "轻度压实",
+  "confidence": "medium",
+  "reasoning": "金属腰链(合金), 可卷绕/盘绕收纳, 净重约100g(与CAL-052同类商品65g+更长链条), 包装按15×10×3cm OPP袋",
+  "notes": "1688商品, 与CAL-052(同类金属腰链)参照估算。金属链实重主导计费, 卷绕后体积重远小于实重。"
+}
