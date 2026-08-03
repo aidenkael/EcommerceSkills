@@ -157,21 +157,26 @@ def validate_packaging_scenarios(
     weight_indices = {accepted_weight.get("evidence_index")} if accepted_weight else set()
     usable_indices = (dimension_indices | weight_indices) - {None}
     soft = _is_soft(product_summary)
+    shape_scope = str(product_summary.get("shape_retention_scope") or "none")
+    has_body_retention = shape_scope in ("body", "whole")
+    has_whole_retention = shape_scope == "whole"
+    has_foldable = bool(product_summary.get("foldable_parts"))
     allows_shape_reduction = (
         product_summary.get("rigidity") == "soft"
-        and not bool(product_summary.get("requires_shape_retention"))
+        and not has_whole_retention
         and (
             product_summary.get("foldability") in {"good", "limited"}
             or product_summary.get("compression") in {"good", "limited", "moderate", "high"}
         )
     )
-    rigid = product_summary.get("rigidity") == "hard" or bool(product_summary.get("requires_shape_retention"))
+    # v2.2: rigid only for whole retention or hard without body retention
+    rigid = has_whole_retention or (product_summary.get("rigidity") == "hard" and not has_body_retention)
     product_type = str(product_summary.get("product_type") or "").lower()
     small = product_summary.get("size_class") in {"tiny", "small"} or any(
         word in product_type for word in ("keychain", "hair_clip", "hair_accessory", "hairpin", "barrette", "bag_charm", "small_ornament")
     )
-    rigid_min = product_summary.get("rigid_part_min_size_cm")
-    if product_summary.get("has_rigid_parts") and not rigid_min:
+    rigid_min = (product_summary.get("rigid_body_size_cm") or product_summary.get("rigid_part_min_size_cm"))
+    if product_summary.get("has_rigid_parts") and not rigid_min and not has_body_retention:
         # rigid_part_size_missing: 如果 AI 提供了有效包装尺寸且未设置折叠/强压缩，降级为 warn
         has_valid_pkg = (
             all(isinstance(d, (int, float)) and d > 0 for d in normal["packaged_size_cm"])
@@ -213,8 +218,14 @@ def validate_packaging_scenarios(
         if product_summary.get("category_type") == "bag" and soft and scenario_volume_weight > soft_bag_volume_limit:
             error("soft_bag_package_anomaly", f"{mode}档软袋包装体积重异常偏大")
         if rigid and folding not in {"", "none", "no", "不折叠", "无"}:
-            error("rigid_item_folded", f"{mode}档对硬质或需保形商品提出了折叠")
-        if product_summary.get("rigidity") == "hard" and compression not in {"", "none", "no", "不压缩", "无"}:
+            # v2.2: body retention allows folding foldable_parts
+            if has_body_retention and has_foldable:
+                pass  # allow folding declared foldable parts
+            else:
+                error("rigid_item_folded", f"{mode}档对硬质或需保形商品提出了折叠")
+        if has_whole_retention and compression not in {"", "none", "no", "不压缩", "无"}:
+            error("hard_item_compressed", f"{mode}档对需整件保形商品提出了压缩")
+        elif product_summary.get("rigidity") == "hard" and compression not in {"", "none", "no", "不压缩", "无"} and not has_body_retention:
             error("hard_item_compressed", f"{mode}档对硬质商品提出了压缩")
         if product_summary.get("rigidity") == "hard" and product_summary.get("fragility") in {"medium", "high"}:
             if not scenario["requires_box"] and not scenario["requires_bubble_wrap"]:

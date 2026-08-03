@@ -24,7 +24,7 @@ VALID_WEIGHT_SCOPE = ("net_weight", "packaged_weight", "original_box_weight", "u
 VALID_DIMENSION_SCOPE = ("display_size", "product_size", "shipping_package_size", "unknown")
 
 # 新增: 结构形态与保守档风险来源 (v2 语义重构)
-VALID_OVERALL_FORM = ("soft_flat", "soft_bulky", "flexible_chain", "hard_flat", "hard_3d", "mixed", "unknown")
+VALID_OVERALL_FORM = ("soft_flat", "soft_bulky", "flexible_long", "flexible_chain", "semi_structured_hollow", "hard_flat", "hard_3d", "mixed", "unknown")
 VALID_CONSERVATIVE_RISK_BASIS = (
     "known_package_no_uncertainty",
     "weight_uncertainty",
@@ -35,6 +35,8 @@ VALID_CONSERVATIVE_RISK_BASIS = (
     "mixed_uncertainty",
     "unknown",
 )
+VALID_SHAPE_RETENTION_SCOPE = ("none", "body", "whole")
+VALID_MODIFIERS = ("nestable", "articulated", "fragile", "hollow")
 
 
 @dataclass
@@ -83,7 +85,14 @@ class AiProductJson:
     conservative_package_weight_kg: float | None = None
 
     # ---- v2 新增: 结构形态 (必填, AI 根据商品本质形状填写) ----
-    overall_form: str = "unknown"  # soft_flat/soft_bulky/flexible_chain/hard_flat/hard_3d/mixed/unknown
+    overall_form: str = "unknown"
+
+    # ---- v2.2 新增: 组件级包装字段 ----
+    rigid_body_size_cm: list[float] = field(default_factory=list)  # 主体最小不可压缩外廓
+    foldable_parts: list[str] = field(default_factory=list)        # 可折部件列表 (handle/strap/brim...)
+    detachable_parts: list[str] = field(default_factory=list)      # 可拆附件列表
+    shape_retention_scope: str = "none"                            # none / body / whole
+    modifiers: list[str] = field(default_factory=list)             # nestable/articulated/fragile/hollow
 
     # ---- v2 新增: 保守档风险来源 (可选, 说明为何保守档与正常档不同) ----
     conservative_risk_basis: str = "unknown"  # known_package_no_uncertainty/weight_uncertainty/thickness_uncertainty/...
@@ -139,6 +148,33 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         d["overall_form"] = "unknown"
     if d.get("conservative_risk_basis", "") not in VALID_CONSERVATIVE_RISK_BASIS:
         d["conservative_risk_basis"] = "unknown"
+    if d.get("shape_retention_scope", "") not in VALID_SHAPE_RETENTION_SCOPE:
+        d["shape_retention_scope"] = "none"
+    mods = d.get("modifiers", [])
+    if isinstance(mods, list):
+        d["modifiers"] = [m for m in mods if m in VALID_MODIFIERS]
+    else:
+        d["modifiers"] = []
+
+    # v2.2 兼容映射: 旧类型 → 新类型
+    _overall_form = d.get("overall_form", "")
+    _old_to_new = {
+        "soft_hollow": "semi_structured_hollow",
+        "rigid_hollow": "hard_3d",
+        "nestable_set": "hard_3d",
+        "fragile_protruding": "hard_3d",
+        "articulated": "mixed",
+    }
+    if _overall_form in _old_to_new:
+        d["overall_form"] = _old_to_new[_overall_form]
+        mods = d.get("modifiers", [])
+        if "hollow" not in mods:
+            mods.append("hollow")
+        if _overall_form == "articulated" and "articulated" not in mods:
+            mods.append("articulated")
+        if _overall_form in ("fragile_protruding",) and "fragile" not in mods:
+            mods.append("fragile")
+        d["modifiers"] = mods
 
     # 数量默认
     d.setdefault("quantity", 1)
@@ -172,6 +208,11 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     d.setdefault("reasoning", "")
     d.setdefault("overall_form", "unknown")
     d.setdefault("conservative_risk_basis", "unknown")
+    d.setdefault("rigid_body_size_cm", [])
+    d.setdefault("foldable_parts", [])
+    d.setdefault("detachable_parts", [])
+    d.setdefault("shape_retention_scope", "none")
+    d.setdefault("modifiers", [])
 
     # 布尔字段
     d.setdefault("has_rigid_parts", False)
@@ -197,6 +238,11 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         conservative_package_weight_kg=d["conservative_package_weight_kg"],
         overall_form=d["overall_form"],
         conservative_risk_basis=d["conservative_risk_basis"],
+        rigid_body_size_cm=d["rigid_body_size_cm"],
+        foldable_parts=d["foldable_parts"],
+        detachable_parts=d["detachable_parts"],
+        shape_retention_scope=d["shape_retention_scope"],
+        modifiers=d["modifiers"],
         packaging_method=d["packaging_method"],
         folding_action=d["folding_action"],
         compression_action=d["compression_action"],
@@ -234,6 +280,12 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
         "fragility": "low",
         "has_rigid_parts": ai.has_rigid_parts,
         "requires_shape_retention": ai.requires_shape_retention,
+        "shape_retention_scope": ai.shape_retention_scope,
+        "rigid_body_size_cm": list(ai.rigid_body_size_cm) if ai.rigid_body_size_cm else [],
+        "foldable_parts": list(ai.foldable_parts),
+        "detachable_parts": list(ai.detachable_parts),
+        "modifiers": list(ai.modifiers),
+        "overall_form": ai.overall_form,
         "quantity": ai.quantity,
         "size_class": size_class,
         "confidence": ai.confidence,
@@ -276,7 +328,7 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
             "compression_action": ai.compression_action or (
                 "不压缩" if ai.rigidity == "hard" else "轻度压缩"
             ),
-            "requires_box": ai.has_rigid_parts or ai.requires_shape_retention,
+            "requires_box": ai.packaging_type in ("small_box", "original_box") or ai.shape_retention_scope == "whole",
             "requires_bubble_wrap": False,
             "used_evidence_indices": [0, 1],
             "reason": ai.reasoning or "AI推断包装",
@@ -293,7 +345,7 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
             "compression_action": ai.compression_action or (
                 "不压缩" if ai.rigidity == "hard" else "轻度压缩"
             ),
-            "requires_box": ai.has_rigid_parts or ai.requires_shape_retention,
+            "requires_box": ai.packaging_type in ("small_box", "original_box") or ai.shape_retention_scope == "whole",
             "requires_bubble_wrap": False,
             "used_evidence_indices": [0, 1],
             "reason": ai.reasoning or "AI推断保守包装",
