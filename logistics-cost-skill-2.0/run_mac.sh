@@ -22,5 +22,4 @@ if [ ! -d ".venv" ] || [ ! -f ".bootstrapped" ]; then
     echo ""
 fi
 
-# 启动模式选择
-python3 agent_workflow.py prompt
+echo "请在支持Agent的工具中打开本目录并读取 START_HERE_FOR_AGENT.md"

@@ -31,9 +31,9 @@
       "review_triggers": ["压缩率<30%时检查是否实心", "体积重>净重×5时检查"]
     },
     "flexible_long": {
-      "description": "柔性长条（雨伞/数据线/跳绳/软管）",
+      "description": "柔性长条（数据线/软管/跳绳/伞类）",
       "required_evidence": ["可卷绕或折叠"],
-      "rigid_axes": [],
+      "rigid_axes": ["折叠伞收拢后中心杆/伞骨最长刚性轴（长柄伞按不可折伞杆长度）"],
       "foldable_parts_policy": "卷绕或折叠收拢",
       "detachable_parts_policy": "无",
       "compression_policy": "收拢后袋装",
@@ -78,7 +78,7 @@
       "rigid_axes": ["底部长", "底部宽", "硬框高度"],
       "foldable_parts_policy": "把手可折叠，肩带可盘绕",
       "detachable_parts_policy": "肩带/链条可拆卸或收纳",
-      "compression_policy": "厚度可适度压缩（通常×0.5～0.8）",
+      "compression_policy": "根据硬底、硬框、侧围柔软度、空腔和回弹证据适度压缩；无证据时不得使用统一压缩比例",
       "nesting_policy": "不适用",
       "protection_policy": "防尘袋/OPP袋+局部五金保护",
       "normal_scenario_policy": "折叠把手，收纳肩带，适度压缩厚度，袋装",

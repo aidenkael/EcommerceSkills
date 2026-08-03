@@ -11,21 +11,21 @@
 **⚠️ 重要：不要双击 ZIP 解压，请用终端命令：**
 
 ```bash
-# 1. 解压并验证（替换 YOUR_ZIP 为实际文件名）
+# 1. 解压并验证
 cd ~/Desktop
 unzip logistics-cost-skill-2.0-macos-agent-v2.zip
 cd logistics-cost-skill-2.0
 bash extract_and_verify.sh
 
-# 2. 运行环境检查（首次）
+# 2. 首次安装时运行环境检查
 python3 tools/mac_bootstrap.py
-
-# 3. 启动模式选择
-python3 agent_workflow.py prompt
 ```
 
-或使用快捷脚本：
+环境检查只在首次安装或用户主动排错时运行。新建Agent对话不重复运行。
 
+日常使用：在支持Agent的工具中打开 `logistics-cost-skill-2.0` 目录，让Agent先读取 `START_HERE_FOR_AGENT.md`。
+
+或使用快捷脚本：
 ```bash
 bash run_mac.sh
 ```
@@ -34,8 +34,6 @@ bash run_mac.sh
 
 ```bash
 python3 -m pytest tests/ -q
-python3 scripts/validate_active_rules.py
-python3 scripts/replay_active_rules.py
 ```
 
 ## 常见问题
@@ -51,7 +49,7 @@ python3 scripts/replay_active_rules.py
 
 ## 两个模式
 
-- **模式1（仅校准头程）**：上传商品图片 → AI 识别 → CAL 校准 → 深圳/义乌头程计算 → 简表输出
-- **模式2（完整物流与利润）**：先一次性配置汇率/利润率/佣金等参数 → 后续每个商品自动计算建议标价和预计利润
+- **模式1（利润核算）**：识别商品 → 两档四方案头程 + 总成本与利润表
+- **模式2（仅头程）**：识别商品 → 两档四方案头程表
 
-两个模式在同一对话中互斥，选定后不得切换。
+两个模式在同一对话中互斥。模式只在当前对话有效。
