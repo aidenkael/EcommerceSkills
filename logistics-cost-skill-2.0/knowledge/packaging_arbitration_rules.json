@@ -1,0 +1,136 @@
+[
+  {
+    "rule_id": "ARB-PVC-THIN-001",
+    "enabled": true,
+    "priority": 10,
+    "source_repo": "aidenkael/2.6.1",
+    "source_commit": "9436b970ed4b9d6335ff243f3ae363dc36692c15",
+    "source_rule_ids": ["AGR-PVC-THIN-068", "CAL-068"],
+    "match": {
+      "product_type_keywords": ["透明", "化妆包", "cosmetic_bag", "pouch", "收纳包"],
+      "material_family": ["pvc", "tpu", "transparent_soft_plastic"],
+      "rigidity": ["soft"],
+      "foldability": ["good", "limited"],
+      "no_strong_hard_evidence": true
+    },
+    "action": {
+      "set_overall_form": "soft_hollow",
+      "no_display_thickness_as_shipping": true,
+      "reference_product_size_cm": [22, 11, 18],
+      "normal_reference_package_cm": [10, 10, 3],
+      "conservative_reference_package_cm": [14, 12, 5],
+      "scale_min": 0.55,
+      "scale_max": 2.8,
+      "normal_packaging_method": "充分折叠后袋装",
+      "conservative_packaging_method": "较少折叠后袋装"
+    },
+    "confidence": "low"
+  },
+  {
+    "rule_id": "ARB-PVC-STRUCTURED-001",
+    "enabled": true,
+    "priority": 20,
+    "source_repo": "aidenkael/2.6.1",
+    "source_commit": "9436b970ed4b9d6335ff243f3ae363dc36692c15",
+    "source_rule_ids": ["AGR-PVC-STRUCTURED-075", "CAL-075"],
+    "match": {
+      "material_family": ["pvc", "tpu", "transparent_soft_plastic"],
+      "has_strong_hard_evidence": true
+    },
+    "action": {
+      "no_full_folding": true,
+      "min_axis_scale_normal": 0.72,
+      "min_axis_scale_conservative": 0.90,
+      "min_axis_cm": 4.0,
+      "preserve_evidenced_dimensions": true
+    },
+    "confidence": "low"
+  },
+  {
+    "rule_id": "ARB-PU-BAG-001",
+    "enabled": true,
+    "priority": 5,
+    "source_repo": "aidenkael/2.6.1",
+    "source_commit": "9436b970ed4b9d6335ff243f3ae363dc36692c15",
+    "source_rule_ids": ["AGR-PU-BAG-065", "CAL-065"],
+    "match": {
+      "material_family": ["pu"],
+      "category": ["bag"],
+      "no_strong_hard_evidence": true
+    },
+    "action": {
+      "compress_min_axis_only": true,
+      "min_axis_scale_normal": 0.65,
+      "min_axis_scale_conservative": 0.82,
+      "min_axis_cm": 3.0,
+      "preserve_length_width": true,
+      "fold_handles": true,
+      "store_straps": true,
+      "no_default_hard_box": true
+    },
+    "confidence": "low"
+  },
+  {
+    "rule_id": "ARB-OXFORD-BAG-001",
+    "enabled": true,
+    "priority": 5,
+    "source_repo": "aidenkael/2.6.1",
+    "source_commit": "9436b970ed4b9d6335ff243f3ae363dc36692c15",
+    "source_rule_ids": ["AGR-OXFORD-BACKPACK-076", "CAL-076"],
+    "match": {
+      "material_family": ["oxford", "canvas", "fabric"],
+      "category": ["bag"],
+      "no_strong_hard_evidence": true
+    },
+    "action": {
+      "compress_min_axis_only": true,
+      "min_axis_scale_normal": 0.40,
+      "min_axis_scale_conservative": 0.62,
+      "min_axis_cm": 4.0,
+      "preserve_length_width": true
+    },
+    "confidence": "low"
+  },
+  {
+    "rule_id": "ARB-THIN-TEXTILE-001",
+    "enabled": true,
+    "priority": 3,
+    "source_repo": "aidenkael/2.6.1",
+    "source_commit": "9436b970ed4b9d6335ff243f3ae363dc36692c15",
+    "source_rule_ids": ["AGR-THIN-TEXTILE-001"],
+    "match": {
+      "material_family": ["thin_textile"],
+      "rigidity": ["soft"],
+      "foldability": ["good"]
+    },
+    "action": {
+      "compress_min_axis_only": true,
+      "min_axis_scale_normal": 0.75,
+      "min_axis_scale_conservative": 0.90,
+      "min_axis_cm": 1.5,
+      "no_uniform_scale": true,
+      "no_hard_box": true,
+      "no_bubble_wrap": true
+    },
+    "confidence": "low"
+  },
+  {
+    "rule_id": "ARB-HARD-PROTRUSION-001",
+    "enabled": true,
+    "priority": 3,
+    "source_repo": "aidenkael/2.6.1",
+    "source_commit": "9436b970ed4b9d6335ff243f3ae363dc36692c15",
+    "source_rule_ids": ["AGR-HARD-PROTRUSION-001"],
+    "match": {
+      "has_strong_protrusion_evidence": true,
+      "rigidity": ["semi_rigid", "hard"]
+    },
+    "action": {
+      "add_min_axis_protection_only": true,
+      "protection_normal_cm": 2.0,
+      "protection_conservative_cm": 3.5,
+      "no_uniform_amplification": true
+    },
+    "confidence": "low"
+  }
+]

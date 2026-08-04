@@ -17,8 +17,14 @@
 ## 证据优先级
 用户明确说明>当前高亮SKU/数量>规格参数>validated档案>通用规则>AI推测。禁止用同页套包/其他颜色覆盖当前单包。
 
-## 物理包装总原则
-区分展示与运输状态。半结构化包：主体保型+把手折叠+肩带收纳，不强制硬纸盒。正常档：最可能普通代发包装。保守档：合理偏高成本场景，只调整不确定因素。
+## AI JSON 字段要求
+Agent 识图构建 AI JSON 时必须：
+
+1. **dimension_scope**：必须区分 `display_size` / `product_size` / `shipping_package_size` / `unknown`
+2. **material_family**：必须输出，不得写 "unknown"。常见值：pvc / tpu / pu / oxford / canvas / fabric / thin_textile / transparent_soft_plastic
+3. **structure_evidence**：声称硬底/硬框/硬衬/原盒/整件保形时，必须在 `structure_evidence` 中给出来源和位置。`source` 取 `user_confirmed` / `merchant_text` / `image_visible` / `ai_inferred`
+4. 拉链、提手、肩带和普通五金不能单独证明整体刚性
+5. Agent 只识图一次并提交候选；不得为通过校验自行改分类或二次试算；候选修复由 `packaging_arbitrator.py` 完成
 
 ## 输出合同保护（最高优先级）
 OUTPUT_CONTRACT.md、output_renderer.py 和黄金快照属于受保护文件。只有用户当前任务明确要求修改输出格式时才允许修改。任何Agent不得因"看起来更清晰""更专业""表格太宽""减少输出""重构方便"而自行改变格式。

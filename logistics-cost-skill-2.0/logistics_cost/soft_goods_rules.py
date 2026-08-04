@@ -42,12 +42,12 @@ def determine_soft_volume_policy(
     if not is_soft:
         return SOFT_VOLUME_POLICY_NOT_SOFT
 
-    # soft_flat: 正常档体积重已超标 → 忽略体积重
+    # soft_flat / soft_hollow: 正常档体积重已超标 → 忽略体积重
     # soft_bulky: 允许体积重参与比较, 不给无条件忽略
     if overall_form == "soft_bulky":
         return SOFT_VOLUME_POLICY_SOFT_BULKY
 
-    # soft_flat / unknown: 统一基于正常档判定
+    # soft_flat / soft_hollow / unknown: 统一基于正常档判定
     if isfinite(ai_net_weight_kg) and ai_net_weight_kg > 0:
         if normal_volume_weight_kg > ai_net_weight_kg * SOFT_VOLUME_INFLATION_RATIO:
             return SOFT_VOLUME_POLICY_SOFT_FLAT

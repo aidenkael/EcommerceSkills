@@ -24,7 +24,7 @@ VALID_WEIGHT_SCOPE = ("net_weight", "packaged_weight", "original_box_weight", "u
 VALID_DIMENSION_SCOPE = ("display_size", "product_size", "shipping_package_size", "unknown")
 
 # 新增: 结构形态与保守档风险来源 (v2 语义重构)
-VALID_OVERALL_FORM = ("soft_flat", "soft_bulky", "flexible_long", "flexible_chain", "semi_structured_hollow", "hard_flat", "hard_3d", "mixed", "unknown")
+VALID_OVERALL_FORM = ("soft_flat", "soft_bulky", "soft_hollow", "flexible_long", "flexible_chain", "semi_structured_hollow", "hard_flat", "hard_3d", "mixed", "unknown")
 VALID_CONSERVATIVE_RISK_BASIS = (
     "known_package_no_uncertainty",
     "weight_uncertainty",
@@ -112,6 +112,10 @@ class AiProductJson:
     product_link: str = ""                                # 1688 链接, 仅保存
     notes: str = ""
 
+    # ---- v3 新增: 材质与结构证据 ----
+    material_family: str = "unknown"                       # pvc/tpu/pu/oxford/canvas/fabric/thin_textile/transparent_soft_plastic/unknown
+    structure_evidence: list[dict] = field(default_factory=list)  # [{fact, source, location}]
+
 
 def validate(ai: dict[str, Any]) -> AiProductJson:
     """校验并规范化 AI JSON。缺失字段填默认值, 非法值替换为 unknown。
@@ -156,10 +160,9 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     else:
         d["modifiers"] = []
 
-    # v2.2 兼容映射: 旧类型 → 新类型
+    # v2.2 兼容映射: 旧类型 → 新类型 (soft_hollow 已成为合法类型, 不再映射)
     _overall_form = d.get("overall_form", "")
     _old_to_new = {
-        "soft_hollow": "semi_structured_hollow",
         "rigid_hollow": "hard_3d",
         "nestable_set": "hard_3d",
         "fragile_protruding": "hard_3d",
@@ -218,6 +221,10 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
     d.setdefault("has_rigid_parts", False)
     d.setdefault("requires_shape_retention", False)
 
+    # v3 新增字段
+    d.setdefault("material_family", "unknown")
+    d.setdefault("structure_evidence", [])
+
     # 构造
     return AiProductJson(
         product_type=d["product_type"],
@@ -252,6 +259,8 @@ def validate(ai: dict[str, Any]) -> AiProductJson:
         image_path=d["image_path"],
         product_link=d["product_link"],
         notes=d["notes"],
+        material_family=d["material_family"],
+        structure_evidence=d.get("structure_evidence", []),
     )
 
 
@@ -273,7 +282,7 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
     product_summary = {
         "product_type": ai.product_type,
         "category_type": ai.category,
-        "material": "unknown",
+        "material": ai.material_family or "unknown",
         "rigidity": ai.rigidity,
         "foldability": ai.foldability,
         "compression": ai.compressibility,
@@ -291,6 +300,8 @@ def to_estimate_inputs(ai: AiProductJson) -> tuple[dict, list[dict], dict, dict]
         "confidence": ai.confidence,
         "product_link": ai.product_link,
         "quantity_source": ai.quantity_source,
+        "material_family": ai.material_family or "unknown",
+        "structure_evidence": list(ai.structure_evidence) if ai.structure_evidence else [],
     }
 
     # 尺寸证据: raw_text 避免 "包装尺寸" 关键词导致被强制推断为 packaged_size

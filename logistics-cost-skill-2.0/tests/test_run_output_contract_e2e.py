@@ -258,3 +258,89 @@ class TestDebugMode:
         assert "PVC-COSMETIC-BAG-001" in r.stderr
         # stdout 仍符合合同
         assert "```" not in r.stdout
+
+
+class TestBlindSimilarTransparentBag:
+    """相似透明软包盲测 — 不满足精确标题/SKU → 不走精确校准 → 走通用PVC规则"""
+
+    def test_no_exact_calibration_hit(self):
+        """不得命中精确案例。"""
+        envelope = {
+            "mode": "head_only",
+            "product_display": {
+                "title": "其他品牌透明PVC化妆包收纳袋",
+                "selected_sku": "大号透明包",
+                "quantity": 1,
+                "unit": "件",
+                "normal_packaging": "袋装",
+                "conservative_packaging": "袋装",
+                "confidence": "medium",
+            },
+            "ai": {
+                "product_type": "transparent_pvc_cosmetic_bag",
+                "category": "general",
+                "rigidity": "soft",
+                "foldability": "good",
+                "compressibility": "good",
+                "overall_form": "unknown",
+                "material_family": "pvc",
+                "dimension_scope": "display_size",
+                "modifiers": ["hollow"],
+                "ai_net_weight_kg": 0.16,
+                "ai_package_size_cm": [22, 18, 8],
+                "ai_package_weight_kg": 0.18,
+                "conservative_package_size_cm": [23, 19, 9],
+                "conservative_package_weight_kg": 0.2,
+                "confidence": "medium",
+                "folding_action": "折叠压扁",
+                "compression_action": "轻度压缩",
+            },
+        }
+        r = _run_envelope(envelope)
+        assert r.returncode == 0, f"stderr={r.stderr}"
+        # 不得使用 8~20cm 展示厚度直接计费
+        output = r.stdout
+        # 检查义乌正常行的计费重，应远低于 22×18×8/8000 = 0.396kg
+        lines = output.split("\n")
+        yw_normal = [l for l in lines if l.startswith("| 义乌正常 |")]
+        if yw_normal:
+            cols = [c.strip() for c in yw_normal[0].split("|")]
+            cw_g = int(cols[4])
+            assert cw_g < 300, f"Chargeable weight {cw_g}g too high, should not use display thickness"
+
+    def test_not_using_semi_rigid_bypass(self):
+        """不得通过semi_rigid绕过异常。"""
+        envelope = {
+            "mode": "head_only",
+            "product_display": {
+                "title": "其他品牌透明PVC化妆包收纳袋",
+                "selected_sku": "大号透明包",
+                "quantity": 1,
+                "unit": "件",
+                "normal_packaging": "袋装",
+                "conservative_packaging": "袋装",
+                "confidence": "medium",
+            },
+            "ai": {
+                "product_type": "transparent_pvc_cosmetic_bag",
+                "category": "general",
+                "rigidity": "soft",
+                "foldability": "good",
+                "compressibility": "good",
+                "overall_form": "unknown",
+                "material_family": "pvc",
+                "modifiers": ["hollow"],
+                "ai_net_weight_kg": 0.16,
+                "ai_package_size_cm": [22, 18, 8],
+                "ai_package_weight_kg": 0.18,
+                "conservative_package_size_cm": [23, 19, 9],
+                "conservative_package_weight_kg": 0.2,
+                "confidence": "medium",
+                "folding_action": "折叠压扁",
+                "compression_action": "轻度压缩",
+            },
+        }
+        r = _run_envelope(envelope)
+        assert r.returncode == 0
+        # 输出不应出现 semi_rigid
+        assert "semi_rigid" not in r.stdout

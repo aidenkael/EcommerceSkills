@@ -19,6 +19,7 @@ from logistics_cost.weight_rules import build_user_weight
 from logistics_cost.output_renderer import render_head_only, render_profit
 from logistics_cost.calibration_resolver import resolve_exact_calibration, apply_calibration_override
 from logistics_cost.output_contract_guard import validate_rendered_output, OutputContractViolation
+from logistics_cost.packaging_arbitrator import arbitrate_packaging_candidate
 
 
 def _compact_output(result: dict) -> dict:
@@ -120,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
         calibration_hit = resolve_exact_calibration(title, sku, quantity)
         if calibration_hit:
             ai_data = apply_calibration_override(dict(ai_data), calibration_hit)
+            ai_data = arbitrate_packaging_candidate(ai_data, exact_calibration_applied=True)
+        else:
+            ai_data = arbitrate_packaging_candidate(dict(ai_data), exact_calibration_applied=False)
 
     try:
         ai = validate(ai_data)
