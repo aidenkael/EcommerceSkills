@@ -1,20 +1,22 @@
-"""确定性按成本利润率计算 — 双售价模型 (OUTPUT_CONTRACT 2026-08-04-v1)。
+"""确定性按成本利润率计算 — 双售价模型 (OUTPUT_CONTRACT 2026-08-04-v2)。
 
 公式：
   国内成本 = 采购价 + 国内运费
   核算成本 C = 国内成本 + 最低总头程 + 尾程人民币
   目标利润 P = C × 目标利润率（按成本）
+  r = 汇率, t = 目标利润率, d = 活动降价率, S = SHEIN补贴USD, T = 29 USD
+
+  活动后售价（含补贴利润）：
+    候选 = C × (1+t) ÷ r
+    如果候选 < T: 活动后补贴 = S, 活动后售价USD = 候选 - S
+    否则:           活动后补贴 = 0, 活动后售价USD = 候选
+    活动后利润RMB = 活动后售价USD×r + 活动后补贴USD×r - C  (= C×t)
 
   无活动售价：
-    无活动售价人民币 = C + P
-    无活动售价USD = 无活动售价人民币 ÷ 汇率
-    SHEIN补贴：售价 < $29 时补贴 $2.99, 否则 0
-    无活动利润RMB = 无活动售价USD×汇率 + 补贴USD×汇率 - C
+    无活动售价USD = 活动后售价USD ÷ (1-d)
+    独立判断补贴（未舍入值 < T 时生效）
 
-  活动后售价：
-    活动后售价USD = 无活动售价USD × (1 - 活动预留率)
-    SHEIN补贴：售价 < $29 时补贴 $2.99, 否则 0
-    活动后利润RMB = 活动后售价USD×汇率 + 补贴USD×汇率 - C
+  无活动利润RMB = 无活动售价USD×r + 无活动补贴USD×r - C
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ def calculate_profit(
     target_profit_markup_percent: float,
     activity_reserve_percent: float = 0.0,
 ) -> dict[str, Any]:
-    """双售价利润模型。
+    """双售价利润模型 (v2: 活动后利润包含补贴, 目标利润含补贴收入)。
 
     Args:
         product_cost_rmb: 商品采购成本 (¥)
@@ -77,7 +79,10 @@ def calculate_profit(
             domestic_cost_rmb, total_head_cost_rmb, tail_cost_rmb,
             total_cost_rmb, target_profit_rmb,
             no_activity_price_usd, no_activity_subsidy_usd, no_activity_profit_rmb,
+            no_activity_subsidy_applied,
             activity_price_usd, activity_subsidy_usd, activity_profit_rmb,
+            activity_subsidy_applied,
+            show_hint,
         }
     """
     pc = _positive(product_cost_rmb, "product_cost_rmb")
@@ -92,25 +97,35 @@ def calculate_profit(
         raise ValueError("活动预留率不能 >= 100%")
 
     subsidy_cfg = _get_shein_subsidy_config()
+    S = subsidy_cfg["amount_usd"]
+    T = subsidy_cfg["price_threshold_usd"]
 
     domestic_cost = round(pc + df, 2)
     C = domestic_cost + hc + tc
     P = C * markup_pct
 
-    # 无活动售价
-    no_activity_price_rmb = C + P
-    no_activity_price_usd = no_activity_price_rmb / rate
-    no_activity_subsidy_usd = _apply_subsidy(no_activity_price_usd, subsidy_cfg)
-    no_activity_profit_rmb = (
-        no_activity_price_usd * rate + no_activity_subsidy_usd * rate - C
-    )
+    # ---- 活动后售价 (含补贴) ----
+    # 候选 = C × (1+t) ÷ r  →  若需要补贴则售价 = 候选 - S
+    candidate = C * (1.0 + markup_pct) / rate
+    activity_subsidy_usd = _apply_subsidy(candidate, subsidy_cfg)
+    activity_price_usd = candidate - activity_subsidy_usd
 
-    # 活动后售价
-    activity_price_usd = no_activity_price_usd * (1.0 - reserve_pct)
-    activity_subsidy_usd = _apply_subsidy(activity_price_usd, subsidy_cfg)
-    activity_profit_rmb = (
-        activity_price_usd * rate + activity_subsidy_usd * rate - C
-    )
+    # ---- 无活动售价 = 活动后售价 ÷ (1-d) ----
+    no_activity_price_usd = activity_price_usd / (1.0 - reserve_pct)
+
+    # ---- 独立判断无活动补贴 ----
+    no_activity_subsidy_usd = _apply_subsidy(no_activity_price_usd, subsidy_cfg)
+
+    # ---- 利润计算 ----
+    activity_profit_rmb = activity_price_usd * rate + activity_subsidy_usd * rate - C
+    no_activity_profit_rmb = no_activity_price_usd * rate + no_activity_subsidy_usd * rate - C
+
+    # ---- 补贴状态标记 ----
+    no_activity_subsidy_applied = bool(no_activity_subsidy_usd > 0)
+    activity_subsidy_applied = bool(activity_subsidy_usd > 0)
+
+    # 提示条件: 无活动无补贴 AND 活动后命中补贴
+    show_hint = (not no_activity_subsidy_applied) and activity_subsidy_applied
 
     return {
         "domestic_cost_rmb": round(domestic_cost, 2),
@@ -122,7 +137,10 @@ def calculate_profit(
         "no_activity_price_usd": round(no_activity_price_usd, 2),
         "no_activity_subsidy_usd": round(no_activity_subsidy_usd, 2),
         "no_activity_profit_rmb": round(no_activity_profit_rmb, 2),
+        "no_activity_subsidy_applied": no_activity_subsidy_applied,
         "activity_price_usd": round(activity_price_usd, 2),
         "activity_subsidy_usd": round(activity_subsidy_usd, 2),
         "activity_profit_rmb": round(activity_profit_rmb, 2),
+        "activity_subsidy_applied": activity_subsidy_applied,
+        "show_hint": show_hint,
     }

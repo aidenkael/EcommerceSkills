@@ -1,4 +1,4 @@
-"""确定性输出渲染器 — OUTPUT_CONTRACT_VERSION = 2026-08-04-v1
+"""确定性输出渲染器 — OUTPUT_CONTRACT_VERSION = 2026-08-04-v2
 
 提供 render_head_only() 和 render_profit() 两个函数, 返回用于最终用户回复的完整 Markdown 字符串。
 Agent 不得手工拼接表格, 不得在程序输出后改写/总结/解释/增加/删除/调整顺序。
@@ -10,7 +10,7 @@ from typing import Any
 
 from .profit_calculator import calculate_profit
 
-OUTPUT_CONTRACT_VERSION = "2026-08-04-v1"
+OUTPUT_CONTRACT_VERSION = "2026-08-04-v2"
 
 # 四行方案的固定顺序
 _SCENARIO_ORDER = [
@@ -26,13 +26,20 @@ _HEAD_TABLE_HEADER = (
 )
 
 _PROFIT_TABLE_HEADER = (
-    "| 国内成本（¥） | 总头程（¥） | 尾程（¥） | 无活动售价（USD） | 无活动利润（¥） | 活动后售价（USD） | 活动后利润（¥） |\n"
+    "| 国内成本 | 总头程 | 尾程 | 无活动售价 | 无活动利润（补贴状态） | 活动后售价 | 活动后利润（补贴状态） |\n"
     "|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
 )
+
+_GREEN_SPAN_OPEN = '<span style="color:#16a34a">'
+_GREEN_SPAN_CLOSE = '</span>'
 
 
 def _fmt_price(val: float) -> str:
     return f"{val:.2f}"
+
+
+def _fmt_rmb(val: float) -> str:
+    return f"¥{val:.2f}"
 
 
 def _fmt_int(val: float) -> str:
@@ -47,6 +54,13 @@ def _fmt_dims(dims: list[float]) -> str:
     if not dims or len(dims) < 3:
         return "—"
     return "×".join(_fmt_int(d) for d in dims[:3])
+
+
+def _fmt_subsidy_status(subsidy_applied: bool) -> str:
+    """生成补贴状态文本。补贴命中用绿色, 无补贴用普通文字。"""
+    if subsidy_applied:
+        return f"{_GREEN_SPAN_OPEN}补贴命中{_GREEN_SPAN_CLOSE}"
+    return "无补贴"
 
 
 def _fmt_product_summary(display: dict[str, Any]) -> str:
@@ -123,21 +137,26 @@ def _build_profit_table(
     tail_rmb: float,
     profit_result: dict[str, Any],
 ) -> str:
-    """构建一行七列利润表。"""
+    """构建一行七列利润表 (v2: 币种符号在数据单元格, 补贴状态在表头)。"""
     no_activity_price = profit_result.get("no_activity_price_usd", 0)
     no_activity_profit = profit_result.get("no_activity_profit_rmb", 0)
+    no_subsidy_applied = profit_result.get("no_activity_subsidy_applied", False)
     activity_price = profit_result.get("activity_price_usd", 0)
     activity_profit = profit_result.get("activity_profit_rmb", 0)
+    activity_subsidy_applied = profit_result.get("activity_subsidy_applied", False)
+
+    no_status = _fmt_subsidy_status(no_subsidy_applied)
+    act_status = _fmt_subsidy_status(activity_subsidy_applied)
 
     return (
         _PROFIT_TABLE_HEADER + "\n"
-        f"| {_fmt_price(domestic_cost)} "
-        f"| {_fmt_price(lowest_head)} "
-        f"| {_fmt_price(tail_rmb)} "
+        f"| {_fmt_rmb(domestic_cost)} "
+        f"| {_fmt_rmb(lowest_head)} "
+        f"| {_fmt_rmb(tail_rmb)} "
         f"| {_fmt_usd(no_activity_price)} "
-        f"| {_fmt_price(no_activity_profit)} "
+        f"| {_fmt_rmb(no_activity_profit)}（{no_status}） "
         f"| {_fmt_usd(activity_price)} "
-        f"| {_fmt_price(activity_profit)} |"
+        f"| {_fmt_rmb(activity_profit)}（{act_status}） |"
     )
 
 
@@ -170,27 +189,28 @@ def _build_deduction_sentence(
     lowest_scenario: str,
     profit_result: dict[str, Any],
 ) -> str:
-    """生成推算句 (模式1)。"""
+    """生成推算句 (模式1, v2: 补贴状态在表头, 不再在推算句重复)。"""
     if purchase_price is None or domestic_freight is None:
         return "推算：头程已完成；利润部分因采购价或国内运费缺失无法计算。"
 
-    domestic_cost = purchase_price + domestic_freight
     total_cost = profit_result.get("total_cost_rmb", 0)
     no_activity_price = profit_result.get("no_activity_price_usd", 0)
     no_activity_profit = profit_result.get("no_activity_profit_rmb", 0)
     activity_price = profit_result.get("activity_price_usd", 0)
     activity_profit = profit_result.get("activity_profit_rmb", 0)
-    activity_subsidy = profit_result.get("activity_subsidy_usd", 0)
-    no_activity_subsidy = profit_result.get("no_activity_subsidy_usd", 0)
+    show_hint = profit_result.get("show_hint", False)
 
-    subsidy_text = "满足" if activity_subsidy > 0 else "不满足"
-    return (
+    base = (
         f"推算：国内成本为采购价¥{purchase_price}＋国内运费¥{domestic_freight}；"
         f"采用{lowest_scenario}后核算成本为¥{_fmt_price(total_cost)}；"
         f"无活动售价为{_fmt_usd(no_activity_price)}，无活动利润为¥{_fmt_price(no_activity_profit)}；"
-        f"活动后售价为{_fmt_usd(activity_price)}，{subsidy_text}SHEIN补贴条件，"
-        f"活动后利润为¥{_fmt_price(activity_profit)}。"
+        f"活动后售价为{_fmt_usd(activity_price)}，活动后利润为¥{_fmt_price(activity_profit)}。"
     )
+
+    if show_hint:
+        base += "提示：活动后售价低于$29，已计入$2.99补贴。"
+
+    return base
 
 
 def _build_head_deduction_sentence(result: dict[str, Any]) -> str:
@@ -281,8 +301,8 @@ def render_profit(
         profit_table = (
             _PROFIT_TABLE_HEADER + "\n"
             f"| {domestic_cost_str} "
-            f"| {_fmt_price(lowest_head)} "
-            f"| {_fmt_price(tail_rmb)} "
+            f"| {_fmt_rmb(lowest_head)} "
+            f"| {_fmt_rmb(tail_rmb)} "
             f"| 无法计算 "
             f"| 无法计算 "
             f"| 无法计算 "
