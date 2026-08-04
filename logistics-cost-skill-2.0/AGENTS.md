@@ -8,9 +8,18 @@
 
 ## 每商品快速路径
 ```
-确认SKU和数量→一次图片理解→一次紧凑AI JSON→一次run.py --render-markdown调用→renderer直接输出
+确认SKU和数量→一次图片理解→一次精确校准键查询→一次紧凑AI JSON→一次run.py --render-markdown调用→renderer直接输出
 ```
 最多1次图片理解+1次计算。仅异常时允许1次重估。缺参数不阻断。
+
+**精确校准查询规则：**
+
+1. 只查询 `knowledge/calibration_cases.jsonl`（单次本地精确文本查询，不加载全文件）
+2. 查询键：`normalized_title + selected_sku + quantity`
+3. 命中条件：`status=validated` + `usage_scope=exact_product_sku_only` + 标题关键标识一致 + selected_sku完全一致 + quantity完全一致
+4. 命中后直接使用该案例的 `calibrated_estimate_normal/conservative` 包装参数写入AI JSON，结构字段按案例填入
+5. 未命中立即继续现有AI快速估算，不做模糊搜索，不扫描相似案例，不读取其他案例
+6. `pending`/`deprecated` 案例禁止数值参与
 
 ## 证据优先级
 用户明确说明>当前高亮SKU/数量>规格参数>validated档案>通用规则>AI推测。禁止用同页套包/其他颜色覆盖当前单包。
@@ -25,6 +34,7 @@ OUTPUT_CONTRACT.md、output_renderer.py 和黄金快照属于受保护文件。�
 
 ## 日常核算禁止
 写MEMORY/日志、修改AGENTS/SKILL/knowledge/OUTPUT_CONTRACT、保存AI JSON/Markdown、执行Git、联网、访问1688链接。不读全部knowledge/calibration/多个examples/Git历史/测试报告/MEMORY。仅结构签名精确命中时读一个档案。
+- 校准查询例外：允许读 knowledge/calibration_cases.jsonl 做精确键匹配（不加载全文件，不扫描其他行）
 
 ## 性能
 一次图片理解+一次renderer调用，≤40秒。不生成临时JSON文件。

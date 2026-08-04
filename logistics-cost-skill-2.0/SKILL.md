@@ -53,6 +53,18 @@ SHEIN 补贴阈值（<$29 补 $2.99）属于项目规则，不要求用户每次
 利润 = 售价USD×汇率 + 补贴USD×汇率 - C
 ```
 
+## 精确校准键查询（轻量快速路径）
+
+日常核算中，在图片理解之后、AI JSON 构建之前，执行一次精确校准键查询：
+
+1. 只查询 `knowledge/calibration_cases.jsonl`
+2. 查询键：`normalized_title + selected_sku + quantity`
+3. 命中条件：`status=validated` + `usage_scope=exact_product_sku_only` + 标题关键标识一致 + selected_sku完全一致 + quantity完全一致
+4. 命中后直接使用该案例的 `calibrated_estimate_normal/conservative` 包装参数填入AI JSON
+5. 结构字段按案例中 `runtime_overall_form` / `runtime_modifiers` / `shape_retention_scope` / `foldability` / `compressibility` / `requires_shape_retention` 等填入
+6. 不得因运行时形态（如 `soft_bulky`）覆盖精确校准参数
+7. 未命中立即继续现有AI快速估算，不做模糊搜索，不扫描其他案例
+
 ## AI JSON 格式
 
 ```json
