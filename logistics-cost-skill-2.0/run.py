@@ -20,6 +20,8 @@ from logistics_cost.output_renderer import render_head_only, render_profit
 from logistics_cost.calibration_resolver import resolve_exact_calibration, apply_calibration_override
 from logistics_cost.output_contract_guard import validate_rendered_output, OutputContractViolation
 from logistics_cost.packaging_arbitrator import arbitrate_packaging_candidate
+from logistics_cost.session_preferences import get_mode as get_saved_mode, set_mode as save_mode, update_profit_params, get_profit_params as get_saved_profit_params
+from logistics_cost.request_freshness_guard import validate_request_freshness, RequestFreshnessViolation
 
 
 def _compact_output(result: dict) -> dict:
@@ -105,17 +107,43 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # ---- 信封模式解包 ----
-    mode = raw.get("mode", "head_only") if isinstance(raw, dict) else "head_only"
+    envelope_mode = raw.get("mode") if isinstance(raw, dict) else None
     product_display = raw.get("product_display", {}) if isinstance(raw, dict) else {}
     profit_parameters = raw.get("profit_parameters") if isinstance(raw, dict) else None
-    # AI JSON 可能在信封的 "ai" 字段或根对象本身
     ai_data = raw.get("ai", raw) if isinstance(raw, dict) else raw
+
+    # ---- 模式解析（信封 > 已保存 > 默认 head_only） ----
+    if envelope_mode and envelope_mode in ("head_only", "profit"):
+        mode = envelope_mode
+        save_mode(mode)
+    else:
+        saved = get_saved_mode()
+        mode = saved or "head_only"
+
+    # ---- 利润参数（信封提供则保存并优先使用，否则用已保存） ----
+    if profit_parameters:
+        update_profit_params(profit_parameters)
+    elif mode == "profit":
+        saved_params = get_saved_profit_params()
+        if any(v is not None for v in saved_params.values()):
+            profit_parameters = saved_params
 
     # ---- 精确校准查询 ----
     title = _resolve_title(product_display, ai_data)
     sku = _resolve_sku(product_display, ai_data)
     quantity = _resolve_quantity(product_display, ai_data)
     calibration_hit = None
+
+    # ---- 商品身份绑定 ----
+    import hashlib, re as _re, time as _time
+    _ts = str(int(_time.time() * 1000))
+    request_id = f"req-{_ts[-10:]}"
+    _raw_sig = "|".join([
+        _re.sub(r"\s+", " ", title.lower().strip()),
+        _re.sub(r"\s+", " ", sku.lower().strip()),
+        str(quantity),
+    ])
+    product_signature = hashlib.sha256(_raw_sig.encode("utf-8")).hexdigest()[:16]
 
     if sku and title:
         calibration_hit = resolve_exact_calibration(title, sku, quantity)
@@ -146,6 +174,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     result["ai_meta"] = ai_meta
+
+    # ---- 绑定请求身份到结果 ----
+    result["_request_id"] = request_id
+    result["_product_signature"] = product_signature
+    result["_title"] = title
+    result["_selected_sku"] = sku
+    result["_quantity"] = quantity
 
     # 校准元数据（仅 --debug 时输出到 stderr）
     if calibration_hit:
@@ -186,6 +221,24 @@ def main(argv: list[str] | None = None) -> int:
         try:
             validate_rendered_output(output_md, mode)
         except OutputContractViolation as exc:
+            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+
+        # ---- 请求新鲜度校验 ----
+        try:
+            validate_request_freshness(
+                request_id=request_id,
+                product_signature=product_signature,
+                title=title,
+                selected_sku=sku,
+                quantity=quantity,
+                result_request_id=result.get("_request_id", ""),
+                result_signature=result.get("_product_signature", ""),
+                result_title=result.get("_title", ""),
+                result_sku=result.get("_selected_sku", ""),
+                result_quantity=result.get("_quantity", 0),
+            )
+        except RequestFreshnessViolation as exc:
             print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
             return 2
 
