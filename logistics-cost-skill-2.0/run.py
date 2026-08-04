@@ -121,9 +121,11 @@ def main(argv: list[str] | None = None) -> int:
         calibration_hit = resolve_exact_calibration(title, sku, quantity)
         if calibration_hit:
             ai_data = apply_calibration_override(dict(ai_data), calibration_hit)
-            ai_data = arbitrate_packaging_candidate(ai_data, exact_calibration_applied=True)
-        else:
-            ai_data = arbitrate_packaging_candidate(dict(ai_data), exact_calibration_applied=False)
+
+    ai_data = arbitrate_packaging_candidate(
+        ai_data,
+        exact_calibration_applied=bool(calibration_hit),
+    )
 
     try:
         ai = validate(ai_data)

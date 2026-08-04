@@ -1,11 +1,13 @@
 """包装候选仲裁 — 证据驱动的字段级修复 (不整份重写 AI JSON)。
 
 流程：
-  原始AI JSON → 字段标准化 → 证据门槛 → 结构分类纠正
+  深拷贝输入 → 字段合法化 → exact_calibration_applied? 立即返回
+  → 证据门槛 → 结构分类纠正
   → 选择最多1条聚合规则 → 按字段修复正常档 → 按风险生成保守档 → 返回
 """
 from __future__ import annotations
 
+import copy
 import json
 import math
 import re
@@ -14,8 +16,30 @@ from typing import Any
 
 # ---------- 硬结构强证据名单 ----------
 
-HARD_STRUCTURE_FACTS = {"hard_bottom", "rigid_frame", "rigid_lining"}
-WEAK_STRUCTURE_ITEMS = {"拉链", "提手", "肩带", "金属扣", "金属拉链头", "装饰牌", "包边", "普通五金"}
+HARD_STRUCTURE_FACTS = {
+    "hard_bottom",
+    "rigid_frame",
+    "rigid_lining",
+    "rigid_body",
+    "hard_shell",
+    "solid_hard_material",
+    "rigid_container",
+    "fragile_rigid_body",
+}
+
+PROTRUSION_FACTS = {
+    "rigid_protrusion",
+    "non_detachable_hard_protrusion",
+}
+
+# 非包类硬类型 — 不因缺少包类硬底/硬框证据自动降级
+_NON_BAG_HARD_FORMS = {"hard_flat", "hard_3d"}
+
+# 确保不因误判降级的非包类硬商品特征
+_SPECIALIZED_PROTECTED_TYPES = {
+    "hard_shell_case", "acrylic_box", "ceramic_cup", "glass_cup", "glass_vase",
+    "hard_plastic_ornament", "rigid_cosmetic_mirror", "hard_container",
+}
 
 # ---------- 材质标准化映射 ----------
 
@@ -43,6 +67,16 @@ def _min_axis(dims: list[float]) -> int:
     return vals.index(min(vals))
 
 
+def _is_strong_source(source: str, location: str) -> bool:
+    """来源是否为强证据。"""
+    s = str(source or "").strip()
+    if s in ("user_confirmed", "merchant_text"):
+        return True
+    if s == "image_visible" and str(location or "").strip():
+        return True
+    return False
+
+
 def _has_strong_hard_evidence(ai_data: dict) -> bool:
     """检查是否有硬结构强证据。"""
     evidence_list = ai_data.get("structure_evidence", [])
@@ -50,24 +84,39 @@ def _has_strong_hard_evidence(ai_data: dict) -> bool:
         return False
     for ev in evidence_list:
         fact = str(ev.get("fact", "")).strip()
-        source = str(ev.get("source", "")).strip()
-        location = str(ev.get("location", "")).strip()
-        if fact in HARD_STRUCTURE_FACTS:
-            if source in ("user_confirmed", "merchant_text"):
-                return True
-            if source == "image_visible" and location:
-                return True
+        if fact in HARD_STRUCTURE_FACTS and _is_strong_source(
+            ev.get("source", ""), ev.get("location", "")
+        ):
+            return True
     return False
 
 
 def _has_strong_protrusion_evidence(ai_data: dict) -> bool:
-    """检查是否有硬质突出件强证据。"""
+    """检查是否有硬质突出件强证据（仅 PROTRUSION_FACTS 事实）。"""
     evidence_list = ai_data.get("structure_evidence", [])
     if not isinstance(evidence_list, list):
-        return not all(ai_data.get(key) in ("soft", "none", False, "") for key in ("rigidity",))
+        return False
     for ev in evidence_list:
         fact = str(ev.get("fact", "")).strip()
-        if fact not in HARD_STRUCTURE_FACTS and ev.get("source") in ("user_confirmed", "merchant_text"):
+        if fact in PROTRUSION_FACTS and _is_strong_source(
+            ev.get("source", ""), ev.get("location", "")
+        ):
+            return True
+    return False
+
+
+def _is_non_bag_hard_commodity(d: dict) -> bool:
+    """检查是否为非包类硬商品（不因缺少包类证据降级）。"""
+    cat = d.get("category", "general")
+    form = d.get("overall_form", "")
+    rig = d.get("rigidity", "")
+    # 非包 + hard_flat/hard_3d + hard → 不降级
+    if cat != "bag" and form in _NON_BAG_HARD_FORMS and rig == "hard":
+        return True
+    # 特殊保护类型
+    pt = _normalize(d.get("product_type", ""))
+    for prot in _SPECIALIZED_PROTECTED_TYPES:
+        if prot in pt:
             return True
     return False
 
@@ -94,19 +143,23 @@ def arbitrate_packaging_candidate(
 
     Args:
         ai_data: 原始 AI JSON
-        exact_calibration_applied: 是否已命中精确校准（命中时只做字段合法化）
+        exact_calibration_applied: 是否已命中精确校准（命中时只做字段合法化后立即返回）
         rules_path: 聚合规则文件路径
 
     Returns:
-        修复后的新 dict
+        修复后的新 dict（深拷贝，不污染输入）
     """
     if ai_data is None:
         return {}
 
-    d = dict(ai_data)  # 不污染输入
+    d = copy.deepcopy(ai_data)
 
-    # ---- 1. 字段标准化 ----
-    _standardize_fields(d)
+    # ---- 1. 字段合法化（无损） ----
+    _sanitize_fields(d)
+
+    # ---- 精确校准命中时, 只做合法化立即返回 ----
+    if exact_calibration_applied:
+        return d
 
     # ---- 2. 证据门槛检查 ----
     _evidence_gate(d)
@@ -114,36 +167,54 @@ def arbitrate_packaging_candidate(
     # ---- 3. 结构分类纠正 ----
     _correct_structure_classification(d)
 
-    # 精确校准已应用时，不再应用通用聚合规则
-    if exact_calibration_applied:
-        return d
-
     # ---- 4. 加载规则并匹配 ----
     rules = _load_rules(rules_path)
     matched_rule = _match_rule(d, rules)
     if matched_rule is None:
         return d
 
-    # ---- 5. 按规则修复正常档 ----
+    # ---- 5. 按规则修复 ----
     d = _apply_rule_action(d, matched_rule)
 
     return d
 
 
-def _standardize_fields(d: dict) -> None:
-    """标准化字段默认值。"""
-    if "material_family" not in d or d.get("material_family") == "unknown":
-        raw = d.get("material_family") or d.get("material") or d.get("notes", "") or ""
-        if isinstance(raw, str) and raw and raw != "unknown":
+def _sanitize_fields(d: dict) -> None:
+    """无损字段合法化：只补默认值/清理空白/材质标准化，不改变已有有效值。"""
+    mf = d.get("material_family")
+    if not mf or mf == "unknown":
+        # 仅从显式 material 字段推断，不从 notes 中提取（避免误匹配）
+        raw = str(d.get("material", "") or "")
+        if raw and raw != "unknown":
             d["material_family"] = _normalize_material(raw)
-        else:
-            d.setdefault("material_family", "unknown")
 
+    d.setdefault("material_family", "unknown")
     d.setdefault("structure_evidence", [])
+
+    # 补齐缺失列表/字符串
+    for key in ("foldable_parts", "detachable_parts", "modifiers"):
+        if key not in d or d[key] is None:
+            d[key] = []
+
+    d.setdefault("packaging_method", "OPP袋")
+    d.setdefault("folding_action", "不折叠")
+    d.setdefault("compression_action", "不压缩")
+    d.setdefault("overall_form", "unknown")
 
 
 def _evidence_gate(d: dict) -> None:
-    """硬结构证据门槛：无强证据的硬结构声明降级。"""
+    """硬结构证据门槛：无强证据的硬结构声明降级（非包类硬商品保护）。
+
+    material_family=unknown 时不做证据门槛检查，保持向后兼容未标注材质的旧 AI JSON。
+    """
+    # 材质未知时跳过证据门槛，保持旧 AI JSON 兼容性
+    if d.get("material_family") == "unknown":
+        return
+
+    # 非包类硬壳/硬质商品不降级
+    if _is_non_bag_hard_commodity(d):
+        return
+
     has_strong = _has_strong_hard_evidence(d)
 
     rigidity = d.get("rigidity", "")
@@ -173,16 +244,31 @@ def _evidence_gate(d: dict) -> None:
 
 
 def _correct_structure_classification(d: dict) -> None:
-    """纠正结构分类：soft_hollow 类型使用软品逻辑。"""
-    if d.get("overall_form") == "soft_hollow":
-        if d.get("rigidity") not in ("soft",):
-            d["rigidity"] = "soft"
-        d["has_rigid_parts"] = False
-        d["requires_shape_retention"] = False
-        d["shape_retention_scope"] = "none"
-        d.setdefault("modifiers", [])
-        if "hollow" not in d["modifiers"]:
-            d["modifiers"] = list(d["modifiers"]) + ["hollow"]
+    """纠正结构分类：soft_hollow 处理硬结构证据冲突。"""
+    if d.get("overall_form") != "soft_hollow":
+        return
+
+    has_strong = _has_strong_hard_evidence(d)
+    is_bag = d.get("category") == "bag"
+    d.setdefault("modifiers", [])
+    if "hollow" not in d["modifiers"]:
+        d["modifiers"] = list(d["modifiers"]) + ["hollow"]
+
+    if has_strong and is_bag:
+        # 有硬底/硬框/硬衬强证据 + 包类 → 升级为半结构化
+        d["overall_form"] = "semi_structured_hollow"
+        d["rigidity"] = "semi_rigid"
+        d["has_rigid_parts"] = True
+        # 保留用户设置的 shape_retention_scope，不强制设为 whole
+        if d.get("shape_retention_scope", "none") == "none":
+            d["shape_retention_scope"] = "body"
+        return
+
+    # 无强证据：标准软品行为
+    d["rigidity"] = "soft"
+    d["has_rigid_parts"] = False
+    d["requires_shape_retention"] = False
+    d["shape_retention_scope"] = "none"
 
 
 def _load_rules(path: Path | None) -> list[dict]:
@@ -196,10 +282,8 @@ def _load_rules(path: Path | None) -> list[dict]:
 
 
 def _match_rule(d: dict, rules: list[dict]) -> dict | None:
-    """匹配第一条最高优先级规则。"""
     matched = None
     best_priority = -1
-
     for rule in rules:
         m = rule.get("match") or {}
         if not _check_match(d, m):
@@ -208,71 +292,44 @@ def _match_rule(d: dict, rules: list[dict]) -> dict | None:
         if priority > best_priority:
             best_priority = priority
             matched = rule
-
     return matched
 
 
 def _check_match(d: dict, match: dict) -> bool:
-    """检查单条规则的匹配条件。"""
-    # material_family
     if "material_family" in match:
-        mf = d.get("material_family", "unknown")
-        allowed = match["material_family"]
-        if mf not in allowed:
+        if d.get("material_family", "unknown") not in match["material_family"]:
             return False
-
-    # category
     if "category" in match:
-        cat = d.get("category", "general")
-        if cat not in match["category"]:
+        if d.get("category", "general") not in match["category"]:
             return False
-
-    # rigidity
     if "rigidity" in match:
-        rig = d.get("rigidity", "soft")
-        if rig not in match["rigidity"]:
+        if d.get("rigidity", "soft") not in match["rigidity"]:
             return False
-
-    # foldability
     if "foldability" in match:
-        fold = d.get("foldability", "unknown")
-        if fold not in match["foldability"]:
+        if d.get("foldability", "unknown") not in match["foldability"]:
             return False
-
-    # no_strong_hard_evidence
-    if match.get("no_strong_hard_evidence", False):
-        if _has_strong_hard_evidence(d):
-            return False
-
-    # has_strong_hard_evidence
-    if match.get("has_strong_hard_evidence", False):
-        if not _has_strong_hard_evidence(d):
-            return False
-
-    # has_strong_protrusion_evidence
-    if match.get("has_strong_protrusion_evidence", False):
-        if not _has_strong_protrusion_evidence(d):
-            return False
-
-    # product_type_keywords
+    if match.get("no_strong_hard_evidence") and _has_strong_hard_evidence(d):
+        return False
+    if match.get("has_strong_hard_evidence") and not _has_strong_hard_evidence(d):
+        return False
+    if match.get("has_strong_protrusion_evidence") and not _has_strong_protrusion_evidence(d):
+        return False
     if "product_type_keywords" in match:
         pt = _normalize(
-            (d.get("product_type") or "") + " " +
-            (d.get("product_title") or "") + " " +
-            (d.get("notes") or "")
+            str(d.get("product_type", "")) + " " +
+            str(d.get("product_title", "")) + " " +
+            str(d.get("notes", ""))
         )
-        keywords = match["product_type_keywords"]
-        if not any(kw.lower() in pt for kw in keywords):
+        if not any(kw.lower() in pt for kw in match["product_type_keywords"]):
             return False
-
     return True
 
 
 def _apply_rule_action(d: dict, rule: dict) -> dict:
-    """应用匹配规则的 action 到 AI JSON。"""
     action = rule.get("action") or {}
-    dims = d.get("ai_package_size_cm", [15, 10, 4])
-    dims_con = d.get("conservative_package_size_cm", list(dims))
+    dim_scope = d.get("dimension_scope", "unknown")
+    dims = list(d.get("ai_package_size_cm", [15, 10, 4]))
+    dims_con = list(d.get("conservative_package_size_cm", dims))
 
     # ---- set_overall_form ----
     if action.get("set_overall_form"):
@@ -280,26 +337,24 @@ def _apply_rule_action(d: dict, rule: dict) -> dict:
 
     # ---- no_display_thickness_as_shipping ----
     if action.get("no_display_thickness_as_shipping"):
-        dims = _fix_thickness_from_display(dims, d, action, is_conservative=False)
-        dims_con = _fix_thickness_from_display(dims_con, d, action, is_conservative=True)
+        if dim_scope == "shipping_package_size":
+            pass  # 三轴全部保持不变
+        else:
+            dims = _fix_thickness_min_axis_only(dims, action, is_conservative=False)
+            dims_con = _fix_thickness_min_axis_only(dims_con, action, is_conservative=True)
+            # 保证保守厚度 >= 正常厚度
+            if dims_con[_min_axis(dims_con)] < dims[_min_axis(dims)]:
+                dims_con[_min_axis(dims_con)] = dims[_min_axis(dims)]
 
     # ---- compress_min_axis_only ----
     elif action.get("compress_min_axis_only"):
-        dims = _compress_min_axis(
-            dims, action, scale_key="min_axis_scale_normal", is_conservative=False
-        )
-        dims_con = _compress_min_axis(
-            dims_con, action, scale_key="min_axis_scale_conservative", is_conservative=True
-        )
+        dims = _compress_min_axis(dims, action, scale_key="min_axis_scale_normal")
+        dims_con = _compress_min_axis(dims_con, action, scale_key="min_axis_scale_conservative")
 
     # ---- no_full_folding ----
     elif action.get("no_full_folding"):
-        dims = _partial_min_axis_fix(
-            dims, action, scale_key="min_axis_scale_normal", is_conservative=False
-        )
-        dims_con = _partial_min_axis_fix(
-            dims_con, action, scale_key="min_axis_scale_conservative", is_conservative=True
-        )
+        dims = _partial_min_axis_fix(dims, action, scale_key="min_axis_scale_normal")
+        dims_con = _partial_min_axis_fix(dims_con, action, scale_key="min_axis_scale_conservative")
 
     # ---- add_min_axis_protection_only ----
     elif action.get("add_min_axis_protection_only"):
@@ -312,23 +367,20 @@ def _apply_rule_action(d: dict, rule: dict) -> dict:
     # ---- 包装方法 ----
     if action.get("normal_packaging_method"):
         d["packaging_method"] = action["normal_packaging_method"]
-
     if action.get("fold_handles"):
         d["folding_action"] = "把手折叠"
     if action.get("store_straps"):
         d["folding_action"] = (d.get("folding_action", "") + "、肩带收纳").strip("、")
-
     if action.get("no_default_hard_box"):
         d["packaging_type"] = "opp_bag"
 
     return d
 
 
-def _fix_thickness_from_display(
-    dims: list[float], d: dict, action: dict, is_conservative: bool
+def _fix_thickness_min_axis_only(
+    dims: list[float], action: dict, is_conservative: bool
 ) -> list[float]:
-    """透明软包：展示厚度不得作运输厚度，用参考比例缩放。"""
-    ref_prod = action.get("reference_product_size_cm", [22, 11, 18])
+    """薄款透明软包：只修最小轴(厚度)，保留两个较大轴。"""
     ref_pkg = (
         action["conservative_reference_package_cm"] if is_conservative
         else action["normal_reference_package_cm"]
@@ -336,24 +388,26 @@ def _fix_thickness_from_display(
     if not ref_pkg or len(ref_pkg) < 3:
         ref_pkg = [10, 10, 3]
 
-    # 按当前体积/参考体积的立方根比例缩放
-    current_vol = dims[0] * dims[1] * dims[2]
-    ref_vol = ref_prod[0] * ref_prod[1] * ref_prod[2]
-    ratio = (current_vol / ref_vol) ** (1 / 3) if ref_vol > 0 else 1.0
+    # 找出两个较大轴和参考的两个较大轴
+    result = list(dims)
+    idx_min = _min_axis(dims)
+    large_axes = [dims[i] for i in range(3) if i != idx_min]
+    ref_large = [ref_pkg[i] for i in range(3) if i != _min_axis(ref_pkg)]
+
+    # 比例基于两个较大轴面积
+    current_area = large_axes[0] * large_axes[1] if len(large_axes) == 2 else dims[0] * dims[1]
+    ref_area = ref_large[0] * ref_large[1] if len(ref_large) == 2 else ref_pkg[0] * ref_pkg[1]
+    ratio = math.sqrt(current_area / ref_area) if ref_area > 0 else 1.0
     ratio = max(action.get("scale_min", 0.55), min(action.get("scale_max", 2.8), ratio))
 
-    new_dims = [
-        max(1, round(ref_pkg[0] * ratio, 1)),
-        max(1, round(ref_pkg[1] * ratio, 1)),
-        max(1, round(ref_pkg[2] * ratio, 1)),
-    ]
-    return new_dims
+    ref_min_axis = ref_pkg[_min_axis(ref_pkg)]
+    result[idx_min] = max(1, round(ref_min_axis * ratio, 1))
+    return result
 
 
 def _compress_min_axis(
-    dims: list[float], action: dict, scale_key: str, is_conservative: bool
+    dims: list[float], action: dict, scale_key: str
 ) -> list[float]:
-    """只压缩最小轴。"""
     idx = _min_axis(dims)
     scale = action.get(scale_key, 0.75)
     min_val = action.get("min_axis_cm", 1.5)
@@ -363,9 +417,8 @@ def _compress_min_axis(
 
 
 def _partial_min_axis_fix(
-    dims: list[float], action: dict, scale_key: str, is_conservative: bool
+    dims: list[float], action: dict, scale_key: str
 ) -> list[float]:
-    """结构型PVC：部分调整最小轴。"""
     idx = _min_axis(dims)
     scale = action.get(scale_key, 0.72)
     min_val = action.get("min_axis_cm", 4.0)
@@ -377,7 +430,6 @@ def _partial_min_axis_fix(
 def _add_protection_min_axis(
     dims: list[float], action: dict, is_conservative: bool
 ) -> list[float]:
-    """硬质突出件：最小轴承增加保护空间。"""
     idx = _min_axis(dims)
     add = action.get("protection_conservative_cm" if is_conservative else "protection_normal_cm", 2.0)
     result = list(dims)
