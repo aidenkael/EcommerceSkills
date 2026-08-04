@@ -3,126 +3,94 @@ name: estimate-logistics-cost
 description: 单件跨境物流头程成本核算。Codex 读取商品图片输出 AI JSON，Python 确定性计算头程运费和利润。
 ---
 
-# 物流成本核算 v2.2
+# 物流成本核算 v2.2 (OUTPUT_CONTRACT 2026-08-04-v1)
 
 ## 交互模式
 
-两种互斥模式：1. 利润核算 / 2. 仅头程。模式仅当前对话有效。
+两种互斥模式：1. 利润核算 / 2. 仅头程。模式仅当前对话有效。新对话第一次核算只输出模式菜单并停止；已选后后续商品直接沿用。利润模式缺参数时一次性询问全部缺失项并停止。
 
-新对话第一次核算：只输出模式菜单并停止，不提前识图或计算。已选模式后后续商品直接沿用。利润模式缺少默认参数时一次性询问全部缺失项。
-
-### 缺失参数自动估算
-缺重量/尺寸/数量不弹窗、不询问。AI根据材质/结构/体积估算，标记confidence=low。数量默认1。仅图片完全无法识别时允许询问。
-
-### 最终结果必须在可见回复
-不依赖过程区。仅头程：1句商品+1张四行七列表+1句推算。利润核算：1句商品+表1+1句参数+表2+1句推算。
-
-### 禁止输出
-小结/临界点/案例引用/模式说明/MEMORY提示/风险段落/内部过程。
+SHEIN 补贴阈值（<$29 补 $2.99）属于项目规则，不要求用户每次输入。
 
 ## 紧凑物理结构签名
 
-每商品选择一个最匹配的基础形态（9选1）：
-
-| 形态 | 不可压缩轴 | 可折/可压 | 正常档 | 保守档 |
-|------|-----------|----------|--------|--------|
-| soft_flat | 无 | 折叠堆叠 | 折叠+袋装 | 仅增厚度 |
-| soft_bulky | 无 | 可压缩 | 适度压+袋 | 较少压缩 |
-| flexible_long | 收拢杆 | 卷绕折叠 | 收拢袋装 | 考虑回弹 |
-| flexible_chain | 无 | 盘绕 | 盘绕袋装 | 增重量 |
-| semi_structured_hollow | 硬底/框 | 把手折/肩带拆/侧围压 | 压缩+袋 | 较少压 |
-| hard_flat | 长/宽 | 不折 | 本体+缓冲厚 | 增保护 |
-| hard_3d | 长/宽/高 | 不折 | 本体+缓冲 | 局部保护 |
-| mixed | 硬部分 | 软部分折压 | 软压缩+硬保持 | 软松+硬多保 |
-| unknown | 保守不折 | 回退 | 保守+复核 | 与正常相同 |
-
-4个修饰符：nestable/articulated/fragile/hollow。
+每商品选择一个最匹配的基础形态（9 选 1）：soft_flat / soft_bulky / flexible_long / flexible_chain / semi_structured_hollow / hard_flat / hard_3d / mixed / unknown。4 个修饰符：nestable / articulated / fragile / hollow。
 
 ## 组件级字段
 
-`rigid_body_size_cm`：运输时不可缩小的主体最小外廓。`shape_retention_scope`：body(主体保型)/whole(整件不可折)/none。`foldable_parts`/`detachable_parts`：可折/可拆部件列表。
+`rigid_body_size_cm`：运输时不可缩小的主体最小外廓。`shape_retention_scope`：body（主体保型）/ whole（整件不可折）/ none。`foldable_parts` / `detachable_parts`：可折/可拆部件列表。
 
-半结构化包可：主体保型+把手折叠+肩带收纳+防尘袋+局部五金保护，不强制硬纸盒。
-
-## AI JSON 格式
-
-```json
-{
-  "product_type": "mid_calf_socks",
-  "quantity": 1,
-  "overall_form": "soft_flat",
-  "shape_retention_scope": "none",
-  "rigid_body_size_cm": [15, 10, 2],
-  "foldable_parts": [],
-  "detachable_parts": [],
-  "modifiers": [],
-  "ai_net_weight_kg": 0.08,
-  "ai_package_size_cm": [15, 10, 4],
-  "ai_package_weight_kg": 0.09,
-  "conservative_package_size_cm": [15, 10, 5],
-  "conservative_package_weight_kg": 0.10,
-  "conservative_risk_basis": "thickness_uncertainty",
-  "confidence": "medium",
-  "reasoning": "..."
-}
-```
-
-`ai_package_size_cm`/`conservative_package_size_cm` = 已完成折叠/收纳/压缩/包装后的运输外廓。
+半结构化包可：主体保型 + 把手折叠 + 肩带收纳 + 防尘袋 + 局部五金保护，不强制硬纸盒。
 
 ## 正常档与保守档
 
-**正常档：** 最可能普通代发包装。合理折叠/收纳/压缩。
-**保守档：** 合理偏高成本场景。只调整不确定因素，不机械放大。
+**正常档：** 最可能普通代发包装。合理折叠/收纳/压缩。把手折叠、肩带收纳、主体适度保持、袋装或局部保护。
 
-## 货代费率
+**保守档：** 合理偏高成本场景。仍合理折叠把手、较少压缩、增加局部五金保护。只调整不确定因素，不机械放大。
+
+## 货代费率与公式
 
 | 货代 | 单价 | 固定费 |
 |---|---|---|
 | 深圳 | 80 元/kg | 10 元 |
 | 义乌 | 100 元/kg | 6 元 |
 
-体积重=长×宽×高÷8000，计费重=max(实重,体积重)。
-
-## 利润计算
-
 ```
-C = 商品成本+国内运费+总头程+尾程
-P = C × 目标利润率(按成本)
-售价 = (C+P)÷(1-活动预留%)  [无补贴]
-售价 = (C+P)÷(1+补贴%-活动预留%)  [售价比例补贴]
-售价 = (C+P-固定补贴)÷(1-活动预留%)  [固定补贴]
+体积重 = 长×宽×高(cm) ÷ 8000
+计费重 = max(包装后重量, 体积重)
+总头程 = 计费重 × 单价 + 固定费
 ```
 
-## 固定输出表格
+四行方案固定顺序：义乌正常 / 义乌保守 / 深圳正常 / 深圳保守。
 
-### 仅头程
+## 双售价利润模型 (模式1)
 
-| 方案 | 包装尺寸(cm) | 包装后重量(g) | 计费重(g) | 纯头程(¥) | 固定费(¥) | 总头程(¥) |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 义乌正常 | ... | ... | ... | ... | ... | ... |
-| 义乌保守 | ... | ... | ... | ... | ... | ... |
-| 深圳正常 | ... | ... | ... | ... | ... | ... |
-| 深圳保守 | ... | ... | ... | ... | ... | ... |
+```
+国内成本 = 采购价 + 国内运费
+核算成本 C = 国内成本 + 最低总头程 + 尾程RMB
+无活动售价USD = (C × (1+利润率)) ÷ 汇率
+活动后售价USD = 无活动售价USD × (1-活动预留率)
+补贴：售价<$29 时 +$2.99（按未舍入值判断）
+利润 = 售价USD×汇率 + 补贴USD×汇率 - C
+```
 
-### 利润核算（表1同上，表2如下）
+## AI JSON 格式
 
-| 方案 | 商品+国内运费(¥) | 总头程(¥) | 尾程(¥) | 总成本(¥) | 预计利润(¥) |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| 义乌正常 | ... | ... | ... | ... | ... |
-| ... | ... | ... | ... | ... | ... |
+```json
+{
+  "product_type": "...", "quantity": 1,
+  "overall_form": "semi_structured_hollow",
+  "rigid_body_size_cm": [21, 28.5, 12],
+  "foldable_parts": [{"name": "把手", "action": "折叠", ...}],
+  "detachable_parts": [{"name": "肩带", "action": "拆卸收纳", ...}],
+  "ai_net_weight_kg": 0.4, "ai_package_size_cm": [22, 30, 13],
+  "ai_package_weight_kg": 0.43,
+  "conservative_package_size_cm": [23, 31, 14],
+  "conservative_package_weight_kg": 0.48,
+  "confidence": "medium", "reasoning": "..."
+}
+```
+
+`ai_package_size_cm` / `conservative_package_size_cm` = 已完成折叠/收纳/压缩/包装后的运输外廓。
+
+## 输出格式
+
+完整输出合同见 `OUTPUT_CONTRACT.md`，程序模板见 `logistics_cost/output_renderer.py`。
+
+- 仅头程：商品摘要 → 四行七列表 → 推算句
+- 利润核算：商品摘要 → 四行七列表 → 参数摘要 → 一行七列表 → 推算句
+- 禁止：小结 / 临界点 / 案例引用 / 模式说明 / MEMORY 提示 / 风险段落 / 内部过程
 
 ## 日常运行限制
 
-- 不读knowledge/全部规则
-- 不扫描案例库
-- 不生成临时AI JSON文件
-- 不写MEMORY/日志
-- 不执行Git
-- 推荐只在推算一句中表达
+- 不读 knowledge/全部规则、不扫描案例库
+- 不生成临时 AI JSON 文件、不写 MEMORY/日志、不执行 Git
+- 默认读取：AGENTS.md / SKILL.md
+- 日常最终回复 = `output_renderer` 返回值，Agent 不手工拼接表格
 
 ## CLI
 
 ```bash
 python run.py --ai-json PATH [--compact]
-echo '$JSON' | python run.py --stdin [--compact]
+echo '$JSON' | python run.py --stdin [--compact] [--render-markdown]
+echo '$ENVELOPE' | python run.py --stdin --render-markdown
 ```
