@@ -1,5 +1,10 @@
 {
-  "formula_version": "2026-07-head-tail-freight-forwarder-v1",
+  "formula_version": "2026-08-04-output-contract-v1",
+  "shein_subsidy": {
+    "price_threshold_usd": 29.0,
+    "comparison": "lt",
+    "amount_usd": 2.99
+  },
   "packaging_policy_version": "2026-07-realistic-range-packaging-v2",
   "min_head_charge_rmb": 3.0,
   "trusted_weight_no_increment_max_g": 50,

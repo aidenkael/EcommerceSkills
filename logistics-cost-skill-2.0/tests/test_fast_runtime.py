@@ -81,37 +81,42 @@ def test_stdin_compact():
     assert "conservative" in result
 
 
-# 6. 目标利润率按成本计算
+# 6. 目标利润率按成本计算 (v2 双售价模型)
 def test_profit_cost_based():
     from logistics_cost.profit_calculator import calculate_profit
     result = calculate_profit(
         product_cost_rmb=50, total_head_cost_rmb=18,
-        target_profit_markup_percent=20, activity_reserve_percent=15,
-        shein_subsidy_type="none",
+        exchange_rate=6.7716,
+        target_profit_markup_percent=20, activity_reserve_percent=0,
     )
-    assert abs(result["target_profit_rmb"] - 13.6) < 0.1  # (50+18)*0.20 = 13.6
-    assert abs(result["expected_profit_rmb"] - 13.6) < 0.1
+    # C = 50+18+0 = 68, P = 68*0.20 = 13.6
+    assert abs(result["target_profit_rmb"] - 13.6) < 0.1
+    # 活动预留0%时两售价相同
+    assert result["no_activity_price_usd"] == result["activity_price_usd"]
 
 
-# 7. 百分比补贴和固定补贴各一个参数化测试
-def test_subsidy_percent_of_sale():
+# 7. SHEIN 补贴: 售价低于 $29 时补贴 $2.99
+def test_subsidy_below_29():
     from logistics_cost.profit_calculator import calculate_profit
     result = calculate_profit(
-        product_cost_rmb=50, total_head_cost_rmb=20, tail_cost_rmb=50,
-        target_profit_markup_percent=20, activity_reserve_percent=10,
-        shein_subsidy_type="percent_of_sale", shein_subsidy_value=2.99,
+        product_cost_rmb=30, total_head_cost_rmb=20, tail_cost_rmb=45,
+        exchange_rate=6.7716,
+        target_profit_markup_percent=20, activity_reserve_percent=0,
     )
-    assert result["shein_subsidy_amount_rmb"] > 0
+    # C = 95, P = 19, no_activity_usd = 114/6.7716 = 16.83 < 29
+    assert result["no_activity_subsidy_usd"] == 2.99
+    assert result["no_activity_profit_rmb"] > 0
 
 
-def test_subsidy_fixed_cny():
+def test_subsidy_above_29():
     from logistics_cost.profit_calculator import calculate_profit
     result = calculate_profit(
-        product_cost_rmb=50, total_head_cost_rmb=20,
-        target_profit_markup_percent=15,
-        shein_subsidy_type="fixed_cny", shein_subsidy_value=5.0,
+        product_cost_rmb=80, total_head_cost_rmb=50, tail_cost_rmb=50,
+        exchange_rate=6.7716,
+        target_profit_markup_percent=25, activity_reserve_percent=0,
     )
-    assert result["shein_subsidy_amount_rmb"] == 5.0
+    # C = 180, P = 45, no_activity_usd = 225/6.7716 = 33.23 > 29
+    assert result["no_activity_subsidy_usd"] == 0.0
 
 
 # 8. 正常档与保守档费用保持单调
