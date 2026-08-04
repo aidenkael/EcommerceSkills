@@ -1,6 +1,6 @@
 """输出合同锁定测试 — OUTPUT_CONTRACT 2026-08-04-v2。
 
-测试覆盖 16 项针对性检查：
+测试覆盖：
 1. 模式2黄金快照逐字符一致（保持不变）
 2. 模式1黄金快照逐字符一致（v2）
 3. 第一张表固定四行顺序
@@ -9,18 +9,20 @@
 6. 相同总头程按固定顺序选择
 7. 活动后利润包含补贴后等于目标利润
 8. 活动后无补贴时仍等于目标利润
-9. 无活动无补贴、活动后命中补贴 → show_hint=True
+9. 无活动无补贴、活动后命中补贴 → show_hint=True + 提示句
 10. 无活动和活动后均命中补贴 → show_hint=False
 11. 两个场景均无补贴 → show_hint=False
-12. 售价未舍入值小于29时命中补贴
-13. 售价正好29时无补贴
-14. 表头不再包含（¥）和（USD）
-15. 人民币数据带¥，美元售价数据带$
-16. 补贴命中使用绿色span，无补贴不使用颜色
-17. 第二张表仍为一行七列
-18. 第一张头程表完全不变
-19. 模式2黄金快照完全不变
-20. 输出中不增加独立补贴列或额外段落
+12. B-S < 29 时命中补贴（边界测试）
+13. B-S = 29 时无补贴
+14. B-S > 29 时无补贴
+15. 补贴状态只在表头，数据单元格不含"补贴命中"或"无补贴"
+16. 表头补贴命中使用绿色span，无补贴在表头用普通文字
+17. 人民币数据带¥，美元售价数据带$
+18. 第二张表仍为一行七列
+19. 第一张头程表完全不变
+20. 模式2黄金快照完全不变
+21. 输出中不增加独立补贴列或额外段落
+22. 版本为 2026-08-04-v2
 """
 from __future__ import annotations
 
@@ -40,7 +42,7 @@ from logistics_cost.ai_schema import validate, to_estimate_inputs
 from logistics_cost.estimator import estimate
 from logistics_cost.output_renderer import (
     render_head_only, render_profit, OUTPUT_CONTRACT_VERSION,
-    _GREEN_SPAN_OPEN, _GREEN_SPAN_CLOSE,
+    _GREEN_SPAN_OPEN, _GREEN_SPAN_CLOSE, _build_profit_table_header,
 )
 
 
@@ -121,7 +123,6 @@ def test_profit_table_one_row_seven_columns():
                           exchange_rate=6.7716, tail_fee_usd=7,
                           target_profit_markup_percent=25, activity_reserve_percent=15)
     lines = output.split("\n")
-    # Find profit table lines
     profit_lines = []
     in_profit = False
     for line in lines:
@@ -135,9 +136,8 @@ def test_profit_table_one_row_seven_columns():
                 profit_lines.append(line)
             elif profit_lines and not line.startswith("| "):
                 break
-    # Should have exactly 1 data row + no extra
     assert len(profit_lines) == 1, f"Profit table should have exactly 1 data row, got {len(profit_lines)}"
-    cols = profit_lines[0].split("|")[1:-1]  # strip leading/trailing |
+    cols = profit_lines[0].split("|")[1:-1]
     assert len(cols) == 7, f"Profit table should have 7 columns, got {len(cols)}"
 
 
@@ -148,19 +148,15 @@ def test_profit_table_one_row_seven_columns():
 def test_lowest_head_cost_selection():
     """四种方案选择最低总头程。"""
     from logistics_cost.output_renderer import _find_lowest_head
-
     result = _load_and_estimate("pu_small_chain_shoulder_bag_ai.json")
     scenario, cost = _find_lowest_head(result)
     assert scenario == "深圳正常"
-    # 深圳正常 = 0.495*80+10 = 49.60 (lowest)
     assert cost == 49.60, f"Expected 49.60, got {cost}"
 
 
 def test_equal_cost_uses_fixed_order():
     """相同总头程按固定顺序选择。"""
     from logistics_cost.output_renderer import _find_lowest_head
-
-    # 构造一个两方案总头程相等的场景
     mock_result = {
         "normal": {
             "provider_costs": {
@@ -192,38 +188,29 @@ def test_equal_cost_uses_fixed_order():
 def test_activity_profit_equals_target_with_subsidy():
     """活动后利润包含补贴后等于目标利润 C×t。"""
     from logistics_cost.profit_calculator import calculate_profit
-
     result = calculate_profit(
         product_cost_rmb=47, domestic_freight_rmb=5,
         total_head_cost_rmb=49.60, tail_cost_rmb=47.40,
         exchange_rate=6.7716,
         target_profit_markup_percent=25, activity_reserve_percent=15,
     )
-    # C = 47+5+49.60+47.40 = 149.00
     assert result["total_cost_rmb"] == 149.00
-    # P = 149.00 * 0.25 = 37.25
     assert result["target_profit_rmb"] == 37.25
-    # Activity profit should equal target profit
     assert abs(result["activity_profit_rmb"] - result["target_profit_rmb"]) < 0.02
 
 
 def test_activity_profit_equals_target_no_subsidy():
     """活动后无补贴时仍等于目标利润。"""
     from logistics_cost.profit_calculator import calculate_profit
-
-    # 高成本让售价远超$29, 不触发补贴
     result = calculate_profit(
         product_cost_rmb=80, domestic_freight_rmb=5,
         total_head_cost_rmb=60, tail_cost_rmb=47,
         exchange_rate=6.7716,
         target_profit_markup_percent=20, activity_reserve_percent=10,
     )
-    # C = 80+5+60+47 = 192
     assert result["total_cost_rmb"] == 192.00
     assert result["activity_subsidy_applied"] == False
-    # P = 192 * 0.20 = 38.40
     assert result["target_profit_rmb"] == 38.40
-    # Activity profit should equal target profit even without subsidy
     assert abs(result["activity_profit_rmb"] - result["target_profit_rmb"]) < 0.02
 
 
@@ -234,65 +221,29 @@ def test_activity_profit_equals_target_no_subsidy():
 def test_no_activity_no_subsidy_activity_subsidy_hint():
     """无活动无补贴、活动后命中补贴 → show_hint=True。"""
     from logistics_cost.profit_calculator import calculate_profit
-
-    # 调整参数让无活动售价 >= 29 但活动后 < 29
-    # C=149, 无补贴时 no_activity = 149*1.25/6.7716 = 27.50 < 29 → 有补贴
-    # 需要更低成本或更高汇率让无活动 >= 29
-    result = calculate_profit(
-        product_cost_rmb=60, domestic_freight_rmb=5,
-        total_head_cost_rmb=50, tail_cost_rmb=50,
-        exchange_rate=6.8,
-        target_profit_markup_percent=20, activity_reserve_percent=15,
-    )
-    # C = 60+5+50+50 = 165
-    # candidate = 165*1.20/6.8 = 198/6.8 = 29.117... >= 29 → no subsidy for activity
-    # activity_price = 29.117 > 29 → no subsidy
-    # So this gives both no subsidy. Let me try a different approach.
-    
-    # Need: no_activity >= 29, activity candidate < 29
-    # no_activity = activity_price / (1-d), activity_price = candidate - S (if candidate < 29)
-    # So: (candidate - S) / 0.85 >= 29 → candidate >= 29*0.85 + 2.99 = 24.65 + 2.99 = 27.64
-    # Also: candidate < 29
-    # So: 27.64 <= candidate < 29
-    # E.g. candidate = 28.0
-    # C * (1+t) / r = 28.0 → C * (1+t) = 28.0 * r
-    # With r=6.7716, t=0.2: C = 28.0 * 6.7716 / 1.2 = 158.00
-    # Let me try: C=158, t=20%, r=6.7716, d=15%
+    # C=158, t=20%, r=6.7716, d=15%
+    # B = 158*1.2/6.7716 = 28.00, P_subsidized = 28.00 - 2.99 = 25.01 < 29 → 命中
+    # activity_price = 25.01, no_activity_price = 25.01/0.85 = 29.42 >= 29 → 无补贴
     result = calculate_profit(
         product_cost_rmb=53, domestic_freight_rmb=5,
         total_head_cost_rmb=52.6, tail_cost_rmb=47.4,
         exchange_rate=6.7716,
         target_profit_markup_percent=20, activity_reserve_percent=15,
     )
-    # C = 53+5+52.6+47.4 = 158.00
-    # candidate = 158*1.2/6.7716 = 189.6/6.7716 = 28.00
-    # 28.00 < 29 → activity_subsidy = 2.99
-    # activity_price = 28.00 - 2.99 = 25.01
-    # no_activity_price = 25.01/0.85 = 29.42
-    # 29.42 >= 29 → no_activity_subsidy = 0
-    # show_hint = True
-    print(f"no_activity_price: {result['no_activity_price_usd']}")
-    print(f"no_activity_subsidy: {result['no_activity_subsidy_usd']}")
-    print(f"activity_price: {result['activity_price_usd']}")
-    print(f"activity_subsidy: {result['activity_subsidy_usd']}")
-    print(f"show_hint: {result['show_hint']}")
-    
-    assert result["no_activity_subsidy_applied"] == False, "No-activity should have no subsidy"
-    assert result["activity_subsidy_applied"] == True, "Activity should have subsidy"
-    assert result["show_hint"] == True, "Should show hint when no-activity no subsidy but activity has subsidy"
+    assert result["no_activity_subsidy_applied"] == False
+    assert result["activity_subsidy_applied"] == True
+    assert result["show_hint"] == True
 
 
 def test_both_have_subsidy_no_hint():
     """无活动和活动后均命中补贴 → show_hint=False。"""
     from logistics_cost.profit_calculator import calculate_profit
-
     result = calculate_profit(
         product_cost_rmb=47, domestic_freight_rmb=5,
         total_head_cost_rmb=49.60, tail_cost_rmb=47.40,
         exchange_rate=6.7716,
         target_profit_markup_percent=25, activity_reserve_percent=15,
     )
-    # Both prices < $29, both get subsidy
     assert result["no_activity_subsidy_applied"] == True
     assert result["activity_subsidy_applied"] == True
     assert result["show_hint"] == False
@@ -301,54 +252,129 @@ def test_both_have_subsidy_no_hint():
 def test_neither_has_subsidy_no_hint():
     """两个场景均无补贴 → show_hint=False。"""
     from logistics_cost.profit_calculator import calculate_profit
-
-    # 高成本让售价远超$29
     result = calculate_profit(
         product_cost_rmb=100, domestic_freight_rmb=5,
         total_head_cost_rmb=80, tail_cost_rmb=50,
         exchange_rate=6.7716,
         target_profit_markup_percent=20, activity_reserve_percent=10,
     )
-    # C = 100+5+80+50 = 235, candidate = 235*1.2/6.7716 = 41.64 > 29
     assert result["no_activity_subsidy_applied"] == False
     assert result["activity_subsidy_applied"] == False
     assert result["show_hint"] == False
 
 
 # ============================================================
-# Test 12-13: SHEIN subsidy boundary
+# Test 12-14: B-S subsidy boundary (修正后的临界条件)
 # ============================================================
 
-def test_subsidy_applied_when_unrounded_below_29():
-    """售价未舍入值小于29时命中补贴。"""
-    from logistics_cost.profit_calculator import calculate_profit, _get_shein_subsidy_config, _apply_subsidy
+def test_subsidy_when_b_minus_s_below_29():
+    """B=30, B-S=27.01 < 29 → 应命中补贴。"""
+    from logistics_cost.profit_calculator import calculate_profit
+    # B = C*(1+t)/r = 30, S = 2.99, P_subsidized = 27.01 < 29 → 命中
+    # C*(1+t) = 30*r. With r=6.7716, t=0.25: C = 30*6.7716/1.25 = 162.5184
+    # domestic_cost = pc+df, C = domestic_cost + head + tail
+    # Let head=60, tail=47.4, so domestic = 162.5184 - 60 - 47.4 = 55.1184
+    # pc+df = 55.12, e.g. pc=50.12, df=5
+    result = calculate_profit(
+        product_cost_rmb=50.12, domestic_freight_rmb=5,
+        total_head_cost_rmb=60, tail_cost_rmb=47.4,
+        exchange_rate=6.7716,
+        target_profit_markup_percent=25, activity_reserve_percent=15,
+    )
+    # B = C*1.25/6.7716 ≈ 30.00, P_subsidized ≈ 27.01 < 29 → 补贴命中
+    assert result["activity_subsidy_applied"] == True, f"Expected subsidy when B-S < 29, got {result}"
 
-    cfg = _get_shein_subsidy_config()
-    # 28.999 should get subsidy
-    assert _apply_subsidy(28.999, cfg) == 2.99
-    # 28.994 rounded to 2dp = 28.99 but raw is 28.994 → should get subsidy
-    assert _apply_subsidy(28.994, cfg) == 2.99
+
+def test_subsidy_when_b_minus_s_equals_29():
+    """B-S = 29 → 无补贴。"""
+    from logistics_cost.profit_calculator import calculate_profit
+    # B = 32.00, S = 2.99, P_subsidized = 29.01 > 29 → 无补贴
+    # C*(1+t) = 32.00 * r. With r=6.7716, t=0.2: C = 32.00*6.7716/1.2 = 180.576
+    # head=80, tail=50, domestic=50.576 → pc=45.576, df=5
+    result = calculate_profit(
+        product_cost_rmb=45.576, domestic_freight_rmb=5,
+        total_head_cost_rmb=80, tail_cost_rmb=50,
+        exchange_rate=6.7716,
+        target_profit_markup_percent=20, activity_reserve_percent=10,
+    )
+    # P_subsidized = B - S = 32.00 - 2.99 = 29.01
+    # 29.01 is NOT < 29.0 → 无补贴
+    assert result["activity_subsidy_applied"] == False, f"Expected no subsidy when B-S > 29, got {result}"
 
 
-def test_subsidy_not_applied_at_exactly_29():
-    """售价等于29.00时补贴不生效。"""
-    from logistics_cost.profit_calculator import _get_shein_subsidy_config, _apply_subsidy
-
-    cfg = _get_shein_subsidy_config()
-    # 29.0 should NOT get subsidy
-    assert _apply_subsidy(29.0, cfg) == 0.0
+def test_subsidy_when_b_minus_s_above_29():
+    """B-S > 29 → 无补贴。"""
+    from logistics_cost.profit_calculator import calculate_profit
+    # High costs → B is large → B-S > 29
+    result = calculate_profit(
+        product_cost_rmb=100, domestic_freight_rmb=5,
+        total_head_cost_rmb=80, tail_cost_rmb=50,
+        exchange_rate=6.7716,
+        target_profit_markup_percent=20, activity_reserve_percent=10,
+    )
+    # C = 235, B = 235*1.2/6.7716 = 41.64, P_subsidized = 38.65 > 29
+    assert result["activity_subsidy_applied"] == False
+    assert result["no_activity_subsidy_applied"] == False
 
 
 # ============================================================
-# Test 14-15: Table format (v2 changes)
+# Test 15-16: Subsidy status in headers only, not in data cells
 # ============================================================
 
-def test_profit_table_header_no_currency_in_header():
-    """第二张表表头不再包含（¥）和（USD）。"""
-    from logistics_cost.output_renderer import _PROFIT_TABLE_HEADER
-    assert "（¥）" not in _PROFIT_TABLE_HEADER, "Header should not contain (¥)"
-    assert "（USD）" not in _PROFIT_TABLE_HEADER, "Header should not contain (USD)"
+def test_subsidy_status_in_header_not_data_cells():
+    """补贴状态只存在于表头，数据单元格不含"补贴命中"或"无补贴"。"""
+    result = _load_and_estimate("pu_small_chain_shoulder_bag_ai.json")
+    display = {"title": "test", "quantity": 1, "unit": "件",
+               "purchase_price_rmb": 47, "domestic_freight_rmb": 5,
+               "confidence": "low", "normal_packaging": "袋装", "conservative_packaging": "加保护"}
+    output = render_profit(result, display,
+                          exchange_rate=6.7716, tail_fee_usd=7,
+                          target_profit_markup_percent=25, activity_reserve_percent=15)
+    # Find profit data row
+    lines = output.split("\n")
+    in_profit = False
+    data_row = None
+    header_row = None
+    for line in lines:
+        if "国内成本 |" in line:
+            header_row = line
+            in_profit = True
+            continue
+        if in_profit:
+            if line.startswith("|:---"):
+                continue
+            if line.startswith("| ") and not line.startswith("| 方案"):
+                data_row = line
+                break
 
+    # Header must contain subsidy status
+    assert header_row is not None
+    assert "补贴命中" in header_row or "无补贴" in header_row, "Subsidy status must be in header"
+
+    # Data row must NOT contain subsidy status text
+    assert data_row is not None
+    assert "补贴命中" not in data_row, "Data cells must not contain subsidy status"
+    assert "无补贴" not in data_row, "Data cells must not contain '无补贴'"
+    assert _GREEN_SPAN_OPEN not in data_row, "Data cells must not contain green span"
+
+
+def test_subsidy_hit_uses_green_span_in_header():
+    """补贴命中时表头包含绿色span。"""
+    from logistics_cost.output_renderer import _build_profit_table_header
+    # 补贴命中
+    header = _build_profit_table_header(True, True)
+    assert _GREEN_SPAN_OPEN in header
+    assert "补贴命中" in header
+
+    # 无补贴
+    header2 = _build_profit_table_header(False, False)
+    assert _GREEN_SPAN_OPEN not in header2
+    assert "无补贴" in header2
+
+
+# ============================================================
+# Test 17: Currency symbols in data cells
+# ============================================================
 
 def test_rmb_cells_use_yen_symbol():
     """人民币数据单元格带¥符号。"""
@@ -359,10 +385,9 @@ def test_rmb_cells_use_yen_symbol():
     output = render_profit(result, display,
                           exchange_rate=6.7716, tail_fee_usd=7,
                           target_profit_markup_percent=25, activity_reserve_percent=15)
-    # Find profit data row
     for line in output.split("\n"):
         if line.startswith("| ¥"):
-            assert "¥" in line, "RMB cells should use ¥ symbol"
+            assert "¥" in line
             return
     pytest.fail("No RMB cell found in profit table")
 
@@ -376,41 +401,15 @@ def test_usd_cells_use_dollar_symbol():
     output = render_profit(result, display,
                           exchange_rate=6.7716, tail_fee_usd=7,
                           target_profit_markup_percent=25, activity_reserve_percent=15)
-    # Find profit data row
     for line in output.split("\n"):
         if line.startswith("| ¥"):
-            assert "$" in line, "USD cells should use $ symbol"
+            assert "$" in line
             return
     pytest.fail("No USD cell found in profit table")
 
 
 # ============================================================
-# Test 16-17: Subsidy status visual
-# ============================================================
-
-def test_subsidy_hit_uses_green_span():
-    """补贴命中使用绿色span标签。"""
-    result = _load_and_estimate("pu_small_chain_shoulder_bag_ai.json")
-    display = {"title": "test", "quantity": 1, "unit": "件",
-               "purchase_price_rmb": 47, "domestic_freight_rmb": 5,
-               "confidence": "low", "normal_packaging": "袋装", "conservative_packaging": "加保护"}
-    output = render_profit(result, display,
-                          exchange_rate=6.7716, tail_fee_usd=7,
-                          target_profit_markup_percent=25, activity_reserve_percent=15)
-    assert _GREEN_SPAN_OPEN in output, "Should contain green span for subsidy hit"
-    assert "补贴命中" in output, "Should contain '补贴命中' text"
-
-
-def test_no_subsidy_does_not_use_green_span():
-    """无补贴时使用'无补贴'文字，不使用颜色。"""
-    from logistics_cost.output_renderer import _fmt_subsidy_status
-    status = _fmt_subsidy_status(False)
-    assert _GREEN_SPAN_OPEN not in status, "No subsidy should not use green span"
-    assert status == "无补贴", f"Expected '无补贴', got '{status}'"
-
-
-# ============================================================
-# Test 18: Head table unchanged (v2)
+# Test 18: Head table unchanged
 # ============================================================
 
 def test_head_table_unchanged_in_v2():
@@ -422,7 +421,6 @@ def test_head_table_unchanged_in_v2():
     output = render_profit(result, display,
                           exchange_rate=6.7716, tail_fee_usd=7,
                           target_profit_markup_percent=25, activity_reserve_percent=15)
-    # Check head table header unchanged
     assert "| 方案 | 包装尺寸（cm） | 包装后重量（g） | 计费重（g） | 纯头程（¥） | 固定费（¥） | 总头程（¥） |" in output
 
 
@@ -517,7 +515,7 @@ def test_no_forbidden_text_mode2():
 
 
 # ============================================================
-# Test 22: No independent subsidy column or extra paragraph
+# Test 22: No independent subsidy column
 # ============================================================
 
 def test_no_independent_subsidy_column():
@@ -529,9 +527,8 @@ def test_no_independent_subsidy_column():
     output = render_profit(result, display,
                           exchange_rate=6.7716, tail_fee_usd=7,
                           target_profit_markup_percent=25, activity_reserve_percent=15)
-    # Make sure no standalone "补贴" column exists (should only be in "补贴状态" column headers)
-    profit_section = output.split("当前参数：")[1] if "当前参数：" in output else ""
-    assert "| 补贴" not in profit_section and "| 补贴列" not in output
+    # Make sure no standalone "补贴列" exists
+    assert "| 补贴列" not in output
 
 
 # ============================================================

@@ -25,11 +25,6 @@ _HEAD_TABLE_HEADER = (
     "|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
 )
 
-_PROFIT_TABLE_HEADER = (
-    "| 国内成本 | 总头程 | 尾程 | 无活动售价 | 无活动利润（补贴状态） | 活动后售价 | 活动后利润（补贴状态） |\n"
-    "|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
-)
-
 _GREEN_SPAN_OPEN = '<span style="color:#16a34a">'
 _GREEN_SPAN_CLOSE = '</span>'
 
@@ -131,13 +126,23 @@ def _find_lowest_head(result: dict[str, Any]) -> tuple[str, float]:
     return lowest_scenario, lowest_cost
 
 
+def _build_profit_table_header(no_subsidy: bool, act_subsidy: bool) -> str:
+    """动态生成利润表表头，补贴状态根据实际是否命中写入表头。"""
+    no_status = _fmt_subsidy_status(no_subsidy)
+    act_status = _fmt_subsidy_status(act_subsidy)
+    return (
+        f"| 国内成本 | 总头程 | 尾程 | 无活动售价 | 无活动利润（{no_status}） | 活动后售价 | 活动后利润（{act_status}） |\n"
+        "|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
+    )
+
+
 def _build_profit_table(
     domestic_cost: float,
     lowest_head: float,
     tail_rmb: float,
     profit_result: dict[str, Any],
 ) -> str:
-    """构建一行七列利润表 (v2: 币种符号在数据单元格, 补贴状态在表头)。"""
+    """构建一行七列利润表 (v2: 补贴状态在动态表头, 数据单元格仅显示数值)。"""
     no_activity_price = profit_result.get("no_activity_price_usd", 0)
     no_activity_profit = profit_result.get("no_activity_profit_rmb", 0)
     no_subsidy_applied = profit_result.get("no_activity_subsidy_applied", False)
@@ -145,18 +150,17 @@ def _build_profit_table(
     activity_profit = profit_result.get("activity_profit_rmb", 0)
     activity_subsidy_applied = profit_result.get("activity_subsidy_applied", False)
 
-    no_status = _fmt_subsidy_status(no_subsidy_applied)
-    act_status = _fmt_subsidy_status(activity_subsidy_applied)
+    header = _build_profit_table_header(no_subsidy_applied, activity_subsidy_applied)
 
     return (
-        _PROFIT_TABLE_HEADER + "\n"
+        header + "\n"
         f"| {_fmt_rmb(domestic_cost)} "
         f"| {_fmt_rmb(lowest_head)} "
         f"| {_fmt_rmb(tail_rmb)} "
         f"| {_fmt_usd(no_activity_price)} "
-        f"| {_fmt_rmb(no_activity_profit)}（{no_status}） "
+        f"| {_fmt_rmb(no_activity_profit)} "
         f"| {_fmt_usd(activity_price)} "
-        f"| {_fmt_rmb(activity_profit)}（{act_status}） |"
+        f"| {_fmt_rmb(activity_profit)} |"
     )
 
 
@@ -298,8 +302,10 @@ def render_profit(
         deduction = _build_deduction_sentence(purchase_price, domestic_freight, lowest_scenario, profit_result)
     else:
         domestic_cost_str = "无法计算"
+        # 缺数据时无法判断补贴状态, 用占位
+        header = _build_profit_table_header(False, False)
         profit_table = (
-            _PROFIT_TABLE_HEADER + "\n"
+            header + "\n"
             f"| {domestic_cost_str} "
             f"| {_fmt_rmb(lowest_head)} "
             f"| {_fmt_rmb(tail_rmb)} "

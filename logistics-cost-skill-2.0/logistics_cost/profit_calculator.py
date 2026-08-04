@@ -105,10 +105,17 @@ def calculate_profit(
     P = C * markup_pct
 
     # ---- 活动后售价 (含补贴) ----
-    # 候选 = C × (1+t) ÷ r  →  若需要补贴则售价 = 候选 - S
-    candidate = C * (1.0 + markup_pct) / rate
-    activity_subsidy_usd = _apply_subsidy(candidate, subsidy_cfg)
-    activity_price_usd = candidate - activity_subsidy_usd
+    # B = C × (1+t) ÷ r, P_subsidized = B - S
+    # 判断规则: 如果 P_subsidized < T → 补贴命中, 售价 = P_subsidized
+    #          否则 → 无补贴, 售价 = B
+    B = C * (1.0 + markup_pct) / rate
+    P_subsidized = B - S
+    if P_subsidized < T:
+        activity_subsidy_usd = S
+        activity_price_usd = P_subsidized
+    else:
+        activity_subsidy_usd = 0.0
+        activity_price_usd = B
 
     # ---- 无活动售价 = 活动后售价 ÷ (1-d) ----
     no_activity_price_usd = activity_price_usd / (1.0 - reserve_pct)
