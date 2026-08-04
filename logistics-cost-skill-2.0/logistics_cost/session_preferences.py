@@ -1,30 +1,54 @@
 """会话偏好管理 — 模式与利润参数持久化。
 
-提供 load/update/get_mode/get_profit_params 四个函数。
+提供 load/update/get_mode/set_mode/get_profit_params/update_profit_params。
 保存到 config/local_user_preferences.json（被 Git 忽略）。
+采用安全写入：先写临时文件，成功后原子替换。
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
-# 偏好文件路径
+
 def _prefs_path() -> Path:
     return Path(__file__).resolve().parent.parent / "config" / "local_user_preferences.json"
 
 
 def load() -> dict:
     try:
-        with open(_prefs_path(), encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+        p = _prefs_path()
+        if not p.exists():
+            return {}
+        with open(p, encoding="utf-8") as f:
+            text = f.read().strip()
+            if not text:
+                return {}
+            return json.loads(text) or {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {}
 
 
 def _save(prefs: dict) -> None:
-    with open(_prefs_path(), "w", encoding="utf-8") as f:
-        json.dump(prefs, f, ensure_ascii=False, indent=2)
+    """安全写入：临时文件 + 原子替换。"""
+    p = _prefs_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    content = json.dumps(prefs, ensure_ascii=False, indent=2)
+    fd, tmp_path = tempfile.mkstemp(dir=str(p.parent), suffix=".tmp", prefix=".prefs_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, str(p))
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def get_mode() -> str | None:
@@ -63,3 +87,25 @@ def update_profit_params(params: dict) -> None:
         if key in params and params[key] is not None:
             prefs[key] = params[key]
     _save(prefs)
+
+
+def resolve_mode(envelope_mode: str | None) -> tuple[str | None, str | None]:
+    """解析运行模式。
+
+    Returns:
+        (mode, error_reason)
+        mode=None 且 error_reason 非空时表示需要用户选择模式。
+    """
+    if envelope_mode and envelope_mode in ("head_only", "profit"):
+        set_mode(envelope_mode)
+        return (envelope_mode, None)
+
+    # 信封提供了无效的 mode 值
+    if envelope_mode and envelope_mode not in ("head_only", "profit"):
+        return (None, "mode_required")
+
+    saved = get_mode()
+    if saved:
+        return (saved, None)
+
+    return (None, "mode_required")

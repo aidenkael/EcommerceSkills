@@ -1,7 +1,7 @@
-"""商品请求对象 — 定义当前商品的独立请求与事实收集。
+"""商品请求对象 — 当前商品的独立请求与事实收集。
 
-提供 create_product_request() 创建新请求，ProductRequest 类封装所有商品级数据。
-每个新商品必须创建新的 ProductRequest，确保不跨商品污染。
+ProductRequest 是商品级状态的唯一容器：身份、事实、AI数据、计算、输出。
+每次新商品必须创建新的 ProductRequest，确保不跨商品污染。
 """
 from __future__ import annotations
 
@@ -22,68 +22,96 @@ def _normalize(text: str) -> str:
 
 
 def _make_product_signature(title: str, sku: str, quantity: int, image_fingerprint: str = "") -> str:
-    """基于商品身份稳定生成签名。"""
-    parts = [
-        _normalize(title),
-        _normalize(sku),
-        str(quantity),
-        image_fingerprint,
-    ]
+    parts = [_normalize(title), _normalize(sku), str(quantity), image_fingerprint]
     raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+_request_counter = 0
+
+
 def _make_request_id() -> str:
-    """生成唯一请求ID。"""
-    t = str(int(time.time() * 1000))
-    return f"req-{t[-10:]}"
+    global _request_counter
+    _request_counter += 1
+    t = str(int(time.perf_counter_ns()))
+    return f"req-{t[-8:]}-{_request_counter}"
 
 
 @dataclass
 class Fact:
-    """单个商品事实条目。"""
+    """单个商品事实条目，带来源优先级。"""
     field: str
     value: Any
-    source: str        # user_confirmed / merchant_text / image_visible / ai_inferred / calibrated
-    confidence: str = "medium"  # high / medium / low
+    source: str        # user_confirmed > merchant_text > image_visible > calibrated > ai_inferred
+    confidence: str = "medium"
     location: str = ""
+
+
+# 来源优先级排名（数字越小优先级越高）
+_SOURCE_RANK = {
+    "user_confirmed": 1,
+    "merchant_text": 2,
+    "image_visible": 3,
+    "calibrated": 4,
+    "ai_inferred": 5,
+}
 
 
 @dataclass
 class ProductRequest:
-    """当前商品的完整请求对象。"""
+    """当前商品的完整请求对象（唯一商品级状态容器）。"""
     request_id: str = field(default_factory=_make_request_id)
     product_signature: str = ""
+
     # 身份
     title: str = ""
     selected_sku: str = ""
     quantity: int = 1
     unit: str = "件"
+
     # 图片
     image_path: str = ""
     image_fingerprint: str = ""
+
     # 成本
     purchase_price_rmb: float | None = None
     domestic_freight_rmb: float | None = None
+
     # 事实
     facts: list[Fact] = field(default_factory=list)
-    # 运行结果
-    ai_data: dict = field(default_factory=dict)
+
+    # AI 数据
+    ai_data_raw: dict = field(default_factory=dict)
+    ai_data_arbitrated: dict = field(default_factory=dict)
+
+    # 校准
     calibration_hit: bool = False
     calibration_case_id: str = ""
-    run_stdout: str = ""
-    result: dict = field(default_factory=dict)
 
-    def add_fact(self, field: str, value: Any, source: str, confidence: str = "medium", location: str = "") -> None:
-        """添加一个事实。更高优先级来源不覆盖。"""
+    # 计算结果
+    result: dict = field(default_factory=dict)
+    run_stdout: str = ""
+
+    # 时间
+    created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+    def add_fact(self, field: str, value: Any, source: str, confidence: str = "medium", location: str = "") -> bool:
+        """添加事实。更高优先级来源覆盖低优先级，同优先级保留先添加的。
+
+        Returns:
+            是否实际添加/覆盖了事实
+        """
+        new_rank = _SOURCE_RANK.get(source, 99)
         existing = self.get_fact(field)
         if existing:
-            old_rank = _source_rank(existing.source)
-            new_rank = _source_rank(source)
-            if new_rank <= old_rank:
-                return  # 不覆盖同优先级或更低来源
+            old_rank = _SOURCE_RANK.get(existing.source, 99)
+            # 新来源优先级低于或等于旧来源 → 拒绝覆盖
+            if new_rank >= old_rank:
+                return False
+        # 更高优先级 → 覆盖
         self.facts = [f for f in self.facts if f.field != field]
         self.facts.append(Fact(field=field, value=value, source=source, confidence=confidence, location=location))
+        return True
 
     def get_fact(self, field: str) -> Fact | None:
         for f in self.facts:
@@ -95,17 +123,24 @@ class ProductRequest:
         f = self.get_fact(field)
         return f.value if f else default
 
+    def get_user_weight_info(self) -> tuple[float | None, str]:
+        """获取用户确认或商家明确的重量信息（用于可信重量入口）。"""
+        for source in ("user_confirmed", "merchant_text"):
+            f = self.get_fact("net_weight_g")
+            if f and f.source == source and isinstance(f.value, (int, float)):
+                return (float(f.value), source)
+        return (None, "未提供")
 
-def _source_rank(source: str) -> int:
-    """来源优先级排名（数字越小越优先）。"""
-    ranks = {
-        "user_confirmed": 1,
-        "merchant_text": 2,
-        "image_visible": 3,
-        "calibrated": 4,
-        "ai_inferred": 5,
-    }
-    return ranks.get(source, 99)
+    def get_dimensions_info(self) -> tuple[list[float] | None, str, str]:
+        """获取用户/商家明确的尺寸信息。"""
+        for source in ("user_confirmed", "merchant_text"):
+            f = self.get_fact("product_size_cm")
+            if f and f.source == source and isinstance(f.value, list):
+                return (f.value, source, "product_size")
+            f = self.get_fact("shipping_package_size_cm")
+            if f and f.source == source and isinstance(f.value, list):
+                return (f.value, source, "shipping_package_size")
+        return (None, "unknown", "unknown")
 
 
 def create_product_request(
@@ -119,12 +154,9 @@ def create_product_request(
     purchase_price_rmb: float | None = None,
     domestic_freight_rmb: float | None = None,
 ) -> ProductRequest:
-    """创建新的商品请求（每次新商品必须调用）。
-
-    新请求自动清空商品级状态，保留用户偏好层。
-    """
+    """创建新的商品请求（每次新商品必须调用）。"""
     sig = _make_product_signature(title, selected_sku, quantity, image_fingerprint)
-    req = ProductRequest(
+    return ProductRequest(
         product_signature=sig,
         title=title,
         selected_sku=selected_sku,
@@ -135,4 +167,3 @@ def create_product_request(
         purchase_price_rmb=purchase_price_rmb,
         domestic_freight_rmb=domestic_freight_rmb,
     )
-    return req
