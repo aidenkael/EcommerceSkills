@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""物流成本核算 — simple-v2.2 单一入口 (OUTPUT_CONTRACT 2026-08-04-v1)。
+"""物流成本核算 — simple-v2.2 单一入口 (OUTPUT_CONTRACT 2026-08-04-v2)。
 
 用法:
   python run.py --ai-json <path> [--weight-value N] [--link URL] [--compact]
@@ -17,6 +17,8 @@ from logistics_cost.ai_schema import validate, to_estimate_inputs
 from logistics_cost.estimator import estimate
 from logistics_cost.weight_rules import build_user_weight
 from logistics_cost.output_renderer import render_head_only, render_profit
+from logistics_cost.calibration_resolver import resolve_exact_calibration, apply_calibration_override
+from logistics_cost.output_contract_guard import validate_rendered_output, OutputContractViolation
 
 
 def _compact_output(result: dict) -> dict:
@@ -44,7 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--ai-json", type=Path, metavar="PATH", help="Codex AI JSON 文件")
     p.add_argument("--stdin", action="store_true", help="从标准输入读取 JSON")
     p.add_argument("--compact", action="store_true", help="简洁输出模式 (JSON)")
-    p.add_argument("--render-markdown", action="store_true", help="确定性 Markdown 渲染 (输出合同 2026-08-04-v1)")
+    p.add_argument("--render-markdown", action="store_true", help="确定性 Markdown 渲染 (输出合同 2026-08-04-v2)")
     p.add_argument("--weight-value", type=float, help="用户商品净重")
     p.add_argument("--weight-unit", choices=("g", "kg"), default="g")
     p.add_argument("--weight-trust", default="可信",
@@ -52,6 +54,35 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--link", help="商品链接(仅保存, 不访问)")
     p.add_argument("--debug", action="store_true", help=argparse.SUPPRESS)
     return p
+
+
+def _resolve_title(product_display: dict, ai_data: dict) -> str:
+    """解析标题，优先级: product_display.title > ai_data.product_title > ai_data.product_type"""
+    title = product_display.get("title") or ""
+    if not title:
+        title = ai_data.get("product_title") or ""
+    if not title:
+        title = ai_data.get("product_type") or ""
+    return title
+
+
+def _resolve_sku(product_display: dict, ai_data: dict) -> str:
+    """解析 SKU，优先级: product_display.selected_sku > ai_data.selected_sku"""
+    sku = product_display.get("selected_sku") or ""
+    if not sku:
+        sku = ai_data.get("selected_sku") or ""
+    return sku
+
+
+def _resolve_quantity(product_display: dict, ai_data: dict) -> int:
+    """解析数量，优先级: product_display.quantity > ai_data.quantity > 默认1"""
+    qty = product_display.get("quantity")
+    if qty is not None:
+        return int(qty)
+    qty = ai_data.get("quantity")
+    if qty is not None:
+        return int(qty)
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -79,6 +110,17 @@ def main(argv: list[str] | None = None) -> int:
     # AI JSON 可能在信封的 "ai" 字段或根对象本身
     ai_data = raw.get("ai", raw) if isinstance(raw, dict) else raw
 
+    # ---- 精确校准查询 ----
+    title = _resolve_title(product_display, ai_data)
+    sku = _resolve_sku(product_display, ai_data)
+    quantity = _resolve_quantity(product_display, ai_data)
+    calibration_hit = None
+
+    if sku and title:
+        calibration_hit = resolve_exact_calibration(title, sku, quantity)
+        if calibration_hit:
+            ai_data = apply_calibration_override(dict(ai_data), calibration_hit)
+
     try:
         ai = validate(ai_data)
     except ValueError as exc:
@@ -99,10 +141,15 @@ def main(argv: list[str] | None = None) -> int:
 
     result["ai_meta"] = ai_meta
 
+    # 校准元数据（仅 --debug 时输出到 stderr）
+    if calibration_hit:
+        result["calibration_applied"] = True
+        result["calibration_case_id"] = calibration_hit.get("case_id", "")
+        result["calibration_basis"] = calibration_hit.get("evidence_scope", "")
+
     # ---- 输出决策 ----
     if args.render_markdown:
         if not product_display:
-            # 从 AI 结果和 estimate 结果回填基本显示信息
             product_display = {
                 "title": summary.get("product_type", "未知商品"),
                 "quantity": summary.get("quantity", 1),
@@ -128,6 +175,14 @@ def main(argv: list[str] | None = None) -> int:
                 result=result,
                 product_display=product_display,
             )
+
+        # ---- 输出合同守卫 ----
+        try:
+            validate_rendered_output(output_md, mode)
+        except OutputContractViolation as exc:
+            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+
         print(output_md)
     elif args.compact:
         output = _compact_output(result)
@@ -138,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if result.get("status") == "calculated":
         if args.debug:
+            if calibration_hit:
+                print(f"calibration_case={calibration_hit.get('case_id', '')}", file=sys.stderr)
             n = result.get("normal", {})
             c = result.get("conservative", {})
             print(f"\n正常档: {n.get('head_cost_cny', 0):.1f} 元  保守档: {c.get('head_cost_cny', 0):.1f} 元", file=sys.stderr)
