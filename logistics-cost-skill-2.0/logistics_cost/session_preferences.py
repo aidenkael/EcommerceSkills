@@ -89,6 +89,34 @@ def update_profit_params(params: dict) -> None:
     _save(prefs)
 
 
+def validate_profit_params(params: dict | None) -> tuple[dict | None, list[str]]:
+    """校验利润模式参数是否齐全。
+
+    Args:
+        params: 本次待使用的参数 dict（可能含信封+已保存）
+
+    Returns:
+        (merged_params, missing_fields)
+        参数齐全时 missing_fields 为空列表。
+    """
+    required = ["exchange_rate", "tail_fee_usd", "target_profit_markup_percent", "activity_reserve_percent"]
+    if params is None:
+        return (None, list(required))
+
+    merged = {}
+    missing = []
+    for key in required:
+        val = params.get(key)
+        if val is None:
+            missing.append(key)
+        else:
+            try:
+                merged[key] = float(val)
+            except (ValueError, TypeError):
+                missing.append(key)
+    return (merged if not missing else None, missing)
+
+
 def resolve_mode(envelope_mode: str | None) -> tuple[str | None, str | None]:
     """解析运行模式。
 

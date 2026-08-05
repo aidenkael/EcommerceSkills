@@ -1,4 +1,4 @@
-"""请求新鲜度守卫测试 — request_freshness_guard.py。"""
+"""请求新鲜度守卫测试 — 结果身份字段必须存在。"""
 from __future__ import annotations
 
 import pytest
@@ -7,50 +7,49 @@ from logistics_cost.request_freshness_guard import validate_request_freshness, R
 
 class TestPass:
     def test_all_match(self):
-        validate_request_freshness(
-            "req-123", "sig-A", "Title", "SKU1", 1,
-            "req-123", "sig-A", "Title", "SKU1", 1,
-        )
-
-    def test_empty_result_fields_passes(self):
-        validate_request_freshness(
-            "req-123", "sig-A", "Title", "SKU1", 1,
-            "", "", "", "", 0,
-        )
+        validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                   "req-123", "sig-A", "Title", "SKU1", 1)
 
 
-class TestBlock:
-    def test_request_id_mismatch(self):
+class TestBlockMissing:
+    def test_result_request_id_empty_blocks(self):
         with pytest.raises(RequestFreshnessViolation):
-            validate_request_freshness(
-                "req-123", "sig-A", "Title", "SKU1", 1,
-                "req-999", "sig-A", "Title", "SKU1", 1,
-            )
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "", "sig-A", "Title", "SKU1", 1)
 
-    def test_signature_mismatch(self):
+    def test_result_signature_empty_blocks(self):
         with pytest.raises(RequestFreshnessViolation):
-            validate_request_freshness(
-                "req-123", "sig-A", "Title", "SKU1", 1,
-                "req-123", "sig-B", "Title", "SKU1", 1,
-            )
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "req-123", "", "Title", "SKU1", 1)
 
-    def test_title_mismatch(self):
+    def test_all_empty_blocks(self):
         with pytest.raises(RequestFreshnessViolation):
-            validate_request_freshness(
-                "req-123", "sig-A", "Title", "SKU1", 1,
-                "req-123", "sig-A", "Wrong", "SKU1", 1,
-            )
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "", "", "", "", 0)
 
-    def test_sku_mismatch(self):
-        with pytest.raises(RequestFreshnessViolation):
-            validate_request_freshness(
-                "req-123", "sig-A", "Title", "SKU1", 1,
-                "req-123", "sig-A", "Title", "SKU2", 1,
-            )
 
-    def test_quantity_mismatch(self):
+class TestBlockMismatch:
+    def test_request_id(self):
         with pytest.raises(RequestFreshnessViolation):
-            validate_request_freshness(
-                "req-123", "sig-A", "Title", "SKU1", 1,
-                "req-123", "sig-A", "Title", "SKU1", 99,
-            )
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "req-999", "sig-A", "Title", "SKU1", 1)
+
+    def test_signature(self):
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "req-123", "sig-B", "Title", "SKU1", 1)
+
+    def test_title(self):
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "req-123", "sig-A", "Wrong", "SKU1", 1)
+
+    def test_sku(self):
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "req-123", "sig-A", "Title", "SKU2", 1)
+
+    def test_quantity(self):
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness("req-123", "sig-A", "Title", "SKU1", 1,
+                                       "req-123", "sig-A", "Title", "SKU1", 99)

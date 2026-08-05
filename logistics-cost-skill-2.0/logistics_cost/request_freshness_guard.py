@@ -1,12 +1,12 @@
 """请求新鲜度守卫 — 确保当前结果与当前请求身份一致。
 
-提供 validate_request_freshness() 在输出前校验。
+validate_request_freshness() 在输出前校验。
+双方身份字段必须完整且一致，不允许结果侧字段为空。
 """
 from __future__ import annotations
 
 
 class RequestFreshnessViolation(Exception):
-    """结果身份与请求不一致。"""
     pass
 
 
@@ -24,40 +24,35 @@ def validate_request_freshness(
 ) -> None:
     """校验当前请求身份与结果身份一致。
 
-    任一不一致时抛出 RequestFreshnessViolation，阻止输出旧结果。
-
-    Args:
-        request_id: 当前请求 ID
-        product_signature: 当前商品签名
-        title: 当前标题
-        selected_sku: 当前 SKU
-        quantity: 当前数量
-        result_request_id: 结果中绑定的 request_id（可为空表示未绑定）
-        result_signature: 结果中绑定的 product_signature
-        result_title: 结果中的标题
-        result_sku: 结果中的 SKU
-        result_quantity: 结果中的数量
+    任一方字段缺失或双方不一致时抛出 RequestFreshnessViolation。
+    程序守卫只能保护同次程序调用内的身份一致性，
+    不能绝对阻止 Agent 跨会话手工复制旧 stdout。
     """
-    if result_request_id and result_request_id != request_id:
+    # 请求侧必须存在
+    if not request_id:
+        raise RequestFreshnessViolation("请求侧 request_id 缺失")
+
+    # 结果侧绑定字段必须全部存在
+    if not result_request_id:
+        raise RequestFreshnessViolation("结果未绑定 request_id")
+    if not result_signature:
+        raise RequestFreshnessViolation("结果未绑定 product_signature")
+
+    # 逐项比对
+    if result_request_id != request_id:
         raise RequestFreshnessViolation(
             f"结果request_id({result_request_id})与当前请求({request_id})不一致"
         )
-
-    if result_signature and result_signature != product_signature:
-        raise RequestFreshnessViolation(
-            f"结果product_signature与当前商品不匹配"
-        )
-
+    if result_signature != product_signature:
+        raise RequestFreshnessViolation("结果product_signature与当前商品不匹配")
     if result_title and result_title != title:
         raise RequestFreshnessViolation(
-            f"结果标题与当前商品标题不一致"
+            f"结果标题({result_title})与当前商品标题({title})不一致"
         )
-
     if result_sku and result_sku != selected_sku:
         raise RequestFreshnessViolation(
-            f"结果SKU与当前商品SKU不一致"
+            f"结果SKU({result_sku})与当前商品SKU({selected_sku})不一致"
         )
-
     if result_quantity and result_quantity != quantity:
         raise RequestFreshnessViolation(
             f"结果数量({result_quantity})与当前数量({quantity})不一致"
