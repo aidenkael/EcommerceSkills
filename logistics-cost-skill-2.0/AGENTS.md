@@ -10,7 +10,7 @@
 必须输出：material_family, dimension_scope, structure_evidence。dimension_scope 区分：display_size / product_size / shipping_package_size / unknown。硬底/硬框/硬衬/硬壳/整件保形必须提供强证据。拉链/提手/肩带/普通五金不能单独证明整体刚性。
 
 ## 事实来源契约
-用户确认 > 商家文字 > 图片可见 > 精确校准 > AI推测。AI候选字段默认来源为 ai_inferred，不得标记为 merchant_text。商品本体尺寸(product_size/display_size)不得直接当运输尺寸。用户确认运输尺寸(shipping_package_size)不得被仲裁改写。用户确认重量必须走可信重量入口。
+用户确认 > 商家文字 > 图片可见 > 精确校准 > AI推测。AI候选默认 ai_inferred。product_size/display_size 进入包装仲裁，由仲裁生成运输候选。AI尺寸 field 必须与 dimension_scope 一致。shipping_package_size 属高优先级事实，保守档默认保持事实值不机械放大。用户确认重量走可信重量入口。审计文件包含本次真实 Renderer 输出。
 
 ## 最终回复
 run.py --render-markdown 成功时唯stdout原文。禁止代码围栏/前言/后记/校准说明/来源说明/总结。

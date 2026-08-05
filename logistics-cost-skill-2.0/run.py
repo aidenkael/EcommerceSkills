@@ -60,7 +60,7 @@ def _parser():
     return p
 
 
-def _resolve_envelope(raw: dict):
+def _resolve_envelope(raw):
     pd = raw.get("product_display", {}) if isinstance(raw, dict) else {}
     ai = raw.get("ai", raw) if isinstance(raw, dict) else raw
     pp = raw.get("profit_parameters") if isinstance(raw, dict) else None
@@ -87,15 +87,23 @@ def _resolve_quantity(pd, ai):
     return 1
 
 
+def _dimension_scope_to_field(scope: str) -> str:
+    """AI dimension_scope → 统一事实 field。"""
+    mapping = {
+        "shipping_package_size": "shipping_package_size",
+        "product_size": "product_size",
+        "display_size": "display_size",
+    }
+    return mapping.get(scope, "product_size")
+
+
 def main(argv=None):
     args = _parser().parse_args(argv)
 
-    # 测试用：注入偏好路径
     if args.prefs_path:
         import logistics_cost.session_preferences as sp
         sp._prefs_path = lambda: Path(args.prefs_path)
 
-    # 读取输入
     if args.stdin:
         raw = json.loads(sys.stdin.read())
     elif args.ai_json:
@@ -110,7 +118,7 @@ def main(argv=None):
 
     product_display, ai_data, profit_parameters, envelope_mode, envelope_facts = _resolve_envelope(raw)
 
-    # ---- 模式解析 ----
+    # ---- 模式 ----
     mode, mode_error = resolve_mode(envelope_mode)
     if mode_error:
         print(json.dumps({"status": "error", "error": mode_error}, ensure_ascii=False), file=sys.stderr)
@@ -119,20 +127,17 @@ def main(argv=None):
     # ---- 利润参数 ----
     if profit_parameters:
         update_profit_params(profit_parameters)
-
     if mode == "profit":
-        # 合并信封+已保存
-        merged_params = dict(get_saved_profit_params())
+        merged = dict(get_saved_profit_params())
         if profit_parameters:
-            merged_params.update(profit_parameters)
-        valid_params, missing = validate_profit_params(merged_params)
+            merged.update(profit_parameters)
+        vp, missing = validate_profit_params(merged)
         if missing:
-            err = {"status": "error", "error": "profit_parameters_required", "missing": missing}
-            print(json.dumps(err, ensure_ascii=False), file=sys.stderr)
+            print(json.dumps({"status": "error", "error": "profit_parameters_required", "missing": missing}, ensure_ascii=False), file=sys.stderr)
             return 2
-        profit_parameters = valid_params
+        profit_parameters = vp
 
-    # ---- 创建 ProductRequest ----
+    # ---- ProductRequest ----
     title = _resolve_title(product_display, ai_data)
     sku = _resolve_sku(product_display, ai_data)
     quantity = _resolve_quantity(product_display, ai_data)
@@ -158,16 +163,19 @@ def main(argv=None):
             unit = "g" if "weight" in field_key else ""
             req.add_fact(field_key, product_display[disp_key], src, unit=unit, confidence="high")
 
-    # AI 候选字段默认标记为 ai_inferred（非 merchant_text）
+    # AI 候选重量（默认 ai_inferred）
     ai_net = ai_data.get("ai_net_weight_kg")
     if ai_net is not None:
         req.add_fact("net_weight", ai_net, "ai_inferred", unit="kg", confidence=ai_data.get("confidence", "medium"))
+
+    # AI 候选尺寸按 dimension_scope 映射到正确 field
     ai_dims = ai_data.get("ai_package_size_cm")
     if ai_dims:
-        req.add_fact("product_size", list(ai_dims), "ai_inferred", unit="cm",
-                     scope=ai_data.get("dimension_scope", "unknown"), confidence=ai_data.get("confidence", "medium"))
+        scope = ai_data.get("dimension_scope", "unknown")
+        field = _dimension_scope_to_field(scope)
+        req.add_fact(field, list(ai_dims), "ai_inferred", unit="cm", scope=scope, confidence=ai_data.get("confidence", "medium"))
 
-    # ---- 解析高优先级事实用于后续 ----
+    # ---- 解析事实 ----
     resolved_weight = req.get_resolved_net_weight()
     resolved_dims = req.get_resolved_dimensions()
 
@@ -180,12 +188,20 @@ def main(argv=None):
             req.calibration_hit = True
             req.calibration_case_id = ch.get("case_id", "")
 
-    # ---- 高优先级尺寸事实覆盖（在校准后、仲裁前应用） ----
-    if resolved_dims["dims_cm"] and resolved_dims["scope"] == "shipping_package_size":
+    # ---- 高优先级尺寸事实覆盖（校准命中时不覆盖 ai_inferred 来源） ----
+    if resolved_dims["dims_cm"]:
         dims = resolved_dims["dims_cm"]
-        ai_data_working["ai_package_size_cm"] = list(dims)
-        ai_data_working["conservative_package_size_cm"] = [round(d + 1, 1) for d in dims]
-        ai_data_working["dimension_scope"] = "shipping_package_size"
+        scope = resolved_dims["scope"]
+        src = resolved_dims["source"]
+        # ai_inferred 不覆盖校准结果
+        if src != "ai_inferred" or not req.calibration_hit:
+            if scope == "shipping_package_size":
+                ai_data_working["ai_package_size_cm"] = list(dims)
+                ai_data_working["conservative_package_size_cm"] = list(dims)
+                ai_data_working["dimension_scope"] = "shipping_package_size"
+            else:
+                ai_data_working["ai_package_size_cm"] = list(dims)
+                ai_data_working["dimension_scope"] = scope
 
     # ---- 包装仲裁 ----
     ai_data_working = arbitrate_packaging_candidate(
@@ -196,8 +212,11 @@ def main(argv=None):
     # ---- 用户确认重量进入可信重量入口 ----
     uw = build_user_weight(args.weight_value, args.weight_unit, args.weight_trust)
     if resolved_weight["value_kg"] is not None and uw is None:
-        trust = "可信" if resolved_weight["source"] == "user_confirmed" else "约值"
-        uw = UserWeight(resolved_weight["value_kg"] * 1000, "g", trust)
+        # 仅 user_confirmed/merchant_text 来源使用可信重量入口；校准不触发增量
+        src = resolved_weight["source"]
+        if src in ("user_confirmed", "merchant_text"):
+            trust = "可信" if src == "user_confirmed" else "约值"
+            uw = UserWeight(resolved_weight["value_kg"] * 1000, "g", trust)
 
     # ---- validate + estimate ----
     try:
@@ -271,7 +290,10 @@ def main(argv=None):
             print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
             return 2
 
-        # 审计文件（在stdout之前写入，确保原子性）
+        # 设置 run_stdout（在审计构建之前）
+        req.run_stdout = output_md
+
+        # 审计文件
         if args.audit_md:
             audit = build_audit_record(req)
             audit_md = render_audit_markdown(audit)
@@ -281,7 +303,6 @@ def main(argv=None):
                 print(json.dumps({"status": "error", "error": f"审计文件写入失败: {exc}"}, ensure_ascii=False), file=sys.stderr)
                 return 2
 
-        req.run_stdout = output_md
         print(output_md)
 
     elif args.compact:
