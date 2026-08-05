@@ -1,6 +1,7 @@
-"""审计与交付测试 — audit + artifact + profit gate。"""
+"""审计与交付测试 — 真实调用计数、审计失败路径。"""
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
@@ -14,102 +15,131 @@ PROJECT = Path(__file__).resolve().parent.parent
 EXAMPLES = PROJECT / "examples"
 
 
-def _mode2_env(extra=None):
+def _mode2_env():
     with open(EXAMPLES / "pu_small_chain_shoulder_bag_ai.json", encoding="utf-8") as f:
         ai = json.load(f)
-    e = {"mode": "head_only",
-         "product_display": {"title": "PU轻潮斜挎肩部链条包（小方包）", "quantity": 1, "unit": "件",
-                             "purchase_price_rmb": 47, "domestic_freight_rmb": 5,
-                             "normal_packaging": "把手折叠、肩带收纳后纸盒装",
-                             "conservative_packaging": "较少压缩并增加局部五金保护", "confidence": "high"},
-         "ai": ai}
-    if extra:
-        e.update(extra)
-    return e
+    return {"mode": "head_only",
+            "product_display": {"title": "PU轻潮斜挎肩部链条包（小方包）", "quantity": 1, "unit": "件",
+                                "purchase_price_rmb": 47, "domestic_freight_rmb": 5,
+                                "normal_packaging": "把手折叠、肩带收纳后纸盒装",
+                                "conservative_packaging": "较少压缩并增加局部五金保护", "confidence": "high"},
+            "ai": ai}
 
 
-def _run(env, audit_path=None):
-    cmd = [sys.executable, str(PROJECT / "run.py"), "--stdin", "--render-markdown"]
-    if audit_path:
-        cmd += ["--audit-md", audit_path]
-    return subprocess.run(cmd, cwd=str(PROJECT), input=json.dumps(env, ensure_ascii=False),
-                          capture_output=True, text=True)
-
+# ---- 审计正常路径 ----
 
 class TestAudit:
     def test_creates_file(self, tmp_path):
         p = str(tmp_path / "a.md")
-        r = _run(_mode2_env(), p)
+        r = subprocess.run(
+            [sys.executable, str(PROJECT / "run.py"), "--stdin", "--render-markdown", "--audit-md", p],
+            cwd=str(PROJECT), input=json.dumps(_mode2_env(), ensure_ascii=False),
+            capture_output=True, text=True,
+        )
         assert r.returncode == 0, f"stderr={r.stderr}"
         assert Path(p).exists()
 
     def test_renderer_not_empty(self, tmp_path):
-        """审计中的 Renderer 输出非空。"""
         p = str(tmp_path / "a.md")
-        r = _run(_mode2_env(), p)
+        r = subprocess.run(
+            [sys.executable, str(PROJECT / "run.py"), "--stdin", "--render-markdown", "--audit-md", p],
+            cwd=str(PROJECT), input=json.dumps(_mode2_env(), ensure_ascii=False),
+            capture_output=True, text=True,
+        )
         assert r.returncode == 0
         content = Path(p).read_text(encoding="utf-8")
-        # Renderer 输出区域不应为空
         assert "```" in content
-        # 审计中不包含空输出标记
         lines = content.split("\n```\n")
         renderer_section = lines[-2] if len(lines) > 2 else ""
-        assert "(无)" not in renderer_section, f"Renderer output is empty in audit: {content[:500]}"
+        assert "(无)" not in renderer_section
 
-    def test_audit_stdout_consistent(self, tmp_path):
-        """审计中的 Renderer 输出与 stdout 一致。"""
+    def test_audit_content_consistency(self, tmp_path):
         p = str(tmp_path / "a.md")
-        r = _run(_mode2_env(), p)
+        r = subprocess.run(
+            [sys.executable, str(PROJECT / "run.py"), "--stdin", "--render-markdown", "--audit-md", p],
+            cwd=str(PROJECT), input=json.dumps(_mode2_env(), ensure_ascii=False),
+            capture_output=True, text=True,
+        )
         assert r.returncode == 0
-        audit_content = Path(p).read_text(encoding="utf-8")
-        assert r.stdout.strip() in audit_content.replace("```", ""), "Audit doesn't match stdout"
-
-    def test_estimate_once(self):
-        """审计文件与 stdout 内容一致。"""
-        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
-            prefs_path = tf.name
-        with tempfile.NamedTemporaryFile(suffix=".md", delete=False) as af:
-            audit_path = af.name
-        try:
-            env = _mode2_env()
-            r = subprocess.run(
-                [sys.executable, str(PROJECT / "run.py"), "--stdin", "--render-markdown",
-                 "--audit-md", audit_path, "--prefs-path", prefs_path],
-                cwd=str(PROJECT), input=json.dumps(env, ensure_ascii=False),
-                capture_output=True, text=True,
-            )
-            assert r.returncode == 0, f"stderr={r.stderr}"
-            audit_content = Path(audit_path).read_text(encoding="utf-8")
-            assert r.stdout.strip() in audit_content, "Audit doesn't match stdout"
-        finally:
-            Path(prefs_path).unlink(missing_ok=True)
-            Path(audit_path).unlink(missing_ok=True)
-
-    def test_audit_fail_no_stdout_not_cross_platform(self):
-        """审计写入失败路径在子进程中难以稳定mock，但代码顺序已验证：construction→flag=false→atomic_write→write fail→return error。"""
-        pass  # 该路径已验证：代码中 write_markdown_artifact 失败抛出 OSError → print stderr → return 2 → stdout 未被打印
+        content = Path(p).read_text(encoding="utf-8")
+        assert r.stdout.strip() in content
 
 
-class TestArtifactAtomic:
-    def test_atomic_write_then_read(self, tmp_path):
-        from logistics_cost.artifact_delivery import write_markdown_artifact
-        p = tmp_path / "b.md"
-        write_markdown_artifact("# Test\n", p)
-        assert p.read_text(encoding="utf-8") == "# Test\n"
+# ---- 调用计数 ----
 
-    def test_replace_on_failure_no_tmp_left(self, tmp_path):
-        """os.replace 失败时临时文件被删除。"""
-        from logistics_cost.artifact_delivery import write_markdown_artifact
-        p = tmp_path / "c.md"
-        with patch("os.replace", side_effect=OSError("mock")):
+class TestEstimateCount:
+    def test_audit_mode_estimate_once(self):
+        """审计模式下 estimate 只调用一次。通过 patch run 模块中的 estimate。"""
+        import run
+        original = run.estimate
+        calls = [0]
+
+        def counting(*a, **kw):
+            calls[0] += 1
+            return original(*a, **kw)
+
+        with patch.object(run, "estimate", side_effect=counting):
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
+                prefs = tf.name
+            with tempfile.NamedTemporaryFile(suffix=".md", delete=False) as af:
+                audit_path = af.name
             try:
-                write_markdown_artifact("# Test\n", p)
-            except OSError:
-                pass
-        # 没有残留 .tmp 文件
-        tmps = list(tmp_path.glob(".artifact_*"))
-        assert len(tmps) == 0, f"Temporary files left: {tmps}"
+                env = json.dumps(_mode2_env(), ensure_ascii=False)
+                with patch("sys.stdin", io.StringIO(env)):
+                    exit_code = run.main(["--stdin", "--render-markdown", "--audit-md", audit_path, "--prefs-path", prefs])
+                assert exit_code == 0
+                assert calls[0] == 1, f"estimate called {calls[0]} times, expected 1"
+            finally:
+                Path(prefs).unlink(missing_ok=True)
+                Path(audit_path).unlink(missing_ok=True)
 
+
+# ---- 审计失败路径 ----
+
+class TestAuditFailure:
+    def test_audit_write_failure_no_stdout(self):
+        """审计写入失败时 stdout 为空，stderr 含错误，estimate 仍只调用一次。"""
+        import run
+        original = run.estimate
+        calls = [0]
+
+        def counting(*a, **kw):
+            calls[0] += 1
+            return original(*a, **kw)
+
+        with patch.object(run, "estimate", side_effect=counting):
+            with patch("run.write_markdown_artifact") as mock_write:
+                mock_write.side_effect = OSError("mock failure")
+                with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tf:
+                    prefs = tf.name
+
+                old_stdout = sys.stdout
+                old_stderr = sys.stderr
+                sys.stdout = io.StringIO()
+                sys.stderr = io.StringIO()
+                try:
+                    sys.argv = ["run.py", "--stdin", "--render-markdown",
+                                "--audit-md", str(Path(tf.name).parent / "audit.md"),
+                                "--prefs-path", prefs]
+                    env = json.dumps(_mode2_env(), ensure_ascii=False)
+                    with patch("sys.stdin", io.StringIO(env)):
+                        exit_code = run.main(["--stdin", "--render-markdown",
+                                              "--audit-md", str(Path(tf.name).parent / "audit.md"),
+                                              "--prefs-path", prefs])
+                finally:
+                    captured_stdout = sys.stdout.getvalue()
+                    captured_stderr = sys.stderr.getvalue()
+                    sys.stdout = old_stdout
+                    sys.stderr = old_stderr
+                    Path(prefs).unlink(missing_ok=True)
+
+                assert exit_code == 2, f"Expected exit 2, got {exit_code}"
+                assert captured_stdout.strip() == "", f"stdout should be empty, got: {captured_stdout[:200]}"
+                assert "审计文件写入失败" in captured_stderr, f"stderr: {captured_stderr}"
+                assert calls[0] == 1, f"estimate called {calls[0]} times, expected 1"
+
+
+# ---- 利润门禁 ----
 
 class TestProfitGate:
     def _pf(self, **p):

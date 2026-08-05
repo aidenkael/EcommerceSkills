@@ -94,7 +94,7 @@ def _dimension_scope_to_field(scope: str) -> str:
         "product_size": "product_size",
         "display_size": "display_size",
     }
-    return mapping.get(scope, "product_size")
+    return mapping.get(scope, "unknown_size")
 
 
 def main(argv=None):
@@ -277,15 +277,7 @@ def main(argv=None):
 
         # 请求新鲜度
         try:
-            validate_request_freshness(
-                request_id=req.request_id, product_signature=req.product_signature,
-                title=req.title, selected_sku=req.selected_sku, quantity=req.quantity,
-                result_request_id=result.get("_request_id", ""),
-                result_signature=result.get("_product_signature", ""),
-                result_title=result.get("_title", ""),
-                result_sku=result.get("_selected_sku", ""),
-                result_quantity=result.get("_quantity", 0),
-            )
+            validate_request_freshness(request=req, result=result)
         except RequestFreshnessViolation as exc:
             print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
             return 2

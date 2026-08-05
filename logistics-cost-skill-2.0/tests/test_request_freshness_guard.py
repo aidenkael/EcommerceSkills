@@ -1,53 +1,90 @@
-"""请求新鲜度守卫测试 — 所有身份字段必须存在。"""
+"""请求新鲜度守卫 — 直接检查 result dict 键。"""
 from __future__ import annotations
 
 import pytest
 from logistics_cost.request_freshness_guard import validate_request_freshness, RequestFreshnessViolation
+from logistics_cost.product_request import create_product_request
 
 
-def _check(**result_kw):
-    kw = {"request_id": "req-123", "product_signature": "sig-A", "title": "T", "selected_sku": "S", "quantity": 1,
-          "result_request_id": "req-123", "result_signature": "sig-A", "result_title": "T", "result_sku": "S", "result_quantity": 1}
-    kw.update(result_kw)
-    validate_request_freshness(**kw)
+def _result(req, **overrides):
+    r = {"_request_id": req.request_id, "_product_signature": req.product_signature,
+         "_title": req.title, "_selected_sku": req.selected_sku, "_quantity": req.quantity}
+    r.update(overrides)
+    return r
+
+
+def _req(title="T", sku="S", qty=1):
+    return create_product_request(title, sku, qty)
 
 
 class TestPass:
-    def test_all_match(self): _check()
+    def test_all_match(self):
+        req = _req()
+        validate_request_freshness(request=req, result=_result(req))
 
     def test_both_title_empty(self):
-        validate_request_freshness("r", "s", "", "S", 1, "r", "s", "", "S", 1)
+        req = _req(title="")
+        validate_request_freshness(request=req, result=_result(req))
 
     def test_both_sku_empty(self):
-        validate_request_freshness("r", "s", "T", "", 1, "r", "s", "T", "", 1)
+        req = _req(sku="")
+        validate_request_freshness(request=req, result=_result(req))
 
 
 class TestBlockMissing:
     def test_missing_request_id(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_request_id="")
+        req = _req()
+        r = _result(req)
+        del r["_request_id"]
+        with pytest.raises(RequestFreshnessViolation): validate_request_freshness(request=req, result=r)
 
     def test_missing_signature(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_signature="")
+        req = _req()
+        r = _result(req)
+        del r["_product_signature"]
+        with pytest.raises(RequestFreshnessViolation): validate_request_freshness(request=req, result=r)
 
     def test_missing_title(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_title="")
+        req = _req()
+        r = _result(req)
+        del r["_title"]
+        with pytest.raises(RequestFreshnessViolation): validate_request_freshness(request=req, result=r)
 
     def test_missing_sku(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_sku="")
+        req = _req()
+        r = _result(req)
+        del r["_selected_sku"]
+        with pytest.raises(RequestFreshnessViolation): validate_request_freshness(request=req, result=r)
+
+    def test_missing_quantity(self):
+        req = _req()
+        r = _result(req)
+        del r["_quantity"]
+        with pytest.raises(RequestFreshnessViolation): validate_request_freshness(request=req, result=r)
 
 
 class TestBlockMismatch:
     def test_req_id(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_request_id="req-999")
+        req = _req()
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness(request=req, result=_result(req, _request_id="wrong"))
 
     def test_sig(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_signature="sig-B")
+        req = _req()
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness(request=req, result=_result(req, _product_signature="wrong"))
 
     def test_title(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_title="Wrong")
+        req = _req()
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness(request=req, result=_result(req, _title="Wrong"))
 
     def test_sku(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_sku="Wrong")
+        req = _req()
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness(request=req, result=_result(req, _selected_sku="Wrong"))
 
     def test_quantity(self):
-        with pytest.raises(RequestFreshnessViolation): _check(result_quantity=99)
+        req = _req()
+        with pytest.raises(RequestFreshnessViolation):
+            validate_request_freshness(request=req, result=_result(req, _quantity=99))

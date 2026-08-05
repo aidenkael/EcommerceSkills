@@ -1,8 +1,8 @@
-"""请求新鲜度守卫 — 确保当前结果与当前请求身份一致。
+"""请求新鲜度守卫 — 确保结果 dict 包含完整身份字段并与请求一致。
 
-结果侧所有身份字段必须存在并与请求侧逐项一致。
-缺失任一字段或值不同均抛出 RequestFreshnessViolation。
-程序守卫只能保护同次程序调用内的身份一致性。
+validate_request_freshness(request=req, result=result) 直接检查结果字典键。
+字段缺失立即阻断；字段存在但值不同立即阻断。
+程序守卫只保护同次调用内身份一致性。
 """
 from __future__ import annotations
 
@@ -11,44 +11,43 @@ class RequestFreshnessViolation(Exception):
     pass
 
 
-REQUIRED_RESULT_FIELDS = ("_request_id", "_product_signature", "_title", "_selected_sku", "_quantity")
+def validate_request_freshness(request, result: dict) -> None:
+    """校验 ProductRequest 与 result dict 的身份一致。
 
+    Args:
+        request: ProductRequest 对象
+        result: estimate 返回的 result dict（必须含 _request_id / _product_signature / _title / _selected_sku / _quantity）
 
-def validate_request_freshness(
-    request_id: str,
-    product_signature: str,
-    title: str,
-    selected_sku: str,
-    quantity: int,
-    result_request_id: str = "",
-    result_signature: str = "",
-    result_title: str = "",
-    result_sku: str = "",
-    result_quantity: int = 0,
-) -> None:
-    """校验当前请求身份与结果身份一致。"""
-    # 结果侧必填字段检查（空字符串允许但字段必须存在）
-    for field, val in [
-        ("request_id", result_request_id),
-        ("signature", result_signature),
-    ]:
-        if not val:
-            raise RequestFreshnessViolation(f"结果未绑定 {field}")
+    Raises:
+        RequestFreshnessViolation: 字段缺失或不一致
+    """
+    # 请求侧
+    if not request.request_id:
+        raise RequestFreshnessViolation("请求侧 request_id 缺失")
+    if not request.product_signature:
+        raise RequestFreshnessViolation("请求侧 product_signature 缺失")
 
-    # title/sku 允许为空字符串但必须能比对
-    if result_title is None:
-        raise RequestFreshnessViolation("结果未绑定 title")
-    if result_sku is None:
-        raise RequestFreshnessViolation("结果未绑定 sku")
+    # 结果侧字段存在性（使用 key in result，不用默认值）
+    for key in ("_request_id", "_product_signature", "_title", "_selected_sku", "_quantity"):
+        if key not in result:
+            raise RequestFreshnessViolation(f"结果缺少 {key} 键")
 
     # 逐项比对
-    if result_request_id != request_id:
-        raise RequestFreshnessViolation(f"结果request_id({result_request_id})≠当前({request_id})")
-    if result_signature != product_signature:
-        raise RequestFreshnessViolation("结果product_signature不匹配")
-    if result_title != title:
-        raise RequestFreshnessViolation(f"结果标题({result_title})≠当前({title})")
-    if result_sku != selected_sku:
-        raise RequestFreshnessViolation(f"结果SKU({result_sku})≠当前({selected_sku})")
-    if result_quantity != quantity:
-        raise RequestFreshnessViolation(f"结果数量({result_quantity})≠当前({quantity})")
+    if result["_request_id"] != request.request_id:
+        raise RequestFreshnessViolation(
+            f"_request_id 不一致: result={result['_request_id']} vs request={request.request_id}"
+        )
+    if result["_product_signature"] != request.product_signature:
+        raise RequestFreshnessViolation("_product_signature 不一致")
+    if result["_title"] != request.title:
+        raise RequestFreshnessViolation(
+            f"_title 不一致: result={result['_title']!r} vs request={request.title!r}"
+        )
+    if result["_selected_sku"] != request.selected_sku:
+        raise RequestFreshnessViolation(
+            f"_selected_sku 不一致: result={result['_selected_sku']!r} vs request={request.selected_sku!r}"
+        )
+    if result["_quantity"] != request.quantity:
+        raise RequestFreshnessViolation(
+            f"_quantity 不一致: result={result['_quantity']} vs request={request.quantity}"
+        )
